@@ -659,8 +659,30 @@ async fn mcp_spawn(
     args: Vec<String>,
     env: HashMap<String, String>,
 ) -> Result<(), String> {
-    let mut cmd = StdCommand::new(&command);
-    cmd.args(&args)
+    // On Windows, commands like npx/node/npm are installed as .cmd/.bat scripts.
+    // Rust's Command::new() uses CreateProcessW which only finds .exe files,
+    // so we must wrap non-.exe commands via cmd.exe /C to resolve PATHEXT.
+    #[cfg(target_os = "windows")]
+    let (actual_command, actual_args) = {
+        let lower = command.to_lowercase();
+        let needs_cmd_wrap = !lower.ends_with(".exe")
+            && (lower == "npx" || lower == "node" || lower == "npm"
+                || lower == "python" || lower == "python3" || lower == "pip"
+                || lower == "uvx" || lower == "uv"
+                || !lower.contains('.'));
+        if needs_cmd_wrap {
+            let mut all_args = vec!["/C".to_string(), command.clone()];
+            all_args.extend(args.iter().cloned());
+            ("cmd.exe".to_string(), all_args)
+        } else {
+            (command.clone(), args.clone())
+        }
+    };
+    #[cfg(not(target_os = "windows"))]
+    let (actual_command, actual_args) = (command.clone(), args.clone());
+
+    let mut cmd = StdCommand::new(&actual_command);
+    cmd.args(&actual_args)
        .stdin(Stdio::piped())
        .stdout(Stdio::piped())
        .stderr(Stdio::piped());
