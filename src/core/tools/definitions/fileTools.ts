@@ -108,6 +108,7 @@ export const readFileTool: ToolDefinition = {
       return `Error reading file: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };
 
 export const writeFileTool: ToolDefinition = {
@@ -146,6 +147,7 @@ export const writeFileTool: ToolDefinition = {
       return `Error writing file: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 export const editFileTool: ToolDefinition = {
@@ -216,6 +218,7 @@ export const editFileTool: ToolDefinition = {
       return `Error editing file: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 export const listDirectoryTool: ToolDefinition = {
@@ -249,6 +252,7 @@ export const listDirectoryTool: ToolDefinition = {
       return `Error listing directory: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };
 
 export const searchFilesTool: ToolDefinition = {
@@ -319,6 +323,7 @@ export const searchFilesTool: ToolDefinition = {
       return `Error searching files: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };
 
 export const findFilesTool: ToolDefinition = {
@@ -373,4 +378,5 @@ export const findFilesTool: ToolDefinition = {
       return `Error finding files: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };

@@ -161,6 +161,7 @@ ${skillsList}
       results,
     }, null, 2) + `\n\n概览: ${passed}/${total} 通过 (${passRate}%)\n\n${details}`;
   },
+  isConcurrencySafe: false,
 };
 
 // ─── improve_skill_description ──────────────────────────────────────────────
@@ -247,4 +248,5 @@ ${skillContent ? `技能内容（供参考）：\n${skillContent.slice(0, 2000)}
       return `Error: LLM 调用失败 — ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };

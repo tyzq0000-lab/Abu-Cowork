@@ -27,6 +27,7 @@ export const getSystemInfoTool: ToolDefinition = {
       return `Error getting system info: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };
 
 // ============================================================
@@ -48,6 +49,7 @@ export const clipboardReadTool: ToolDefinition = {
       return `Error reading clipboard: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };
 
 export const clipboardWriteTool: ToolDefinition = {
@@ -68,6 +70,7 @@ export const clipboardWriteTool: ToolDefinition = {
       return `Error writing to clipboard: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 // ============================================================
@@ -101,6 +104,7 @@ export const systemNotifyTool: ToolDefinition = {
       return `Error sending notification: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };
 
 /**
@@ -164,4 +168,5 @@ export const manageMCPServerTool: ToolDefinition = {
 
     return `Error: 未知操作 "${action}"。可用操作: search, install`;
   },
+  isConcurrencySafe: false,
 };

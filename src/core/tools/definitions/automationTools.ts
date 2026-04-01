@@ -214,6 +214,7 @@ export const manageScheduledTaskTool: ToolDefinition = {
         return `Error: 未知操作 "${action}"。可用操作: create, list, update, delete, pause, resume`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 export const manageTriggerTool: ToolDefinition = {
@@ -533,6 +534,7 @@ export const manageTriggerTool: ToolDefinition = {
         return `Error: 未知操作 "${action}"。可用操作: create, list, update, delete, pause, resume`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 export const manageFileWatchTool: ToolDefinition = {
@@ -607,4 +609,5 @@ export const manageFileWatchTool: ToolDefinition = {
       return `Error: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };

@@ -5,6 +5,7 @@ import { resolveCommandPython } from '../../../utils/pythonRuntime';
 import { isSandboxEnabled, isNetworkIsolationEnabled } from '../../sandbox/config';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import type { CommandOutput } from '../helpers/toolHelpers';
+import { isReadOnlyCommand } from '../readOnlyDetector';
 import { TOOL_NAMES } from '../toolNames';
 
 export const runCommandTool: ToolDefinition = {
@@ -78,4 +79,5 @@ export const runCommandTool: ToolDefinition = {
       return `Error executing command: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: (input) => isReadOnlyCommand(String(input.command ?? '')),
 };

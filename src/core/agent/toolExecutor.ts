@@ -39,6 +39,8 @@ export interface ToolBatchParams {
   toolContext: ToolExecutionContext;
   /** Whether the loop will continue (tool_use stop reason) */
   continueLoop: boolean;
+  /** Current context window usage (0-100). Scales tool result truncation under pressure. */
+  contextUsagePercent?: number;
 }
 
 export interface ToolBatchResult {
@@ -80,6 +82,7 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
     filePermCb,
     toolContext,
     continueLoop,
+    contextUsagePercent,
   } = params;
 
   const chatStore = useChatStore.getState();
@@ -155,7 +158,7 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
           }
         };
         abortController.signal.addEventListener('abort', onAbort, { once: true });
-        executeAnyTool(tc.name, effectiveInput, confirmCb, filePermCb, toolContext)
+        executeAnyTool(tc.name, effectiveInput, confirmCb, filePermCb, toolContext, contextUsagePercent)
           .then((result) => {
             if (!settled) {
               settled = true;

@@ -142,6 +142,7 @@ export const webSearchTool: ToolDefinition = {
       return `搜索出错: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };
 
 export const httpFetchTool: ToolDefinition = {
@@ -209,4 +210,5 @@ export const httpFetchTool: ToolDefinition = {
       return `Error making HTTP request: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };

@@ -1056,6 +1056,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
           filePermCb,
           toolContext,
           continueLoop,
+          contextUsagePercent: usagePercent,
         });
 
         // Handle MCP tool changes — inject notification into conversation

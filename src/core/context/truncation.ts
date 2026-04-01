@@ -25,12 +25,43 @@ const TRUNCATION_RULES: Record<string, TruncationRule> = {
 const DEFAULT_RULE: TruncationRule = { headLines: 0, tailLines: 0, maxChars: 3500 };
 
 /**
- * Truncate a tool result based on the tool type
+ * Scale factor for truncation limits based on context pressure.
+ * Returns a multiplier (0.0–1.0) that shrinks the truncation budget
+ * when context is tight.
+ *
+ * @param contextUsagePercent - 0-100, how full the context window is
  */
-export function truncateToolResult(toolName: string, result: string): string {
+export function getContextPressureScale(contextUsagePercent?: number): number {
+  if (contextUsagePercent === undefined) return 1.0;
+  if (contextUsagePercent < 50) return 1.0;  // plenty of room
+  if (contextUsagePercent < 70) return 0.7;  // moderate pressure
+  if (contextUsagePercent < 85) return 0.4;  // high pressure
+  return 0.25;                                // critical — aggressive truncation
+}
+
+/**
+ * Truncate a tool result based on the tool type.
+ *
+ * @param toolName - Name of the tool that produced the result
+ * @param result - Raw result string
+ * @param contextUsagePercent - Optional context usage (0-100). When provided,
+ *   truncation limits are scaled down under context pressure, keeping more room
+ *   for conversation history.
+ */
+export function truncateToolResult(toolName: string, result: string, contextUsagePercent?: number): string {
   if (!result) return result;
 
-  const rule = TRUNCATION_RULES[toolName] || DEFAULT_RULE;
+  const baseRule = TRUNCATION_RULES[toolName] || DEFAULT_RULE;
+  const scale = getContextPressureScale(contextUsagePercent);
+
+  // Apply context pressure scaling
+  const rule: TruncationRule = scale < 1.0
+    ? {
+      headLines: Math.max(20, Math.floor(baseRule.headLines * scale)),
+      tailLines: Math.max(5, Math.floor(baseRule.tailLines * scale)),
+      maxChars: Math.max(1500, Math.floor(baseRule.maxChars * scale)),
+    }
+    : baseRule;
 
   // If within char limit, no truncation needed
   if (result.length <= rule.maxChars) return result;

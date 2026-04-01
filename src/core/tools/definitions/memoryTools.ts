@@ -38,6 +38,7 @@ export const reportPlanTool: ToolDefinition = {
     }
     return `已记录执行计划：${steps.length}个步骤`;
   },
+  isConcurrencySafe: false,
 };
 
 export const updateMemoryTool: ToolDefinition = {
@@ -145,6 +146,7 @@ export const updateMemoryTool: ToolDefinition = {
       return `Error updating memory: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 export const todoWriteTool: ToolDefinition = {
@@ -220,6 +222,7 @@ export const todoWriteTool: ToolDefinition = {
         return `Error: 未知操作 "${action}"。可用操作: set, add, update, read`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 export const logTaskCompletionTool: ToolDefinition = {
@@ -263,4 +266,5 @@ export const logTaskCompletionTool: ToolDefinition = {
       return `Error logging task: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: true,
 };

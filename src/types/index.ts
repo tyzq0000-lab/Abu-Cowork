@@ -174,6 +174,16 @@ export interface ToolDefinition {
     required?: string[];
   };
   execute: (input: Record<string, unknown>, context?: ToolExecutionContext) => Promise<ToolResult>;
+  /**
+   * Whether this tool can safely execute in parallel with other concurrent-safe tools.
+   * - `true` or returns `true`: tool only reads data, no side effects
+   * - `false` or returns `false`: tool writes data, needs exclusive execution
+   * - `undefined`: defaults to `false` (fail-closed)
+   *
+   * Can be a static boolean or a function that inspects the input (e.g., run_command
+   * checks if the command is read-only).
+   */
+  isConcurrencySafe?: boolean | ((input: Record<string, unknown>) => boolean);
 }
 
 // --- LLM ---

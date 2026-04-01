@@ -209,7 +209,9 @@ export async function executeAnyTool(
   input: Record<string, unknown>,
   onRequireConfirmation?: CommandConfirmCallback,
   onRequireFilePermission?: FilePermissionCallback,
-  toolContext?: ToolExecutionContext
+  toolContext?: ToolExecutionContext,
+  /** Current context window usage (0-100). Scales truncation limits under pressure. */
+  contextUsagePercent?: number
 ): Promise<ToolResult> {
   const t = getI18n();
 
@@ -290,7 +292,7 @@ export async function executeAnyTool(
       if (isFileToolName(name) && isOSPermissionError(result)) {
         return formatOSPermissionGuide(result);
       }
-      return truncateToolResult(name, result);
+      return truncateToolResult(name, result, contextUsagePercent);
     }
     return result;
   }
@@ -302,7 +304,7 @@ export async function executeAnyTool(
       const result = await mcpManager.callTool(serverName, toolName, input);
       // Only truncate string results; rich content (images) passes through
       if (typeof result === 'string') {
-        return truncateToolResult(name, result);
+        return truncateToolResult(name, result, contextUsagePercent);
       }
       return result;
     }

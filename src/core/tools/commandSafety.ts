@@ -4,6 +4,7 @@
  */
 
 import { isWindows } from '../../utils/platform';
+import { isReadOnlyCommand } from './readOnlyDetector';
 
 export type DangerLevel = 'safe' | 'warn' | 'danger' | 'block';
 
@@ -11,6 +12,8 @@ export interface CommandAnalysis {
   level: DangerLevel;
   reason: string;
   matchedPattern?: string;
+  /** Whether the command is read-only (no side effects). Used for concurrency safety and UI hints. */
+  readOnly: boolean;
 }
 
 export interface ConfirmationInfo {
@@ -299,10 +302,13 @@ export function analyzeCommand(command: string): CommandAnalysis {
   const trimmedCommand = command.trim();
   const normalizedCommand = normalizeCommand(trimmedCommand);
 
+  // Compute read-only status upfront (used for concurrency safety, does NOT affect danger level)
+  const readOnly = isReadOnlyCommand(trimmedCommand);
+
   // Check for command injection first
   const injectionCheck = hasCommandInjection(trimmedCommand);
   if (injectionCheck.injected) {
-    return { level: 'danger', reason: injectionCheck.reason };
+    return { level: 'danger', reason: injectionCheck.reason, readOnly: false };
   }
 
   // Build platform-aware pattern lists
@@ -311,7 +317,7 @@ export function analyzeCommand(command: string): CommandAnalysis {
   // Check safe patterns first (use original command for safe patterns)
   for (const pattern of safePatterns) {
     if (pattern.test(trimmedCommand)) {
-      return { level: 'safe', reason: '' };
+      return { level: 'safe', reason: '', readOnly };
     }
   }
 
@@ -331,13 +337,14 @@ export function analyzeCommand(command: string): CommandAnalysis {
           level,
           reason,
           matchedPattern: pattern.source,
+          readOnly: false,
         };
       }
     }
   }
 
   // Default to safe for unmatched commands
-  return { level: 'safe', reason: '' };
+  return { level: 'safe', reason: '', readOnly };
 }
 
 /**

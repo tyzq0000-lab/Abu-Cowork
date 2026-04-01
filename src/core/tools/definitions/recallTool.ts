@@ -181,4 +181,5 @@ export const recallTool: ToolDefinition = {
 
     return sections.join('\n\n');
   },
+  isConcurrencySafe: true,
 };

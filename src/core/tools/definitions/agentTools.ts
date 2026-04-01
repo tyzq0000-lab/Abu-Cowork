@@ -118,6 +118,7 @@ export const useSkillTool: ToolDefinition = {
     result += '\n技能指令已注入本轮系统提示，任务结束后自动释放。';
     return result;
   },
+  isConcurrencySafe: false,
 };
 
 // System preset agent definitions — used by delegate_to_agent type parameter
@@ -294,6 +295,7 @@ export const delegateToAgentTool: ToolDefinition = {
       throw err;
     }
   },
+  isConcurrencySafe: false,
 };
 
 /**
@@ -331,6 +333,7 @@ export const readSkillFileTool: ToolDefinition = {
 
     return content;
   },
+  isConcurrencySafe: false,
 };
 
 // --- save_skill / save_agent: bypass pathSafety for ~/.abu/ writes ---
@@ -408,6 +411,7 @@ function createSaveItemTool(kind: 'skill' | 'agent'): ToolDefinition {
       }
       return `✅ ${label}「${name}」已保存到 ${filePath}${fileList}\n\n你可以到「工具箱 → 代理」查看和管理此代理。`;
     },
+    isConcurrencySafe: false,
   };
 }
 
@@ -463,4 +467,5 @@ export const requestWorkspaceTool: ToolDefinition = {
     }
     return '用户取消了工作区选择。请告知用户需要先选择工作目录才能进行文件操作。';
   },
+  isConcurrencySafe: false,
 };

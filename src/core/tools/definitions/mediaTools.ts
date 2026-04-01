@@ -126,6 +126,7 @@ export const generateImageTool: ToolDefinition = {
       return `Error generating image: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };
 
 export const processImageTool: ToolDefinition = {
@@ -205,4 +206,5 @@ export const processImageTool: ToolDefinition = {
       return `Error processing image: ${err instanceof Error ? err.message : String(err)}`;
     }
   },
+  isConcurrencySafe: false,
 };

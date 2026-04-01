@@ -292,4 +292,5 @@ export const computerTool: ToolDefinition = {
       }
     }
   },
+  isConcurrencySafe: false,
 };
