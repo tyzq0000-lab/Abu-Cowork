@@ -1,4 +1,5 @@
 import type { StreamEvent, Message, ToolDefinition, BuiltinSearchMethod } from '../../types';
+import type { PromptSection } from './promptSections';
 
 // Tool choice configuration for API requests
 export type ToolChoice =
@@ -11,6 +12,12 @@ export interface ChatOptions {
   apiKey: string;
   baseUrl?: string;
   systemPrompt?: string;
+  /**
+   * Structured system prompt sections with cacheability annotations.
+   * When provided, Anthropic adapter uses these for per-section cache_control.
+   * Other adapters ignore this and use systemPrompt string instead.
+   */
+  systemPromptSections?: PromptSection[];
   tools?: ToolDefinition[];
   maxTokens?: number;
   // New parameters for enhanced control

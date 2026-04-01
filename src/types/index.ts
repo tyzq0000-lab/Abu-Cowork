@@ -132,6 +132,7 @@ export interface Conversation {
   imPlatform?: string;  // IM platform name (dchat/feishu/dingtalk/wecom/slack)
   projectId?: string;  // If set, this conversation belongs to a project
   contextCache?: ContextCache;  // Ephemeral compression cache (not persisted)
+  contextWarningLevel?: 0 | 1 | 2 | 3;  // Ephemeral context usage warning level (not persisted)
 }
 
 // --- Agent ---

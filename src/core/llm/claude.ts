@@ -187,8 +187,33 @@ export class ClaudeAdapter implements LLMAdapter {
       stream: true,
     };
 
-    // System prompt with cache control
-    if (options.systemPrompt) {
+    // System prompt with per-section cache control
+    if (options.systemPromptSections && options.systemPromptSections.length > 0) {
+      // Use structured sections: cacheable sections get cache_control for prompt caching
+      const systemBlocks: Anthropic.TextBlockParam[] = [];
+      // Find the last cacheable section to place cache_control on it
+      // (Anthropic caches everything up to the last cache_control marker)
+      let lastCacheableIdx = -1;
+      for (let i = options.systemPromptSections.length - 1; i >= 0; i--) {
+        if (options.systemPromptSections[i].cacheable) {
+          lastCacheableIdx = i;
+          break;
+        }
+      }
+
+      for (let i = 0; i < options.systemPromptSections.length; i++) {
+        const section = options.systemPromptSections[i];
+        const block: Anthropic.TextBlockParam = { type: 'text', text: section.text };
+        // Place cache_control on the last cacheable section — Anthropic caches
+        // the prefix up to this point, so all prior cacheable sections are cached too
+        if (i === lastCacheableIdx) {
+          (block as unknown as Record<string, unknown>).cache_control = { type: 'ephemeral' };
+        }
+        systemBlocks.push(block);
+      }
+      params.system = systemBlocks;
+    } else if (options.systemPrompt) {
+      // Fallback: single block with cache control (backward compatible)
       params.system = [
         {
           type: 'text',

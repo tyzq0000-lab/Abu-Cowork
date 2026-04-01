@@ -217,6 +217,7 @@ interface ChatActions {
   // Context compression cache
   setContextCache: (convId: string, cache: import('../types').ContextCache) => void;
   clearContextCache: (convId: string) => void;
+  setContextWarningLevel: (convId: string, level: 0 | 1 | 2 | 3) => void;
 
   // Export/Import
   exportConversation: (convId: string) => string | null;
@@ -705,6 +706,12 @@ export const useChatStore = create<ChatStore>()(
           if (conv) conv.contextCache = undefined;
         });
       },
+      setContextWarningLevel: (convId: string, level: 0 | 1 | 2 | 3) => {
+        set((state) => {
+          const conv = state.conversations[convId];
+          if (conv) conv.contextWarningLevel = level;
+        });
+      },
 
       // Export conversation as JSON string
       exportConversation: (convId: string): string | null => {
@@ -784,6 +791,7 @@ export const useChatStore = create<ChatStore>()(
           }
           conv.completedAt = undefined;
           conv.contextCache = undefined;  // Ephemeral — never restore from disk
+          conv.contextWarningLevel = undefined;  // Ephemeral — never restore from disk
 
           // Clean up streaming flags
           for (const msg of conv.messages) {

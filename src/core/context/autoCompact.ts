@@ -1,0 +1,114 @@
+/**
+ * Auto-Compact — multi-level context warning and automatic compression.
+ *
+ * Provides a state machine that tracks context usage and decides when to
+ * trigger compression. Replaces the simple 65% threshold in contextCompressor.ts
+ * with a graduated 4-level system:
+ *
+ *   Level 0 (< 60%):  Normal — no action
+ *   Level 1 (60-75%): Warning — UI shows yellow indicator
+ *   Level 2 (75-85%): Compress — auto-trigger semantic compression
+ *   Level 3 (> 85%):  Critical — force hard truncation + compression
+ *
+ * Circuit breaker: after 3 consecutive compression failures, auto-compact
+ * is disabled for the rest of the session to avoid infinite retry loops.
+ */
+
+export type ContextWarningLevel = 0 | 1 | 2 | 3;
+
+/** Thresholds as fractions of max input tokens */
+const LEVEL_1_THRESHOLD = 0.60;
+const LEVEL_2_THRESHOLD = 0.75;
+const LEVEL_3_THRESHOLD = 0.85;
+
+/** Max consecutive failures before circuit breaker trips */
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+/**
+ * Calculate the context warning level based on current usage.
+ *
+ * @param currentTokens - Current total input tokens (system + messages + tools)
+ * @param maxInputTokens - Maximum allowed input tokens (contextWindow - reserveForOutput)
+ */
+export function calculateWarningLevel(currentTokens: number, maxInputTokens: number): ContextWarningLevel {
+  if (maxInputTokens <= 0) return 0;
+  const ratio = currentTokens / maxInputTokens;
+
+  if (ratio >= LEVEL_3_THRESHOLD) return 3;
+  if (ratio >= LEVEL_2_THRESHOLD) return 2;
+  if (ratio >= LEVEL_1_THRESHOLD) return 1;
+  return 0;
+}
+
+/**
+ * Get the usage percentage for display purposes.
+ */
+export function getUsagePercent(currentTokens: number, maxInputTokens: number): number {
+  if (maxInputTokens <= 0) return 0;
+  return Math.round((currentTokens / maxInputTokens) * 100);
+}
+
+/**
+ * Tracks auto-compact state within an agent loop session.
+ * Created once per `runAgentLoop` call, reset on each new invocation.
+ */
+export class AutoCompactTracker {
+  private consecutiveFailures = 0;
+  private disabled = false;
+  private lastLevel: ContextWarningLevel = 0;
+
+  /**
+   * Check if auto-compact should be attempted at the given warning level.
+   * Returns false if circuit breaker has tripped.
+   */
+  shouldCompact(level: ContextWarningLevel): boolean {
+    if (this.disabled) return false;
+    return level >= 2;
+  }
+
+  /**
+   * Check if hard truncation should be forced (Level 3 critical).
+   */
+  shouldForceHardTruncation(level: ContextWarningLevel): boolean {
+    return level >= 3;
+  }
+
+  /**
+   * Record a successful compression — resets the failure counter.
+   */
+  recordSuccess(): void {
+    this.consecutiveFailures = 0;
+  }
+
+  /**
+   * Record a failed compression — may trip the circuit breaker.
+   */
+  recordFailure(): void {
+    this.consecutiveFailures++;
+    if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      this.disabled = true;
+    }
+  }
+
+  /**
+   * Whether auto-compact has been disabled by the circuit breaker.
+   */
+  isDisabled(): boolean {
+    return this.disabled;
+  }
+
+  /**
+   * Get the current warning level (last computed).
+   */
+  getLastLevel(): ContextWarningLevel {
+    return this.lastLevel;
+  }
+
+  /**
+   * Update and return the warning level for the given token counts.
+   */
+  updateLevel(currentTokens: number, maxInputTokens: number): ContextWarningLevel {
+    this.lastLevel = calculateWarningLevel(currentTokens, maxInputTokens);
+    return this.lastLevel;
+  }
+}

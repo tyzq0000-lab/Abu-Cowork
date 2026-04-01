@@ -10,7 +10,9 @@ import { useSettingsStore, getEffectiveModel, getActiveApiKey, resolveAgentModel
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useTaskExecutionStore } from '../../stores/taskExecutionStore';
 import { createEventRouter } from './eventRouter';
-import { routeInput, buildSystemPrompt, type RouteResult, type IMContext } from './orchestrator';
+import { routeInput, buildSystemPromptSections, type RouteResult, type IMContext } from './orchestrator';
+import type { PromptSection } from '../llm/promptSections';
+import { sectionsToString, mergeSections } from '../llm/promptSections';
 import { skillLoader } from '../skill/loader';
 import { substituteVariables } from '../skill/preprocessor';
 import { joinPath } from '../../utils/pathUtils';
@@ -18,6 +20,8 @@ import { matchesToolName, parseToolPatterns } from '../skill/toolFilter';
 import { notifyTaskCompleted, notifyTaskError } from '../../utils/notifications';
 import { prepareContextMessages, trimOldScreenshots } from '../context/contextManager';
 import { compressContextIfNeeded } from '../context/contextCompressor';
+import { applyMicroCompaction } from '../context/microCompactor';
+import { AutoCompactTracker, getUsagePercent } from '../context/autoCompact';
 import { estimateToolSchemaTokens, estimateTokens, estimateMessageTokens, calibrateFromUsage } from '../context/tokenEstimator';
 import { identifyRounds, RECENT_ROUNDS_TO_KEEP } from '../context/contextUtils';
 import { withRetry } from './retry';
@@ -408,8 +412,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     }
   }
 
-  // Build static system prompt once (active skills are injected dynamically per-turn)
-  const systemPrompt = await buildSystemPrompt(route, getBaseSystemPrompt(), conversationId, options?.imContext, 0);
+  // Build static system prompt sections once (active skills are injected dynamically per-turn)
+  const systemPromptSections = await buildSystemPromptSections(route, getBaseSystemPrompt(), conversationId, options?.imContext, 0);
 
   // Build tool execution context — provides resolved workspace for tools like update_memory
   const toolContext: ToolExecutionContext = {
@@ -616,6 +620,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   const defaultMaxTurns = useSettingsStore.getState().computerUseEnabled ? 50 : 20;
   const maxTurns = route.skill?.maxTurns ?? route.definition?.maxTurns ?? defaultMaxTurns;
   let turnCount = 0;
+  const autoCompactTracker = new AutoCompactTracker();
 
   while (continueLoop) {
     // Check if cancelled before starting new turn
@@ -720,16 +725,32 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         : (freshSettings.maxOutputTokens ?? modelCaps.maxOutputTokens);
       const contextWindowSize = freshSettings.contextWindowSize ?? modelCaps.contextWindow;
 
-      // Build effective system prompt: static base + dynamic per-turn sections
+      // Build effective system prompt: static cached sections + dynamic per-turn sections
       const todoState = formatTodosForPrompt(conversationId);
-      const effectiveSystemPrompt = [
-        systemPrompt,
-        dynamicCapabilities,
-        activeSkillContent,
-        todoState,
-      ].filter(Boolean).join('\n\n');
+      const dynamicSections: PromptSection[] = [];
+      if (dynamicCapabilities) {
+        dynamicSections.push({ name: 'mcp-capabilities', text: dynamicCapabilities, cacheable: false });
+      }
+      if (activeSkillContent) {
+        dynamicSections.push({ name: 'active-skills', text: activeSkillContent, cacheable: false });
+      }
+      if (todoState) {
+        dynamicSections.push({ name: 'todos', text: todoState, cacheable: false });
+      }
+      const allSections = mergeSections([...systemPromptSections, ...dynamicSections]);
+      // String form for token estimation and context management
+      const effectiveSystemPrompt = sectionsToString(allSections);
 
-      // Step 1: Semantic compression — use cached summary or generate new one
+      // Compute context warning level for UI feedback and compression decisions
+      const preCompressionTokens = estimateTokens(effectiveSystemPrompt) + estimateMessageTokens(historyMessages) + toolTokens;
+      const maxInputTokens = contextWindowSize - maxOutputTokens;
+      const warningLevel = autoCompactTracker.updateLevel(preCompressionTokens, maxInputTokens);
+
+      // Update chatStore with warning level so UI can display context indicators
+      useChatStore.getState().setContextWarningLevel(conversationId, warningLevel);
+
+      // Step 1: Semantic compression — use cached summary or auto-compact based on warning level
+      // Compression triggers when: enough turns AND (cached result available OR warning level triggers compaction)
       let messagesForContext = historyMessages;
       if (turnCount >= 3) {
         const convForCache = useChatStore.getState().conversations[conversationId];
@@ -760,6 +781,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
             );
             if (compressionResult.compressed) {
               messagesForContext = compressionResult.messages;
+              autoCompactTracker.recordSuccess();
               // Cache the compression result for future turns
               const summaryMsg = compressionResult.messages.find(m => m.id.startsWith('context-summary-'));
               if (summaryMsg) {
@@ -774,15 +796,20 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
               }
             }
           } catch {
-            // Compression failed — continue with uncompressed messages
+            // Compression failed — record for circuit breaker
+            autoCompactTracker.recordFailure();
           }
         }
       }
 
+      // Step 1.5: Micro-compaction — truncate oversized tool results from older messages
+      // This prevents single large tool outputs (e.g. grep returning 10KB) from bloating context.
+      // Only affects toolCallsForContext (sent to LLM), not toolCalls (shown in UI).
+      messagesForContext = applyMicroCompaction(messagesForContext);
+
       // Step 2: Trim old screenshots dynamically based on context usage
-      const preScreenshotTokens = estimateTokens(effectiveSystemPrompt) + estimateMessageTokens(messagesForContext) + toolTokens;
-      const maxInputTokens = contextWindowSize - maxOutputTokens;
-      const usagePercent = maxInputTokens > 0 ? Math.round((preScreenshotTokens / maxInputTokens) * 100) : 50;
+      const postCompressionTokens = estimateTokens(effectiveSystemPrompt) + estimateMessageTokens(messagesForContext) + toolTokens;
+      const usagePercent = getUsagePercent(postCompressionTokens, maxInputTokens);
       const trimmedMessages = trimOldScreenshots(messagesForContext, usagePercent);
 
       // Step 3: Hard truncation as safety net
@@ -799,6 +826,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         apiKey: getActiveApiKey(freshSettings),
         baseUrl: freshSettings.baseUrl || undefined,
         systemPrompt: effectiveSystemPrompt,
+        systemPromptSections: allSections,
         tools: tools.length > 0 ? tools : undefined,
         maxTokens: maxOutputTokens,
         signal: abortController.signal,
