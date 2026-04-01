@@ -55,6 +55,9 @@ export const TOOL_NAMES = {
 
   // Workspace
   REQUEST_WORKSPACE: 'request_workspace',
+
+  // Tool discovery
+  TOOL_SEARCH: 'tool_search',
 } as const;
 
 export type ToolName = typeof TOOL_NAMES[keyof typeof TOOL_NAMES];

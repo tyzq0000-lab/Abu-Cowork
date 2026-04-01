@@ -1,12 +1,19 @@
 import { useState, useCallback } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
+import type { PermissionMode } from '@/core/permissions/permissionMode';
 import { useI18n } from '@/i18n';
 import { isMacOS } from '@/utils/platform';
-import { Shield, ShieldAlert, Globe, Plus, X, Info } from 'lucide-react';
+import { Shield, ShieldAlert, Globe, Plus, X, Info, Lock, Unlock, ShieldCheck } from 'lucide-react';
 import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { syncNetworkWhitelist } from '@/core/sandbox/config';
+
+const PERMISSION_MODES: { value: PermissionMode; icon: typeof Shield; color: string }[] = [
+  { value: 'default', icon: ShieldCheck, color: 'text-blue-500' },
+  { value: 'auto', icon: Unlock, color: 'text-emerald-500' },
+  { value: 'strict', icon: Lock, color: 'text-amber-500' },
+];
 
 export default function SandboxSection() {
   const sandboxEnabled = useSettingsStore(s => s.sandboxEnabled);
@@ -246,6 +253,56 @@ export default function SandboxSection() {
           </div>
         </div>
       )}
+      {/* Permission Mode */}
+      <div className="mt-6 pt-6 border-t border-[var(--abu-border)]">
+        <h4 className="text-sm font-medium text-[var(--abu-text-primary)] mb-1">
+          {t.settings.permissionMode}
+        </h4>
+        <p className="text-xs text-[var(--abu-text-tertiary)] mb-3">
+          {t.settings.permissionModeDesc}
+        </p>
+        <PermissionModeSelector />
+      </div>
+    </div>
+  );
+}
+
+function PermissionModeSelector() {
+  const { t } = useI18n();
+  const permissionMode = useSettingsStore(s => s.permissionMode);
+  const setPermissionMode = useSettingsStore(s => s.setPermissionMode);
+
+  const labels: Record<PermissionMode, { name: string; desc: string }> = {
+    default: { name: t.settings.permissionModeDefault, desc: t.settings.permissionModeDefaultDesc },
+    auto: { name: t.settings.permissionModeAuto, desc: t.settings.permissionModeAutoDesc },
+    strict: { name: t.settings.permissionModeStrict, desc: t.settings.permissionModeStrictDesc },
+  };
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {PERMISSION_MODES.map(({ value, icon: Icon, color }) => (
+        <button
+          key={value}
+          onClick={() => setPermissionMode(value)}
+          className={cn(
+            'flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all text-center',
+            permissionMode === value
+              ? 'border-[var(--abu-accent)] bg-[var(--abu-accent)]/10'
+              : 'border-[var(--abu-border)] hover:border-[var(--abu-border-hover)]',
+          )}
+        >
+          <Icon className={cn('h-5 w-5', permissionMode === value ? color : 'text-[var(--abu-text-muted)]')} />
+          <span className={cn(
+            'text-xs font-medium',
+            permissionMode === value ? 'text-[var(--abu-text-primary)]' : 'text-[var(--abu-text-secondary)]',
+          )}>
+            {labels[value].name}
+          </span>
+          <span className="text-[10px] text-[var(--abu-text-tertiary)] leading-tight">
+            {labels[value].desc}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

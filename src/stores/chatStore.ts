@@ -336,6 +336,10 @@ export const useChatStore = create<ChatStore>()(
         clearInputQueue(id);
         clearAllSkillHooks();
         useTaskExecutionStore.getState().clearConversation(id);
+        // Clean up session memory files (tool results offloaded to disk)
+        import('../core/session/sessionMemory').then(({ cleanupConversationResults }) => {
+          cleanupConversationResults(id).catch(() => {});
+        }).catch(() => {});
         // Clean up IM session pointing to this conversation (lazy import to avoid circular deps)
         import('./imChannelStore').then(({ useIMChannelStore }) => {
           const imStore = useIMChannelStore.getState();

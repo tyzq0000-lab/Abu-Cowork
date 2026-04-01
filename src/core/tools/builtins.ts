@@ -30,6 +30,9 @@ import { getSystemInfoTool, clipboardReadTool, clipboardWriteTool, systemNotifyT
 // --- Skill eval tools ---
 import { testSkillTriggerTool, improveSkillDescriptionTool } from './definitions/skillEvalTools';
 
+// --- Tool discovery ---
+import { toolSearchTool } from './definitions/toolSearchTool';
+
 // --- Computer tools ---
 import { computerTool } from './definitions/computerTools';
 export { setComputerUseBatchMode, setSkipAutoScreenshot } from './definitions/computerTools';
@@ -68,4 +71,5 @@ export function registerBuiltinTools(): void {
   toolRegistry.register(requestWorkspaceTool);
   toolRegistry.register(testSkillTriggerTool);
   toolRegistry.register(improveSkillDescriptionTool);
+  toolRegistry.register(toolSearchTool);
 }

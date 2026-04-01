@@ -11,6 +11,7 @@
 import type { ToolCall, ToolResultContent, ToolExecutionContext, ToolResult } from '../../types';
 import type { ConfirmationInfo, FilePermissionCallback } from '../tools/registry';
 import { executeAnyTool, toolResultToString } from '../tools/registry';
+import { processToolResult } from '../session/sessionMemory';
 import { emitHook } from './lifecycleHooks';
 import type { PreToolCallEvent } from './lifecycleHooks';
 import { setComputerUseBatchMode, setSkipAutoScreenshot } from '../tools/builtins';
@@ -281,7 +282,9 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
   }
 
   // Update tool call results via EventRouter (use index to match rejected results)
-  results.forEach((result, i) => {
+  // Process results sequentially to handle async offloading
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
     if (result.status === 'fulfilled') {
       const { id, result: toolResult, resultContent, error } = result.value;
       // Determine hideScreenshot for computer tool
@@ -296,7 +299,20 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
           hideScreenshot = action !== 'screenshot';
         }
       }
-      chatStore.updateToolCall(conversationId, assistantMsgId, id, toolResult, resultContent, error, hideScreenshot);
+
+      // Offload large tool results to disk to reduce localStorage pressure
+      let storedResult = toolResult;
+      try {
+        const processed = await processToolResult(conversationId, id, toolResult);
+        storedResult = processed.stored;
+        if (processed.offloaded) {
+          logger.info('Tool result offloaded to disk', { toolName: matchedTc?.name, originalSize: toolResult.length });
+        }
+      } catch {
+        // Offload failed — store full result in memory (fallback)
+      }
+
+      chatStore.updateToolCall(conversationId, assistantMsgId, id, storedResult, resultContent, error, hideScreenshot);
 
       // Update TaskExecutionStore via EventRouter
       const stepId = toolCallToStepId.get(id);
@@ -360,7 +376,7 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
         }
       }
     }
-  });
+  }
 
   // Clear loop context after tool execution
   setCurrentLoopContext(null);

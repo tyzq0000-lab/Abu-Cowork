@@ -365,6 +365,15 @@ export interface TranslationDict {
     computerUseDesc: string;
     computerUsePermissionDenied: string;
     computerUsePermissionGuide: string;
+    // Permission mode
+    permissionMode: string;
+    permissionModeDesc: string;
+    permissionModeDefault: string;
+    permissionModeDefaultDesc: string;
+    permissionModeAuto: string;
+    permissionModeAutoDesc: string;
+    permissionModeStrict: string;
+    permissionModeStrictDesc: string;
     // ModelConfigSection
     currentConfig: string;
     configured: string;

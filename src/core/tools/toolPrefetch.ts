@@ -23,6 +23,7 @@ export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   TOOL_NAMES.REQUEST_WORKSPACE,
   TOOL_NAMES.USE_SKILL,
   TOOL_NAMES.DELEGATE_TO_AGENT,
+  TOOL_NAMES.TOOL_SEARCH,
 ]);
 
 /** Keyword → tool mapping for demand-based loading */

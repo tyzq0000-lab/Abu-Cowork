@@ -394,6 +394,15 @@ const enUS: TranslationDict = {
     computerUseDesc: 'Enable screenshot capture and keyboard/mouse simulation. Abu can see your screen and operate your computer.',
     computerUsePermissionDenied: 'Cannot capture screen. Please grant Screen Recording permission.',
     computerUsePermissionGuide: 'Go to System Settings → Privacy & Security → Screen Recording, and allow Abu. You may also need to grant Accessibility permission for keyboard/mouse control.',
+    // Permission mode
+    permissionMode: 'Permission Mode',
+    permissionModeDesc: 'Controls confirmation behavior for tool execution',
+    permissionModeDefault: 'Default',
+    permissionModeDefaultDesc: 'Dangerous commands and new directory writes require confirmation',
+    permissionModeAuto: 'Auto',
+    permissionModeAutoDesc: 'Read-only operations auto-proceed, writes still require confirmation',
+    permissionModeStrict: 'Strict',
+    permissionModeStrictDesc: 'All tool operations require confirmation',
     // ModelConfigSection
     currentConfig: 'Current Config',
     configured: 'Configured',

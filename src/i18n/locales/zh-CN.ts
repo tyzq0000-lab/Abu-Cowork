@@ -394,6 +394,15 @@ const zhCN: TranslationDict = {
     computerUseDesc: '启用截屏和键鼠模拟。阿布可以看到你的屏幕并操作电脑。',
     computerUsePermissionDenied: '无法截取屏幕，请授予屏幕录制权限',
     computerUsePermissionGuide: '请前往「系统设置 → 隐私与安全性 → 屏幕录制」，允许阿布。键鼠操控还需要在「辅助功能」中授权。',
+    // Permission mode
+    permissionMode: '权限模式',
+    permissionModeDesc: '控制工具执行时的确认行为',
+    permissionModeDefault: '标准',
+    permissionModeDefaultDesc: '危险命令和新目录写入需要确认',
+    permissionModeAuto: '自动',
+    permissionModeAutoDesc: '只读操作自动放行，写入操作仍需确认',
+    permissionModeStrict: '严格',
+    permissionModeStrictDesc: '所有工具操作都需要确认',
     // ModelConfigSection
     currentConfig: '当前配置',
     configured: '已配置',

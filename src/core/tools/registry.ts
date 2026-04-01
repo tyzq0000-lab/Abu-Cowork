@@ -1,11 +1,12 @@
 import type { ToolDefinition, ToolResult, ToolResultContent, ToolExecutionContext } from '../../types';
 import { mcpManager } from '../mcp/client';
 import { analyzeCommand, type ConfirmationInfo, type DangerLevel } from './commandSafety';
-import { checkReadPath, checkWritePath, checkListPath } from './pathSafety';
+import { checkReadPath, checkWritePath, checkListPath, authorizeWorkspace } from './pathSafety';
 import { isWindows } from '../../utils/platform';
 import { getI18n } from '../../i18n';
 import { truncateToolResult } from '../context/truncation';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { getPermissionStrategy } from '../permissions/permissionMode';
 import { TOOL_NAMES } from './toolNames';
 
 /**
@@ -202,7 +203,8 @@ const FILE_TOOL_PATH_MAP: Record<string, (input: Record<string, unknown>) => { p
 
 /**
  * Execute a tool by name, checking both builtin and MCP tools
- * With optional dangerous command confirmation and file permission callbacks
+ * With optional dangerous command confirmation and file permission callbacks.
+ * Respects the current permission mode (default/auto/strict).
  */
 export async function executeAnyTool(
   name: string,
@@ -214,6 +216,8 @@ export async function executeAnyTool(
   contextUsagePercent?: number
 ): Promise<ToolResult> {
   const t = getI18n();
+  const permissionMode = useSettingsStore.getState().permissionMode;
+  const strategy = getPermissionStrategy(permissionMode);
 
   // Safety check for run_command tool
   if (name === TOOL_NAMES.RUN_COMMAND) {
@@ -221,22 +225,24 @@ export async function executeAnyTool(
     if (command) {
       const analysis = analyzeCommand(command);
 
-      // Block dangerous commands
+      // Block dangerous commands — always enforced regardless of permission mode
       if (analysis.level === 'block') {
         return `Error: ${t.commandConfirm.blocked}: ${analysis.reason}`;
       }
 
-      // Require confirmation for warn/danger level commands
-      if (analysis.level === 'danger' || analysis.level === 'warn') {
-        if (onRequireConfirmation) {
-          const confirmed = await onRequireConfirmation({
-            command,
-            level: analysis.level,
-            reason: analysis.reason,
-          });
-          if (!confirmed) {
-            return t.commandConfirm.userCancelled;
-          }
+      // Check if confirmation is needed based on permission mode
+      const needsConfirm = strategy.shouldConfirmCommand(
+        { command, level: analysis.level, reason: analysis.reason },
+        analysis.readOnly,
+      );
+      if (needsConfirm && onRequireConfirmation) {
+        const confirmed = await onRequireConfirmation({
+          command,
+          level: analysis.level,
+          reason: analysis.reason,
+        });
+        if (!confirmed) {
+          return t.commandConfirm.userCancelled;
         }
       }
     }
@@ -256,27 +262,37 @@ export async function executeAnyTool(
 
       if (!pathCheck.allowed) {
         if (pathCheck.needsPermission && pathCheck.permissionPath) {
-          // Needs user permission — ask via callback
-          if (onRequireFilePermission) {
-            const granted = await onRequireFilePermission({
-              path: pathCheck.permissionPath,
-              capability: pathCheck.capability || pathInfo.capability,
-              toolName: name,
-            });
-            if (!granted) {
-              return `[${t.toolErrors.userDeniedAccess} ${pathCheck.permissionPath}]`;
-            }
-            // Permission granted — re-check (should now pass since authorizeWorkspace was called)
-            const recheck = await checkFn(pathInfo.path);
-            if (!recheck.allowed) {
-              return `Error: ${recheck.reason || t.toolErrors.pathAccessDenied}`;
+          // Check if confirmation is needed based on permission mode
+          const needsFileConfirm = strategy.shouldConfirmFileAccess(
+            pathCheck.capability || pathInfo.capability,
+            true,
+          );
+          if (needsFileConfirm) {
+            // Needs user permission — ask via callback
+            if (onRequireFilePermission) {
+              const granted = await onRequireFilePermission({
+                path: pathCheck.permissionPath,
+                capability: pathCheck.capability || pathInfo.capability,
+                toolName: name,
+              });
+              if (!granted) {
+                return `[${t.toolErrors.userDeniedAccess} ${pathCheck.permissionPath}]`;
+              }
+              // Permission granted — re-check (should now pass since authorizeWorkspace was called)
+              const recheck = await checkFn(pathInfo.path);
+              if (!recheck.allowed) {
+                return `Error: ${recheck.reason || t.toolErrors.pathAccessDenied}`;
+              }
+            } else {
+              // No callback available (shouldn't happen in normal flow)
+              return `Error: ${t.toolErrors.needsAuthorization} ${pathCheck.permissionPath}`;
             }
           } else {
-            // No callback available (shouldn't happen in normal flow)
-            return `Error: ${t.toolErrors.needsAuthorization} ${pathCheck.permissionPath}`;
+            // Auto mode: auto-authorize the workspace for this path
+            authorizeWorkspace(pathCheck.permissionPath);
           }
         } else {
-          // Hard blocked
+          // Hard blocked — always enforced regardless of permission mode
           return `Error: ${pathCheck.reason}`;
         }
       }
