@@ -41,6 +41,8 @@ import { resolveCapabilities } from '../llm/modelCapabilities';
 import { TOOL_NAMES } from '../tools/toolNames';
 import { prefetchTools } from '../tools/toolPrefetch';
 import { classifyTools, buildDeferredToolsSummary } from '../tools/toolSearch';
+import { getRunningAgents } from './backgroundAgentRegistry';
+import { hasQueuedInputs } from './userInputQueue';
 import { createLogger } from '../logging/logger';
 
 const logger = createLogger('agentLoop');
@@ -1195,6 +1197,20 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         };
         useChatStore.getState().addMessage(conversationId, recoveryMsg);
         continueLoop = true;
+      }
+
+      // If there are running background agents, wait for them to complete before ending
+      if (!continueLoop && getRunningAgents().length > 0) {
+        logger.info('Waiting for background agents to complete', { count: getRunningAgents().length });
+        chatStore.setAgentStatus('thinking');
+        // Poll until all background agents finish or user aborts
+        while (getRunningAgents().length > 0 && !abortController.signal.aborted) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        // Background agents injected results via userInputQueue — continue loop to process them
+        if (hasQueuedInputs(conversationId) && !abortController.signal.aborted) {
+          continueLoop = true;
+        }
       }
 
       if (!continueLoop) {
