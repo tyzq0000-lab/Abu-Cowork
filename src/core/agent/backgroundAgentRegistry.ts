@@ -20,6 +20,10 @@ export interface BackgroundAgent {
   conversationId: string;
   /** Links to subagentAbort for cancellation */
   subagentId: string;
+  /** Current activity description for UI (e.g. "web_search: React SSR") */
+  currentActivity?: string;
+  /** Number of tool calls executed so far */
+  toolCallCount?: number;
 }
 
 const MAX_CONCURRENT_AGENTS = 5;
@@ -62,6 +66,15 @@ export function canSpawnAgent(): boolean {
   return getRunningAgents().length < MAX_CONCURRENT_AGENTS;
 }
 
+/** Update progress for a running background agent */
+export function updateAgentProgress(taskId: string, activity: string, toolCallCount: number): void {
+  const agent = agents.get(taskId);
+  if (!agent || agent.status !== 'running') return;
+  agent.currentActivity = activity;
+  agent.toolCallCount = toolCallCount;
+  notify();
+}
+
 /** Register a new background agent */
 export function registerBackgroundAgent(agent: BackgroundAgent): void {
   agents.set(agent.taskId, agent);
@@ -82,8 +95,20 @@ export function completeBackgroundAgent(taskId: string, result: string): void {
   agent.endTime = Date.now();
   notify();
 
-  // Inject result into parent conversation as a system message
-  const resultMessage = `<agent-result task-id="${taskId}" agent="${agent.agentName}" status="completed">\n${result}\n</agent-result>`;
+  // Inject structured result into parent conversation
+  const durationSec = Math.round(((agent.endTime ?? Date.now()) - agent.startTime) / 1000);
+  const toolCount = agent.toolCallCount ?? 0;
+  // Truncate very long results to avoid bloating context
+  const maxResultLen = 3000;
+  const truncatedResult = result.length > maxResultLen
+    ? result.slice(0, maxResultLen) + `\n...(结果已截断，完整内容共 ${result.length} 字符)`
+    : result;
+  const resultMessage = [
+    `<agent-result task-id="${taskId}" agent="${agent.agentName}" status="completed">`,
+    `<summary>代理 "${agent.agentName}" 已完成任务，耗时 ${durationSec}s，调用 ${toolCount} 次工具</summary>`,
+    `<result>\n${truncatedResult}\n</result>`,
+    `</agent-result>`,
+  ].join('\n');
   enqueueUserInput(agent.conversationId, resultMessage, true);
 
   // Auto-cleanup completed agents after 30s

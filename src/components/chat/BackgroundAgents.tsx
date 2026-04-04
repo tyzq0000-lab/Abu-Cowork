@@ -24,6 +24,11 @@ export default function BackgroundAgents() {
         const isRunning = agent.status === 'running';
         const isError = agent.status === 'error';
 
+        // Build activity text
+        const activityText = isRunning && agent.currentActivity
+          ? `${agent.currentActivity}${agent.toolCallCount ? ` (${agent.toolCallCount})` : ''}`
+          : undefined;
+
         return (
           <div
             key={agent.taskId}
@@ -43,8 +48,14 @@ export default function BackgroundAgents() {
             )}
 
             <Bot className="h-3 w-3" />
-            <span className="font-medium max-w-[120px] truncate">{agent.agentName}</span>
-            <span className="text-[10px] opacity-60">{elapsed}s</span>
+            <span className="font-medium max-w-[100px] truncate">{agent.agentName}</span>
+
+            {/* Show current activity or elapsed time */}
+            {activityText ? (
+              <span className="text-[10px] opacity-70 max-w-[140px] truncate">{activityText}</span>
+            ) : (
+              <span className="text-[10px] opacity-60">{elapsed}s</span>
+            )}
 
             {isRunning && (
               <button

@@ -6,7 +6,7 @@ import { getCurrentLoopContext, getLoopContext, requestWorkspace } from '../../a
 import { runSubagentLoop, extractParentConversationSummary } from '../../agent/subagentLoop';
 import type { SubagentProgressEvent } from '../../agent/subagentLoop';
 import { createSubagentController } from '../../agent/subagentAbort';
-import { registerBackgroundAgent, completeBackgroundAgent, failBackgroundAgent, canSpawnAgent } from '../../agent/backgroundAgentRegistry';
+import { registerBackgroundAgent, completeBackgroundAgent, failBackgroundAgent, canSpawnAgent, updateAgentProgress } from '../../agent/backgroundAgentRegistry';
 import { useChatStore } from '../../../stores/chatStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useDiscoveryStore } from '../../../stores/discoveryStore';
@@ -299,6 +299,7 @@ export const delegateToAgentTool: ToolDefinition = {
       });
 
       // Fire-and-forget: run subagent in background
+      let bgToolCount = 0;
       void (async () => {
         try {
           const result = await runSubagentLoop({
@@ -309,7 +310,15 @@ export const delegateToAgentTool: ToolDefinition = {
             signal: subagentSignal,
             commandConfirmCallback: loopCtx?.commandConfirmCallback,
             filePermissionCallback: loopCtx?.filePermissionCallback,
-            onProgress,
+            onProgress: (event) => {
+              // Update registry with progress for UI display
+              if (event.type === 'tool-start') {
+                bgToolCount++;
+                updateAgentProgress(taskId, event.toolName, bgToolCount);
+              }
+              // Also forward to parent onProgress if available
+              onProgress?.(event);
+            },
           });
           completeBackgroundAgent(taskId, result.text);
         } catch (err) {
