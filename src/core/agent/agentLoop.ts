@@ -3,7 +3,7 @@ import type { LLMAdapter } from '../llm/adapter';
 import { LLMError } from '../llm/adapter';
 import { ClaudeAdapter } from '../llm/claude';
 import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
-import { getAllTools, executeAnyTool, toolResultToString, type ConfirmationInfo, type FilePermissionCallback } from '../tools/registry';
+import { getAllTools, type ConfirmationInfo, type FilePermissionCallback } from '../tools/registry';
 import type { ToolDefinition } from '../../types';
 import { useChatStore, flushTokenBuffer } from '../../stores/chatStore';
 import { useSettingsStore, getEffectiveModel, getActiveApiKey, resolveAgentModel } from '../../stores/settingsStore';
@@ -33,7 +33,6 @@ import { snapshotExecutionSteps } from './executionSnapshot';
 import { emitHook } from './lifecycleHooks';
 import { clearAllSkillHooks } from '../tools/builtins';
 import { executeToolBatch } from './toolExecutor';
-import { StreamingToolExecutor } from '../tools/streamingExecutor';
 import { formatTodosForPrompt } from './todoManager';
 import { isWindows } from '../../utils/platform';
 import { getBuiltinSearchConfig } from '../capabilities';
@@ -895,25 +894,6 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         builtinWebSearch,
       };
 
-      // StreamingToolExecutor: when enabled, starts executing concurrent-safe tools
-      // during LLM streaming instead of waiting for all tool_use blocks to arrive.
-      const useStreamingExecution = freshSettings.enableStreamingToolExecution;
-      const confirmCbForStreaming = options?.commandConfirmCallback ?? requestCommandConfirmation;
-      const filePermCbForStreaming = options?.filePermissionCallback ?? requestFilePermission;
-      const streamingExecutor = useStreamingExecution ? new StreamingToolExecutor(async (tc) => {
-        const startTime = Date.now();
-        try {
-          const rawResult = await executeAnyTool(
-            tc.name, tc.input, confirmCbForStreaming, filePermCbForStreaming, toolContext, usagePercent
-          );
-          const resultStr = toolResultToString(rawResult);
-          return { id: tc.id, result: resultStr, resultContent: typeof rawResult !== 'string' ? rawResult : undefined, error: false, duration: (Date.now() - startTime) / 1000 };
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') throw err;
-          return { id: tc.id, result: `Error: ${err instanceof Error ? err.message : String(err)}`, resultContent: undefined, error: true, duration: (Date.now() - startTime) / 1000 };
-        }
-      }) : null;
-
       const chatFn = () => adapter.chat(preparedMessages, chatOptions, eventHandler);
 
       const eventHandler = (event: StreamEvent) => {
@@ -1000,15 +980,6 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
                 startTime: Date.now(),
               });
 
-              // Feed to streaming executor for immediate execution (if enabled)
-              if (streamingExecutor && event.name !== TOOL_NAMES.REPORT_PLAN) {
-                streamingExecutor.addTool({
-                  id: event.id,
-                  name: event.name,
-                  input: event.input,
-                  isExecuting: true,
-                });
-              }
               break;
             }
 

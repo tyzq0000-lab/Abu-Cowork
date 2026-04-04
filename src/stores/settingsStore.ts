@@ -276,8 +276,6 @@ interface SettingsState {
   behaviorSensorEnabled: boolean;
   // Computer Use (screenshot + keyboard/mouse simulation)
   computerUseEnabled: boolean;
-  // Experimental: streaming tool execution (execute tools as LLM streams, not after)
-  enableStreamingToolExecution: boolean;
   // Skill inline command execution (!`command` syntax)
   allowSkillCommands: boolean;
   // npm skill registry
@@ -480,7 +478,6 @@ export const useSettingsStore = create<SettingsStore>()(
       guideShown: false,
       behaviorSensorEnabled: false,
       computerUseEnabled: false,
-      enableStreamingToolExecution: false,
       allowSkillCommands: true,
       skillRegistry: '',
       customServices: [],
