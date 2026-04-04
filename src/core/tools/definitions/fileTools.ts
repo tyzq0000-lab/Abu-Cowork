@@ -18,6 +18,27 @@ import {
 } from '../helpers/toolHelpers';
 import { TOOL_NAMES } from '../toolNames';
 
+/**
+ * Simple pessimistic file lock for concurrent agent safety.
+ * Prevents two agents from writing the same file simultaneously.
+ * Lock is held only during the write operation (not across turns).
+ */
+const fileLocks = new Map<string, string>(); // normalized path → loopId
+
+function acquireFileLock(path: string, loopId?: string): string | null {
+  const normalized = path.replace(/\\/g, '/');
+  const holder = fileLocks.get(normalized);
+  if (holder && loopId && holder !== loopId) {
+    return holder; // Return the holder's loopId (conflict)
+  }
+  if (loopId) fileLocks.set(normalized, loopId);
+  return null; // Lock acquired
+}
+
+function releaseFileLock(path: string): void {
+  fileLocks.delete(path.replace(/\\/g, '/'));
+}
+
 export const readFileTool: ToolDefinition = {
   name: TOOL_NAMES.READ_FILE,
   description: '读取文件内容。支持文本文件、图片（png/jpg/gif/webp，返回视觉内容）、PDF（提取文字）、Office 文档（.docx/.xlsx/.pptx，提取文字）和压缩包（.zip/.tar.gz，列出内容）。返回文件内容或提取的文本。',
@@ -122,7 +143,7 @@ export const writeFileTool: ToolDefinition = {
     },
     required: ['path', 'content'],
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const path = input.path as string;
     const content = input.content as string;
 
@@ -132,6 +153,12 @@ export const writeFileTool: ToolDefinition = {
     if (binaryExts.includes(ext)) {
       return `Error: write_file only writes plain text. Cannot create ${ext} files directly. ` +
         `Use run_command to execute a script that generates the binary file programmatically.`;
+    }
+
+    // File lock: prevent concurrent writes from different agents
+    const lockConflict = acquireFileLock(path, context?.loopId);
+    if (lockConflict) {
+      return `Error: ${path} 正在被其他代理编辑，请稍后重试。`;
     }
 
     try {
@@ -145,6 +172,8 @@ export const writeFileTool: ToolDefinition = {
       return `Successfully wrote ${content.length} characters to ${path}`;
     } catch (err) {
       return `Error writing file: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      releaseFileLock(path);
     }
   },
   isConcurrencySafe: false,
@@ -162,10 +191,16 @@ export const editFileTool: ToolDefinition = {
     },
     required: ['path', 'old_content', 'new_content'],
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const path = input.path as string;
     const oldContent = input.old_content as string;
     const newContent = input.new_content as string;
+
+    // File lock: prevent concurrent edits from different agents
+    const lockConflict = acquireFileLock(path, context?.loopId);
+    if (lockConflict) {
+      return `Error: ${path} 正在被其他代理编辑，请稍后重试。`;
+    }
 
     try {
       // Check file exists
@@ -216,6 +251,8 @@ export const editFileTool: ToolDefinition = {
       return `Successfully edited ${path}: replaced ${oldLines} line(s) with ${newLines} line(s)`;
     } catch (err) {
       return `Error editing file: ${err instanceof Error ? err.message : String(err)}`;
+    } finally {
+      releaseFileLock(path);
     }
   },
   isConcurrencySafe: false,

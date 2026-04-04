@@ -165,6 +165,8 @@ export interface ToolParameter {
 export interface ToolExecutionContext {
   /** Resolved workspace path (from IMContext or global store) */
   workspacePath?: string | null;
+  /** Loop ID for multi-agent context lookup */
+  loopId?: string;
 }
 
 export interface ToolDefinition {
@@ -190,7 +192,7 @@ export interface ToolDefinition {
 
 // --- LLM ---
 
-export type LLMProvider = 'volcengine' | 'bailian' | 'anthropic' | 'openai' | 'deepseek' | 'moonshot' | 'zhipu' | 'minimax' | 'siliconflow' | 'qiniu' | 'openrouter' | 'local' | 'custom';
+export type LLMProvider = 'volcengine' | 'bailian' | 'anthropic' | 'openai' | 'deepseek' | 'moonshot' | 'zhipu' | 'minimax' | 'siliconflow' | 'qiniu' | 'openrouter' | 'ollama' | 'local' | 'custom';
 
 // --- Provider Capabilities ---
 

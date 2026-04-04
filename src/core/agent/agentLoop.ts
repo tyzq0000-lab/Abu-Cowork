@@ -95,7 +95,7 @@ async function saveUserImagesToDisk(
   }
 }
 import {
-  setCurrentLoopContext,
+  clearLoopContext,
   requestCommandConfirmation,
   requestFilePermission,
   drainConfirmationQueue,
@@ -389,7 +389,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     },
   });
 
-  if (!getActiveApiKey(settings)) {
+  if (settings.provider !== 'ollama' && !getActiveApiKey(settings)) {
     chatStore.addMessage(conversationId, {
       id: generateId(),
       role: 'assistant',
@@ -431,6 +431,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // Build tool execution context — provides resolved workspace for tools like update_memory
   const toolContext: ToolExecutionContext = {
     workspacePath: options?.imContext?.workspacePath ?? useWorkspaceStore.getState().currentPath,
+    loopId,
   };
 
   // Determine effective model — agent can override (with provider compatibility check)
@@ -654,8 +655,21 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     logger.info('Turn started', { turnCount, maxTurns });
 
     // Check for mid-task user input (already added to UI by ChatInput)
-    // Just drain the queue — messages are already in the conversation store
-    drainQueuedInputs(conversationId);
+    // Regular messages are already in the conversation store — just drain.
+    // System messages (e.g. background agent results) need to be added to chatStore here.
+    const queuedInputs = drainQueuedInputs(conversationId);
+    for (const qi of queuedInputs) {
+      if (qi.isSystem) {
+        useChatStore.getState().addMessage(conversationId, {
+          id: generateId(),
+          role: 'user',
+          content: qi.text,
+          timestamp: qi.timestamp,
+          loopId,
+          isSystem: true,
+        });
+      }
+    }
 
     // Emit turnStart hook
     await emitHook({
@@ -1212,7 +1226,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       if (err instanceof Error && (err.name === 'AbortError' || abortController.signal.aborted)) {
         logger.warn('Agent loop aborted', { conversationId, loopId });
         // Clear loop context and any pending confirmation/permission dialogs
-        setCurrentLoopContext(null);
+        clearLoopContext(loopId);
         clearInputQueue(conversationId);
         drainConfirmationQueue();
         drainFilePermissionQueue();
@@ -1231,7 +1245,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         return;
       }
 
-      setCurrentLoopContext(null);
+      clearLoopContext(loopId);
       const errorMessage = err instanceof Error ? err.message : String(err);
       const errorCode = err instanceof LLMError ? err.code : undefined;
       logger.error('LLM call failed', { error: errorMessage, code: errorCode });

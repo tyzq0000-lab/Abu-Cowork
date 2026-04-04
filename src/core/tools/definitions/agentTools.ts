@@ -2,10 +2,11 @@ import { writeTextFile } from '@tauri-apps/plugin-fs';
 import type { ToolDefinition, Conversation, SubagentDefinition } from '../../../types';
 import { skillLoader } from '../../skill/loader';
 import { agentRegistry } from '../../agent/registry';
-import { getCurrentLoopContext, requestWorkspace } from '../../agent/permissionBridge';
+import { getCurrentLoopContext, getLoopContext, requestWorkspace } from '../../agent/permissionBridge';
 import { runSubagentLoop, extractParentConversationSummary } from '../../agent/subagentLoop';
 import type { SubagentProgressEvent } from '../../agent/subagentLoop';
 import { createSubagentController } from '../../agent/subagentAbort';
+import { registerBackgroundAgent, completeBackgroundAgent, failBackgroundAgent, canSpawnAgent } from '../../agent/backgroundAgentRegistry';
 import { useChatStore } from '../../../stores/chatStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useDiscoveryStore } from '../../../stores/discoveryStore';
@@ -155,7 +156,7 @@ function buildPresetAgent(type: string, _task: string): SubagentDefinition {
 
 export const delegateToAgentTool: ToolDefinition = {
   name: TOOL_NAMES.DELEGATE_TO_AGENT,
-  description: '将任务委派给代理独立执行。可指定 agent_name（用户自定义代理）或 type（系统内置角色：research 调研/writer 写作/executor 执行）。',
+  description: '将任务委派给代理独立执行。可指定 agent_name（用户自定义代理）或 type（系统内置角色：research 调研/writer 写作/executor 执行）。设置 async: true 可在后台并行执行，不阻塞当前对话。',
   inputSchema: {
     type: 'object',
     properties: {
@@ -163,10 +164,11 @@ export const delegateToAgentTool: ToolDefinition = {
       type: { type: 'string', description: '系统内置角色：research（只读调研）、writer（读写创作）、executor（全能执行）。与 agent_name 二选一', enum: ['research', 'writer', 'executor'] },
       task: { type: 'string', description: '委派的任务描述' },
       context: { type: 'string', description: '附加上下文（可选）' },
+      async: { type: 'boolean', description: '异步执行：立即返回 taskId，代理在后台运行，完成后结果自动回传。适合并行派出多个代理。' },
     },
     required: ['task'],
   },
-  execute: async (input) => {
+  execute: async (input, toolExecContext) => {
     const agentName = input.agent_name as string | undefined;
     const agentType = input.type as string | undefined;
     const task = input.task as string;
@@ -201,8 +203,10 @@ export const delegateToAgentTool: ToolDefinition = {
 
     const effectiveAgentName = agent.name;
 
-    // 3. Get parent loop context
-    const loopCtx = getCurrentLoopContext();
+    // 3. Get parent loop context (prefer loopId from ToolExecutionContext for multi-agent support)
+    const loopCtx = toolExecContext?.loopId
+      ? getLoopContext(toolExecContext.loopId)
+      : getCurrentLoopContext();
 
     // 4. Set agent status indicator
     useChatStore.getState().setAgentStatus('tool-calling', TOOL_NAMES.DELEGATE_TO_AGENT, effectiveAgentName);
@@ -267,12 +271,60 @@ export const delegateToAgentTool: ToolDefinition = {
     }
 
     // 7. Create per-subagent AbortController (linked to parent)
-    const { signal: subagentSignal, cleanup: subagentCleanup } = createSubagentController(
+    const { subagentId, signal: subagentSignal, cleanup: subagentCleanup } = createSubagentController(
       effectiveAgentName,
       loopCtx?.signal
     );
 
-    // 8. Execute subagent
+    const isAsync = input.async === true;
+
+    // 8a. Async mode: fire-and-forget, return immediately with taskId
+    if (isAsync) {
+      if (!canSpawnAgent()) {
+        subagentCleanup();
+        return 'Error: 已达到后台代理并发上限 (5)，请等待现有代理完成后再试。';
+      }
+
+      const taskId = `bg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+      const convId = loopCtx?.conversationId ?? '';
+
+      registerBackgroundAgent({
+        taskId,
+        agentName: effectiveAgentName,
+        task,
+        status: 'running',
+        startTime: Date.now(),
+        conversationId: convId,
+        subagentId,
+      });
+
+      // Fire-and-forget: run subagent in background
+      void (async () => {
+        try {
+          const result = await runSubagentLoop({
+            agent,
+            task,
+            context,
+            parentConversationSummary,
+            signal: subagentSignal,
+            commandConfirmCallback: loopCtx?.commandConfirmCallback,
+            filePermissionCallback: loopCtx?.filePermissionCallback,
+            onProgress,
+          });
+          completeBackgroundAgent(taskId, result.text);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          failBackgroundAgent(taskId, msg);
+        } finally {
+          subagentCleanup();
+          useChatStore.getState().removeActiveAgent(effectiveAgentName);
+        }
+      })();
+
+      return `后台代理 "${effectiveAgentName}" 已启动 (taskId: ${taskId})。任务: ${task.slice(0, 100)}${task.length > 100 ? '...' : ''}。完成后结果会自动回传。`;
+    }
+
+    // 8b. Sync mode: blocking await (existing behavior)
     try {
       const result = await runSubagentLoop({
         agent,
@@ -295,7 +347,8 @@ export const delegateToAgentTool: ToolDefinition = {
       throw err;
     }
   },
-  isConcurrencySafe: false,
+  // Async delegates can run concurrently; sync delegates cannot
+  isConcurrencySafe: (input) => input.async === true,
 };
 
 /**

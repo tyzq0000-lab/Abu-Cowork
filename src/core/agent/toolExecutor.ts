@@ -19,7 +19,7 @@ import { TOOL_NAMES } from '../tools/toolNames';
 import { invoke } from '@tauri-apps/api/core';
 import { useChatStore } from '../../stores/chatStore';
 import { useTaskExecutionStore } from '../../stores/taskExecutionStore';
-import { setCurrentLoopContext } from './permissionBridge';
+import { setLoopContext, clearLoopContext } from './permissionBridge';
 import type { EventRouter } from './eventRouter';
 import { createLogger } from '../logging/logger';
 
@@ -102,8 +102,8 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
   // Execute tools in parallel using Promise.allSettled
   chatStore.setAgentStatus('tool-calling', `${collectedToolCalls.length} tools`);
 
-  // Expose loop context for delegate_to_agent tool
-  setCurrentLoopContext({
+  // Expose loop context for delegate_to_agent tool (per-loop, supports concurrent agents)
+  setLoopContext(loopId, {
     commandConfirmCallback: confirmCb,
     filePermissionCallback: filePermCb,
     signal: abortController.signal,
@@ -379,7 +379,7 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
   }
 
   // Clear loop context after tool execution
-  setCurrentLoopContext(null);
+  clearLoopContext(loopId);
 
   // Detect tool changes (e.g. manage_mcp_server install)
   const mcpChanged = continueLoop && collectedToolCalls.some(tc =>

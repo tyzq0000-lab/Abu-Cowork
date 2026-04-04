@@ -11,6 +11,8 @@ interface QueuedInput {
   id: string;
   text: string;
   timestamp: number;
+  /** System-injected messages (e.g. background agent results) — hidden from chat UI */
+  isSystem?: boolean;
 }
 
 // Per-conversation input queues
@@ -27,7 +29,7 @@ function notifyListeners() {
  * Enqueue a user message for a running conversation.
  * The agent loop will pick this up at the next iteration.
  */
-export function enqueueUserInput(conversationId: string, text: string): void {
+export function enqueueUserInput(conversationId: string, text: string, isSystem?: boolean): void {
   if (!text.trim()) return;
 
   const queue = inputQueues.get(conversationId) ?? [];
@@ -35,6 +37,7 @@ export function enqueueUserInput(conversationId: string, text: string): void {
     id: `qi-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     text: text.trim(),
     timestamp: Date.now(),
+    isSystem,
   });
   inputQueues.set(conversationId, queue);
   notifyListeners();

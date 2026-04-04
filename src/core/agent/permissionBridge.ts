@@ -1,6 +1,8 @@
 /**
  * Permission Bridge — queue systems for command confirmation, file permission, and workspace requests.
  * Extracted from agentLoop.ts to reduce coupling.
+ *
+ * Loop context is stored per-loopId in a Map to support concurrent agents.
  */
 import type { ConfirmationInfo, FilePermissionCallback } from '../tools/registry';
 import { usePermissionStore } from '../../stores/permissionStore';
@@ -8,10 +10,9 @@ import type { PermissionDuration } from '../../stores/permissionStore';
 import { authorizeWorkspace } from '../tools/pathSafety';
 import type { EventRouter } from './eventRouter';
 
-// ── Current Loop Context ──
+// ── Loop Context (per-loop Map) ──
 
-// Module-level: current loop's context for delegate_to_agent tool
-let currentLoopContext: {
+export interface LoopContext {
   commandConfirmCallback: (info: ConfirmationInfo) => Promise<boolean>;
   filePermissionCallback: FilePermissionCallback;
   signal: AbortSignal;
@@ -19,14 +20,54 @@ let currentLoopContext: {
   loopId: string;
   conversationId: string;
   toolCallToStepId: Map<string, string>;
-} | null = null;
-
-export function getCurrentLoopContext() {
-  return currentLoopContext;
+  /** Agent name for UI display (e.g. permission dialog badge) */
+  agentName?: string;
 }
 
-export function setCurrentLoopContext(ctx: typeof currentLoopContext) {
-  currentLoopContext = ctx;
+/** Per-loop context storage — supports concurrent agent loops */
+const loopContexts = new Map<string, LoopContext>();
+
+/**
+ * Set context for a specific loop. Used by toolExecutor before executing tool batches.
+ */
+export function setLoopContext(loopId: string, ctx: LoopContext): void {
+  loopContexts.set(loopId, ctx);
+}
+
+/**
+ * Get context for a specific loop.
+ */
+export function getLoopContext(loopId: string): LoopContext | undefined {
+  return loopContexts.get(loopId);
+}
+
+/**
+ * Clear context for a specific loop. Called after tool batch execution or on abort.
+ */
+export function clearLoopContext(loopId: string): void {
+  loopContexts.delete(loopId);
+}
+
+/**
+ * Compat shim — returns the first active loop context.
+ * Safe for single-agent use. For multi-agent, callers should use getLoopContext(loopId).
+ */
+export function getCurrentLoopContext(): LoopContext | null {
+  if (loopContexts.size === 0) return null;
+  return loopContexts.values().next().value ?? null;
+}
+
+/**
+ * @deprecated Use setLoopContext(loopId, ctx) instead.
+ * Kept for backward compatibility during transition.
+ */
+export function setCurrentLoopContext(ctx: LoopContext | null): void {
+  if (ctx === null) {
+    // Clear all — legacy behavior when called with null
+    loopContexts.clear();
+  } else {
+    loopContexts.set(ctx.loopId, ctx);
+  }
 }
 
 // ── Command Confirmation System ──
@@ -35,6 +76,7 @@ export function setCurrentLoopContext(ctx: typeof currentLoopContext) {
 let pendingConfirmation: {
   info: ConfirmationInfo;
   conversationId: string;
+  agentName?: string;
   resolve: (confirmed: boolean) => void;
 } | null = null;
 
@@ -42,12 +84,11 @@ let pendingConfirmation: {
 const confirmationQueue: Array<{
   info: ConfirmationInfo;
   conversationId: string;
+  agentName?: string;
   resolve: (confirmed: boolean) => void;
 }> = [];
 
 // Subscribers for command confirmation state changes
-// NOTE: Listeners are auto-cleaned via the unsubscribe function returned by subscribeToCommandConfirmation,
-// which is used as the cleanup callback in useSyncExternalStore. No manual cleanup needed.
 const confirmationListeners = new Set<() => void>();
 
 function notifyConfirmationListeners() {
@@ -107,18 +148,23 @@ export function drainConfirmationQueue() {
 }
 
 /**
- * Request confirmation for a dangerous command
+ * Request confirmation for a dangerous command.
  * Returns a promise that resolves when user confirms or cancels.
  * If another confirmation is already pending, this request is queued.
+ *
+ * @param loopId - Optional loopId to look up the correct context for multi-agent.
+ *                 Falls back to getCurrentLoopContext() compat shim if omitted.
  */
-export async function requestCommandConfirmation(info: ConfirmationInfo): Promise<boolean> {
-  const convId = currentLoopContext?.conversationId ?? '';
+export async function requestCommandConfirmation(info: ConfirmationInfo, loopId?: string): Promise<boolean> {
+  const ctx = loopId ? getLoopContext(loopId) : getCurrentLoopContext();
+  const convId = ctx?.conversationId ?? '';
+  const agentName = ctx?.agentName;
   return new Promise((resolve) => {
     if (pendingConfirmation) {
       // Queue instead of overwriting
-      confirmationQueue.push({ info, conversationId: convId, resolve });
+      confirmationQueue.push({ info, conversationId: convId, agentName, resolve });
     } else {
-      pendingConfirmation = { info, conversationId: convId, resolve };
+      pendingConfirmation = { info, conversationId: convId, agentName, resolve };
       notifyConfirmationListeners();
     }
   });
@@ -131,6 +177,7 @@ export interface FilePermissionRequest {
   capability: 'read' | 'write';
   toolName: string;
   conversationId: string;
+  agentName?: string;
   resolve: (granted: boolean) => void;
 }
 
@@ -138,8 +185,6 @@ let pendingFilePermission: FilePermissionRequest | null = null;
 const filePermissionQueue: FilePermissionRequest[] = [];
 let isProcessingFilePermission = false;
 
-// NOTE: Listeners are auto-cleaned via the unsubscribe function returned by subscribeToFilePermission,
-// which is used as the cleanup callback in useSyncExternalStore. No manual cleanup needed.
 const filePermissionListeners = new Set<() => void>();
 
 function notifyFilePermissionListeners() {
@@ -223,13 +268,15 @@ export function drainFilePermissionQueue() {
 }
 
 /**
- * Request file permission — checks permissionStore first, then queues for UI
+ * Request file permission — checks permissionStore first, then queues for UI.
+ *
+ * @param loopId - Optional loopId for multi-agent context lookup.
  */
 export async function requestFilePermission(request: {
   path: string;
   capability: 'read' | 'write';
   toolName: string;
-}): Promise<boolean> {
+}, loopId?: string): Promise<boolean> {
   const permStore = usePermissionStore.getState();
 
   // Already has permission → auto-allow
@@ -239,9 +286,11 @@ export async function requestFilePermission(request: {
     return true;
   }
 
-  const convId = currentLoopContext?.conversationId ?? '';
+  const ctx = loopId ? getLoopContext(loopId) : getCurrentLoopContext();
+  const convId = ctx?.conversationId ?? '';
+  const agentName = ctx?.agentName;
   return new Promise((resolve) => {
-    const filePermReq: FilePermissionRequest = { ...request, conversationId: convId, resolve };
+    const filePermReq: FilePermissionRequest = { ...request, conversationId: convId, agentName, resolve };
 
     if (!isProcessingFilePermission) {
       isProcessingFilePermission = true;
@@ -316,7 +365,7 @@ const WORKSPACE_REQUEST_TIMEOUT_MS = 60_000; // 60 seconds
  * Auto-resolves to null after timeout to prevent indefinite hangs.
  */
 export async function requestWorkspace(reason: string, conversationId?: string, suggestedPath?: string): Promise<string | null> {
-  const convId = conversationId ?? currentLoopContext?.conversationId ?? '';
+  const convId = conversationId ?? getCurrentLoopContext()?.conversationId ?? '';
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       if (pendingWorkspaceRequest?.resolve === wrappedResolve) {

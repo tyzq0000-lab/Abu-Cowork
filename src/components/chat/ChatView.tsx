@@ -4,7 +4,7 @@ import type { Message, ImageAttachment } from '@/types';
 import { useAutoScroll } from '@/hooks/useAutoScroll';
 import { runAgentLoop } from '@/core/agent/agentLoop';
 import { getPendingCommandConfirmation, resolveCommandConfirmation, subscribeToCommandConfirmation, getPendingFilePermission, resolveFilePermission, subscribeToFilePermission, getPendingWorkspaceRequest, resolveWorkspaceRequest, subscribeToWorkspaceRequest } from '@/core/agent/permissionBridge';
-import { useSettingsStore, getActiveApiKey } from '@/stores/settingsStore';
+import { useSettingsStore, getActiveApiKey, providerRequiresApiKey } from '@/stores/settingsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import type { PermissionDuration } from '@/stores/permissionStore';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -12,6 +12,7 @@ import { useI18n } from '@/i18n';
 import MessageGroup from './MessageGroup';
 import ChatInput from './ChatInput';
 import ContextWarningBar from './ContextWarningBar';
+import BackgroundAgents from './BackgroundAgents';
 import ScenarioGuide from './ScenarioGuide';
 import PermissionDialog from '@/components/common/PermissionDialog';
 import CommandConfirmDialog from '@/components/common/CommandConfirmDialog';
@@ -153,10 +154,10 @@ export default function ChatView() {
   }, [activeConvId, scrollToBottom]);
 
   const handleSend = async (text: string, images?: ImageAttachment[], workspacePath?: string | null) => {
-    // Block sending if API key is not configured
-    const currentApiKey = getActiveApiKey(useSettingsStore.getState());
-    if (!currentApiKey?.trim()) {
-      useSettingsStore.getState().openSystemSettings('ai-services');
+    // Block sending if API key is not configured (Ollama doesn't need one)
+    const currentState = useSettingsStore.getState();
+    if (providerRequiresApiKey(currentState) && !getActiveApiKey(currentState)?.trim()) {
+      currentState.openSystemSettings('ai-services');
       return;
     }
 
@@ -178,7 +179,8 @@ export default function ChatView() {
 
   // Welcome screen - new conversation state (activeConversationId is null)
   const apiKey = useSettingsStore((s) => s.apiKeys[s.provider] ?? '');
-  const needsSetup = !apiKey?.trim();
+  const isOllamaProvider = useSettingsStore((s) => s.provider === 'ollama');
+  const needsSetup = !isOllamaProvider && !apiKey?.trim();
 
   // Scenario guide state — lifted here so ChatInput can receive the custom placeholder
   const [scenarioPlaceholder, setScenarioPlaceholder] = useState<string | null>(null);
@@ -316,8 +318,8 @@ export default function ChatView() {
       <div className="relative flex-1 min-h-0 overflow-y-auto" ref={containerRef}>
         <div className="w-full max-w-4xl mx-auto px-6 md:px-10 pt-5 pb-16 overflow-hidden">
           <div className="space-y-5">
-            {messageGroups.map((group) => (
-              <MessageGroup key={group[0].id} messages={group} />
+            {messageGroups.map((group, idx) => (
+              <MessageGroup key={group[0].id} messages={group} isLastGroup={idx === messageGroups.length - 1} />
             ))}
 
             {/* Typing indicator - brief flash before assistant message is created */}
@@ -356,6 +358,7 @@ export default function ChatView() {
             conversationId={activeConv.id}
             onNewChat={() => createConversation(useWorkspaceStore.getState().currentPath)}
           />
+          <BackgroundAgents />
           <ChatInput variant="chat" onSend={handleSend} />
           <p className="text-center text-[11px] text-[var(--abu-text-muted)] mt-1.5">
             {t.chat.disclaimer}
