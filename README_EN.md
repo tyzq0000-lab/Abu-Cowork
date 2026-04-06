@@ -20,6 +20,21 @@ Tell Abu what you need — it reads files, runs commands, writes docs, and build
 
 ---
 
+## Why Abu?
+
+| Feature | Abu | Regular AI Chat | Traditional Automation |
+|---------|-----|----------------|----------------------|
+| Autonomous planning & task execution | :white_check_mark: | :x: | :x: |
+| Read/write local files, run commands | :white_check_mark: | :x: | :white_check_mark: |
+| Natural language interaction | :white_check_mark: | :white_check_mark: | :x: |
+| 26+ extensible skills | :white_check_mark: | :x: | :x: |
+| Scheduled tasks & event triggers | :white_check_mark: | :x: | :white_check_mark: |
+| IM bot (Lark/DingTalk/WeCom) | :white_check_mark: | :x: | Partial |
+| Multi-agent parallel execution | :white_check_mark: | :x: | :x: |
+| 100% local data, privacy-safe | :white_check_mark: | :x: | :white_check_mark: |
+
+---
+
 ## Preview
 
 > Clean interface, powerful capabilities
@@ -34,7 +49,7 @@ Tell Abu what you need — it reads files, runs commands, writes docs, and build
 <td align="center"><b>IM Channel Chat</b><br/>@Abu in Lark/DingTalk to interact<br/><br/><img src="website/assets/screenshot-im-chat.png" width="100%" /></td>
 </tr>
 <tr>
-<td align="center"><b>Skills</b><br/>20+ built-in skills, fully customizable<br/><br/><img src="website/assets/screenshot-skills.png" width="100%" /></td>
+<td align="center"><b>Skills</b><br/>26+ built-in skills, fully customizable<br/><br/><img src="website/assets/screenshot-skills.png" width="100%" /></td>
 <td align="center"><b>MCP Connectors</b><br/>One-click integration with Playwright, GitHub & more<br/><br/><img src="website/assets/screenshot-mcp.png" width="100%" /></td>
 </tr>
 <tr>
@@ -42,7 +57,7 @@ Tell Abu what you need — it reads files, runs commands, writes docs, and build
 <td align="center"><b>Triggers / Watch</b><br/>HTTP, file changes, IM messages auto-trigger tasks<br/><br/><img src="website/assets/screenshot-triggers.png" width="100%" /></td>
 </tr>
 <tr>
-<td align="center"><b>AI Service Config</b><br/>Multi-provider model support, easy switching<br/><br/><img src="website/assets/screenshot-settings-ai.png" width="100%" /></td>
+<td align="center"><b>AI Service Management</b><br/>Multi-provider management with health checks<br/><br/><img src="website/assets/screenshot-settings-ai.png" width="100%" /></td>
 <td align="center"><b>IM Channel Config</b><br/>Connect Lark, DingTalk, WeCom & more<br/><br/><img src="website/assets/screenshot-settings-im.png" width="100%" /></td>
 </tr>
 <tr>
@@ -53,12 +68,27 @@ Tell Abu what you need — it reads files, runs commands, writes docs, and build
 
 ## Features
 
-### Core
+### Core Capabilities
 
-- **Autonomous Agent** — More than chat: plans, invokes tools, reads/writes files, executes commands, and completes complex tasks
-- **Skill System** — 20+ built-in skills (translation, weekly reports, code review, deep research, doc writing, and more) — one-click install, fully customizable
+- **Autonomous Agent** — More than chat: plans, invokes tools, reads/writes files, executes commands, and completes complex tasks end-to-end
+- **Multi-Agent Parallel Execution** — Run up to 5 background agents simultaneously, each executing tasks independently with real-time progress tracking
+- **Skill System** — 26+ built-in skills (PDF/PPTX/DOCX/Excel generation, frontend design, algorithmic art, code review, deep research, workflow automation, and more) — one-click install, fully customizable
 - **MCP Protocol** — Connect to databases, search engines, GitHub, and other external services via Model Context Protocol
-- **Multi-Model Support** — Works with Anthropic Claude, DeepSeek, Qwen, Doubao, Moonshot, GLM, and other major LLM providers
+- **Browser Automation** — Built-in Browser Bridge + Chrome extension for web element interaction, form filling, screenshots, and JS execution
+
+### AI Services & Models
+
+- **12+ Cloud Providers** — Anthropic Claude, OpenAI, DeepSeek, Qwen (Bailian), Doubao (Volcengine), Moonshot, Zhipu GLM, MiniMax, SiliconFlow, Qiniu, OpenRouter, and more
+- **Local Models** — Zero-config Ollama integration with automatic local model discovery
+- **Custom Endpoints** — Connect any OpenAI-compatible or Anthropic-compatible API
+- **Provider Management** — Add, edit, delete, reorder providers with connection health checks and latency detection
+- **Model Selector** — Switch models on-the-fly during conversations with capability badges (vision, tool use, web search, thinking, image generation, long context)
+- **Favorites & History** — Star frequently used models, quickly switch between recent ones
+
+### Web Search
+
+- **Multiple Search Engines** — Bing, Brave, Tavily, SearXNG (self-hosted, no API key needed)
+- **Independent Configuration** — Search engine settings decoupled from main AI service
 
 ### Automation & Triggers
 
@@ -68,7 +98,7 @@ Tell Abu what you need — it reads files, runs commands, writes docs, and build
   - **HTTP Webhook** — Auto-generated POST endpoints for external callbacks
   - **IM Messages** — Trigger tasks on specific incoming messages
   - **Cron Schedule** — Periodic execution on a time-based plan
-- **Trigger Permission Model** — Four capability levels (read-only → safe tools → full access → custom whitelist) for fine-grained control over automated tasks
+- **Trigger Permission Model** — Four capability levels (read-only → safe tools → full access → custom whitelist) for fine-grained control
 
 ### IM Channel Integration
 
@@ -81,14 +111,11 @@ Turn Abu into your team bot — just @Abu in your chat:
 
 ### Memory & Context
 
-- **Personal Memory** — Abu remembers your preferences and work habits (`~/.abu/agents/memory.md`)
-- **Project Memory** — Auto-maintained project-level context (`{workspace}/.abu/MEMORY.md`)
+- **Personal Memory** — Abu remembers your preferences and work habits across projects (`~/.abu/agents/memory.md`)
+- **Project Memory** — Auto-maintained project-level context with keyword matching, time decay, and access frequency ranking (`{workspace}/.abu/MEMORY.md`)
 - **Project Instructions** — Manually configure project-specific rules (`{workspace}/.abu/ABU.md`)
-
-### Browser Integration
-
-- **Browser Bridge** — MCP Server connecting to Chrome for web automation
-- **Chrome Extension** — Works with Abu for element clicking, form filling, screenshots, JS execution, and more
+- **Session Memory** — Large tool outputs automatically persisted to disk; compact summaries kept in-context to prevent context explosion
+- **Auto-Compaction** — Intelligently compresses long conversation history while preserving key context
 
 ### Security & Privacy
 
@@ -112,10 +139,17 @@ Head to [GitHub Releases](https://github.com/PM-Shawn/Abu-Cowork/releases) to do
 
 ## Quick Start
 
-1. Download, install, and open Abu
-2. Click the settings icon at the bottom left, go to "Custom Models"
-3. Choose your API provider and enter your API Key
-4. Return to the main screen and start chatting
+### 1. Configure AI Service
+
+Open Abu → Settings → **AI Service Management**:
+
+- **Quickest setup**: Choose a provider (e.g., DeepSeek, Anthropic), enter your API Key, click verify
+- **Local models**: Install [Ollama](https://ollama.com) — Abu auto-discovers local models, no API key needed
+- **Custom endpoint**: Enter any OpenAI-compatible API's Base URL and Key
+
+### 2. Start Chatting
+
+Return to the main screen, use the model selector to pick your preferred model, and start chatting.
 
 **Try these prompts:**
 
@@ -128,21 +162,48 @@ Extract the tables from this PDF and generate an Excel file
 ```
 Every morning at 9 AM, search for the latest AI news and generate a daily digest
 ```
+```
+Use the frontend design skill to create a product landing page
+```
+```
+Create a weekly report PPT for this week
+```
+
+### 3. Level Up
+
+- **Install skills**: Settings → Customize → Skill Store — install PDF, PPT, frontend design, and more
+- **Connect MCP**: Settings → MCP Connectors — one-click integration with GitHub, Playwright, etc.
+- **Set up schedules**: Have Abu automatically search news, run data, send reports daily
+- **Connect IM**: Settings → IM Channels — let your team @Abu directly in Lark/DingTalk
 
 > For more use cases, see the [User Guide](docs/User-Guide_EN.md)
+
+## Built-in Skills
+
+| Category | Skills |
+|----------|--------|
+| Document Generation | PDF, PPTX, DOCX, XLSX |
+| Design & Creative | Frontend Design, Canvas Design, Algorithmic Art, SVG Diagrams, Mermaid Diagrams, Infographics, Slack GIF |
+| Developer Tools | Claude API, MCP Server Builder, Web Artifacts |
+| Content Writing | Doc Co-authoring, Brand Guidelines, Internal Comms, Blog Writer |
+| Automation | Scheduled Tasks, Triggers, Alert SOP, Workflow Orchestrator |
+| Project Management | Skill Creator, Project Init, Agent Creator |
+| Testing | Web App Testing (Playwright) |
+| Theming | Theme Factory (10+ preset themes for any artifact) |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Desktop Framework | Tauri 2.0 (Rust + Web) |
-| Frontend | React 19 + TypeScript + TailwindCSS v4 + Vite |
-| LLM | Multi-model adapter (Anthropic / OpenAI-compatible) |
-| State Management | Zustand + Immer |
+| Frontend | React 19 + TypeScript (strict) + TailwindCSS v4 + Vite |
+| LLM Adapter | Dual-protocol adapter (Anthropic / OpenAI-compatible) |
+| State Management | Zustand + Immer + Persist |
 | Tool Protocol | MCP (`@modelcontextprotocol/sdk`) |
+| Web Search | Bing / Brave / Tavily / SearXNG |
 | Sandbox | macOS Seatbelt + path/command dual validation |
-| UI | Radix UI + Lucide Icons |
-| Testing | Vitest + happy-dom |
+| UI Components | Radix UI + Lucide Icons + shadcn-style |
+| Testing | Vitest + happy-dom (1000+ test cases) |
 
 ## Build from Source
 
@@ -191,23 +252,28 @@ npm run lint          # ESLint check
 ```
 src/
 ├── components/       # React UI components
-│   ├── chat/         # Chat interface, message bubbles, Markdown rendering
+│   ├── chat/         # Chat interface, messages, model selector
 │   ├── sidebar/      # Sidebar navigation
 │   ├── panel/        # Right-side detail panel
+│   ├── customize/    # Customization (skills, agents, models)
 │   ├── schedule/     # Scheduled task views
 │   ├── trigger/      # Trigger management views
-│   ├── settings/     # System settings (incl. IM channel config)
+│   ├── settings/     # System settings (AI services, IM channels)
+│   ├── preview/      # File preview
 │   └── ui/           # Base UI components (shadcn/Radix)
 ├── core/             # Core engine (non-UI)
-│   ├── agent/        # Agent loop, retry, memory system
-│   ├── llm/          # LLM adapter layer (Claude + OpenAI-compatible)
+│   ├── agent/        # Agent loop, background agents, memory
+│   ├── llm/          # LLM adapter layer (Claude + OpenAI + Ollama)
 │   ├── tools/        # Tool registry, built-in tools, safety checks
 │   ├── mcp/          # MCP client
 │   ├── skill/        # Skill loading & preprocessing
+│   ├── search/       # Web search (Bing/Brave/Tavily/SearXNG)
+│   ├── memory/       # Memory system (storage, retrieval, scoring)
 │   ├── scheduler/    # Scheduling engine
-│   ├── trigger/      # Trigger engine (file watcher/webhook/cron/IM)
-│   ├── im/           # IM channel adapters (D-Chat/Feishu/DingTalk/WeCom/Slack)
-│   ├── context/      # Context management & token estimation
+│   ├── trigger/      # Trigger engine (file/webhook/cron/IM)
+│   ├── im/           # IM channel adapters (D-Chat/Lark/DingTalk/WeCom/Slack)
+│   ├── context/      # Context management & auto-compaction
+│   ├── session/      # Session management & disk persistence
 │   └── sandbox/      # Sandbox configuration
 ├── stores/           # Zustand state management
 ├── hooks/            # React Hooks
@@ -215,11 +281,11 @@ src/
 ├── types/            # TypeScript type definitions
 └── utils/            # Utility functions
 
-builtin-skills/       # Built-in skill definitions (translation, reports, code review, etc.)
+builtin-skills/       # Built-in skill definitions (26+ skills)
 builtin-agents/       # Built-in agent definitions
 abu-browser-bridge/   # Browser bridge MCP Server
 abu-chrome-extension/ # Chrome extension
-src-tauri/            # Tauri Rust backend (sandbox, command execution, network proxy)
+src-tauri/            # Tauri Rust backend (sandbox, command exec, network proxy)
 ```
 
 ## Documentation

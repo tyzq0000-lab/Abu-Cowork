@@ -20,6 +20,21 @@
 
 ---
 
+## 为什么选择 Abu？
+
+| 特性 | Abu | 普通 AI 聊天 | 传统自动化工具 |
+|------|-----|-------------|---------------|
+| 自主规划并执行复杂任务 | :white_check_mark: | :x: | :x: |
+| 读写本地文件、执行命令 | :white_check_mark: | :x: | :white_check_mark: |
+| 自然语言交互 | :white_check_mark: | :white_check_mark: | :x: |
+| 26+ 可扩展技能 | :white_check_mark: | :x: | :x: |
+| 定时任务 & 事件触发 | :white_check_mark: | :x: | :white_check_mark: |
+| IM 机器人（飞书/钉钉/企微） | :white_check_mark: | :x: | 部分 |
+| 多 Agent 后台并行 | :white_check_mark: | :x: | :x: |
+| 数据 100% 本地，隐私安全 | :white_check_mark: | :x: | :white_check_mark: |
+
+---
+
 ## 产品预览
 
 > 简洁直观的界面，强大灵活的能力
@@ -34,7 +49,7 @@
 <td align="center"><b>IM 频道对话</b><br/>在飞书/钉钉中 @阿布 即可交互<br/><br/><img src="website/assets/screenshot-im-chat.png" width="100%" /></td>
 </tr>
 <tr>
-<td align="center"><b>Skill 技能</b><br/>内置 20+ 技能，支持自定义扩展<br/><br/><img src="website/assets/screenshot-skills.png" width="100%" /></td>
+<td align="center"><b>Skill 技能</b><br/>内置 26+ 技能，支持自定义扩展<br/><br/><img src="website/assets/screenshot-skills.png" width="100%" /></td>
 <td align="center"><b>MCP 连接器</b><br/>一键接入 Playwright、GitHub 等外部工具<br/><br/><img src="website/assets/screenshot-mcp.png" width="100%" /></td>
 </tr>
 <tr>
@@ -42,7 +57,7 @@
 <td align="center"><b>触发器 / 值班</b><br/>HTTP、文件变更、IM 消息等事件自动触发<br/><br/><img src="website/assets/screenshot-triggers.png" width="100%" /></td>
 </tr>
 <tr>
-<td align="center"><b>AI 服务配置</b><br/>支持多厂商模型，灵活切换<br/><br/><img src="website/assets/screenshot-settings-ai.png" width="100%" /></td>
+<td align="center"><b>AI 服务管理</b><br/>多厂商 Provider 管理，健康检查，一键切换<br/><br/><img src="website/assets/screenshot-settings-ai.png" width="100%" /></td>
 <td align="center"><b>IM 频道配置</b><br/>连接飞书、钉钉、企微等 IM 平台<br/><br/><img src="website/assets/screenshot-settings-im.png" width="100%" /></td>
 </tr>
 <tr>
@@ -56,9 +71,24 @@
 ### 核心能力
 
 - **Agent 自主执行** — 不只是聊天，能自主规划、调用工具、读写文件、执行命令，完成复杂任务
-- **Skill 技能系统** — 内置 20+ 技能（翻译、周报、代码审查、深度研究、文档写作等），一键安装，支持自定义
+- **多 Agent 后台并行** — 支持同时运行多个后台 Agent（最多 5 个），各自独立执行任务，进度实时可见
+- **Skill 技能系统** — 内置 26+ 技能（PDF/PPTX/DOCX/Excel 生成、前端设计、算法艺术、代码审查、深度研究、工作流自动化等），一键安装，支持自定义
 - **MCP 工具协议** — 通过 Model Context Protocol 连接数据库、搜索引擎、GitHub 等外部服务
-- **多模型支持** — 支持 Anthropic Claude、DeepSeek、通义千问、豆包、Moonshot、智谱等主流模型
+- **浏览器自动化** — 内置 Browser Bridge + Chrome 扩展，实现网页元素操作、表单填写、截图、JS 执行
+
+### AI 服务与模型
+
+- **12+ 云端厂商** — Anthropic Claude、OpenAI、DeepSeek、通义千问(百炼)、豆包(火山引擎)、Moonshot、智谱、MiniMax、SiliconFlow、七牛、OpenRouter 等
+- **本地模型** — Ollama 零配置接入，自动发现本地模型
+- **自定义接入** — 支持任意 OpenAI 兼容 / Anthropic 兼容 API 端点
+- **Provider 管理** — 添加、编辑、删除、排序，连接健康检查 + 延迟检测
+- **模型选择器** — 对话中实时切换模型，能力徽章一目了然（视觉、工具调用、联网搜索、深度思考、图片生成、长上下文）
+- **收藏与历史** — 常用模型一键收藏，最近使用快速切换
+
+### 联网搜索
+
+- **多搜索引擎** — 支持 Bing、Brave、Tavily、SearXNG（自托管免 API Key）
+- **独立配置** — 搜索引擎与主 AI 服务解耦，独立管理
 
 ### 自动化与触发器
 
@@ -81,14 +111,11 @@
 
 ### 记忆与上下文
 
-- **个人记忆** — 阿布会记住你的偏好和工作习惯（`~/.abu/agents/memory.md`）
-- **项目记忆** — 自动维护项目级上下文（`{workspace}/.abu/MEMORY.md`）
+- **个人记忆** — 阿布会记住你的偏好和工作习惯，跨项目生效（`~/.abu/agents/memory.md`）
+- **项目记忆** — 自动维护项目级上下文，支持关键词匹配 + 时间衰减 + 访问频率排序（`{workspace}/.abu/MEMORY.md`）
 - **项目指令** — 手动配置项目专属规则（`{workspace}/.abu/ABU.md`）
-
-### 浏览器集成
-
-- **浏览器桥接** — 通过 MCP Server 连接 Chrome，实现网页自动化操作
-- **Chrome 扩展** — 配合阿布完成网页元素点击、表单填写、截图、JS 执行等操作
+- **会话记忆** — 大体积工具输出自动落盘，会话内保留紧凑摘要，防止上下文爆炸
+- **自动压缩** — 对话过长时智能压缩历史消息，保留关键上下文
 
 ### 安全与隐私
 
@@ -112,10 +139,17 @@
 
 ## 快速开始
 
-1. 下载安装并打开 Abu
-2. 点击左下角设置图标，进入「自定义模型」
-3. 选择 API 厂商，填入 API Key
-4. 回到主界面，开始对话
+### 1. 配置 AI 服务
+
+打开 Abu → 设置 → **AI 服务管理**：
+
+- **最快上手**：选择一个 API 厂商（如 DeepSeek、Anthropic），填入 API Key，点击验证
+- **本地模型**：安装 [Ollama](https://ollama.com)，Abu 自动发现本地模型，无需 API Key
+- **自定义接入**：填入任意 OpenAI 兼容 API 的 Base URL 和 Key
+
+### 2. 开始对话
+
+回到主界面，用模型选择器选择你想用的模型，然后开始对话。
 
 **试试这些指令：**
 
@@ -128,21 +162,48 @@
 ```
 每天早上 9 点帮我搜索最新的 AI 新闻，生成日报
 ```
+```
+用前端技能帮我做一个产品 landing page
+```
+```
+帮我做一份本周的工作周报 PPT
+```
+
+### 3. 进阶玩法
+
+- **安装技能**：设置 → 自定义 → 技能商店，按需安装 PDF、PPT、前端设计等技能
+- **连接 MCP**：设置 → MCP 连接器，一键接入 GitHub、Playwright 等外部工具
+- **配置定时任务**：让阿布每天自动搜新闻、跑数据、发报告
+- **连接 IM**：设置 → IM 频道，让团队在飞书/钉钉里直接 @阿布
 
 > 更多使用场景请查看 [使用指南](docs/User-Guide.md)
+
+## 内置技能一览
+
+| 类别 | 技能 |
+|------|------|
+| 文档生成 | PDF、PPTX、DOCX、XLSX |
+| 设计创作 | 前端设计、画布设计、算法艺术、SVG 图表、Mermaid 图表、信息图、Slack GIF |
+| 开发工具 | Claude API、MCP Server 构建、Web Artifacts |
+| 内容写作 | 文档协作、品牌规范、内部通讯、博客写作 |
+| 自动化 | 定时任务、触发器、告警 SOP、工作流编排 |
+| 项目管理 | 技能创建器、项目初始化、Agent 创建 |
+| 测试 | Web 应用测试 (Playwright) |
+| 主题 | 主题工厂（10+ 预设主题，应用到任何产出物） |
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
 | 桌面框架 | Tauri 2.0 (Rust + Web) |
-| 前端 | React 19 + TypeScript + TailwindCSS v4 + Vite |
-| LLM | 多模型适配 (Anthropic / OpenAI-compatible) |
-| 状态管理 | Zustand + Immer |
+| 前端 | React 19 + TypeScript (strict) + TailwindCSS v4 + Vite |
+| LLM 适配 | 双协议适配器 (Anthropic / OpenAI-compatible) |
+| 状态管理 | Zustand + Immer + Persist |
 | 工具协议 | MCP (`@modelcontextprotocol/sdk`) |
+| 联网搜索 | Bing / Brave / Tavily / SearXNG |
 | 安全沙箱 | macOS Seatbelt + 路径/命令双重校验 |
-| UI | Radix UI + Lucide Icons |
-| 测试 | Vitest + happy-dom |
+| UI 组件 | Radix UI + Lucide Icons + shadcn 风格 |
+| 测试 | Vitest + happy-dom (1000+ 测试用例) |
 
 ## 从源码构建
 
@@ -191,23 +252,28 @@ npm run lint          # ESLint 检查
 ```
 src/
 ├── components/       # React UI 组件
-│   ├── chat/         # 对话界面、消息气泡、Markdown 渲染
+│   ├── chat/         # 对话界面、消息气泡、模型选择器
 │   ├── sidebar/      # 侧边栏导航
 │   ├── panel/        # 右侧详情面板
+│   ├── customize/    # 自定义（技能、Agent、模型）
 │   ├── schedule/     # 定时任务视图
 │   ├── trigger/      # 触发器管理视图
-│   ├── settings/     # 系统设置（含 IM 频道配置）
+│   ├── settings/     # 系统设置（AI 服务、IM 频道）
+│   ├── preview/      # 文件预览
 │   └── ui/           # 基础 UI 组件 (shadcn/Radix)
 ├── core/             # 核心引擎（非 UI）
-│   ├── agent/        # Agent 循环、重试、记忆系统
-│   ├── llm/          # LLM 适配层 (Claude + OpenAI-compatible)
+│   ├── agent/        # Agent 循环、后台 Agent、记忆系统
+│   ├── llm/          # LLM 适配层（Claude + OpenAI + Ollama）
 │   ├── tools/        # 工具注册、内置工具、安全校验
 │   ├── mcp/          # MCP 客户端
 │   ├── skill/        # Skill 加载与预处理
+│   ├── search/       # 联网搜索（Bing/Brave/Tavily/SearXNG）
+│   ├── memory/       # 记忆系统（存储、检索、评分）
 │   ├── scheduler/    # 定时调度引擎
-│   ├── trigger/      # 触发器引擎（文件监听/Webhook/Cron/IM）
+│   ├── trigger/      # 触发器引擎（文件/Webhook/Cron/IM）
 │   ├── im/           # IM 频道适配（D-Chat/飞书/钉钉/企微/Slack）
-│   ├── context/      # 上下文管理与 Token 估算
+│   ├── context/      # 上下文管理与自动压缩
+│   ├── session/      # 会话管理与磁盘落盘
 │   └── sandbox/      # 沙箱配置
 ├── stores/           # Zustand 状态管理
 ├── hooks/            # React Hooks
@@ -215,7 +281,7 @@ src/
 ├── types/            # TypeScript 类型定义
 └── utils/            # 工具函数
 
-builtin-skills/       # 内置技能定义 (翻译、周报、代码审查等)
+builtin-skills/       # 内置技能定义 (26+ 技能)
 builtin-agents/       # 内置 Agent 定义
 abu-browser-bridge/   # 浏览器桥接 MCP Server
 abu-chrome-extension/ # Chrome 扩展
