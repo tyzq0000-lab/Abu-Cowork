@@ -119,9 +119,9 @@ export const recallTool: ToolDefinition = {
 
     // --- 3. Conversation index (from chatStore + memory backend) ---
     try {
-      const conversations = useChatStore.getState().conversations;
-      const convList = Object.values(conversations)
-        .filter(c => c.messages.length >= 2)
+      const conversationIndex = useChatStore.getState().conversationIndex;
+      const convList = Object.values(conversationIndex)
+        .filter(c => c.messageCount >= 2)
         .sort((a, b) => b.updatedAt - a.updatedAt);
 
       let matched = convList;
@@ -131,18 +131,9 @@ export const recallTool: ToolDefinition = {
       matched = matched.slice(0, limit);
 
       if (matched.length > 0) {
-        const lines = matched.map(c => {
-          const toolNames = new Set<string>();
-          for (const m of c.messages) {
-            if (m.toolCalls) {
-              for (const tc of m.toolCalls) {
-                toolNames.add(tc.name);
-              }
-            }
-          }
-          const toolSuffix = toolNames.size > 0 ? `, 工具: ${[...toolNames].slice(0, 5).join('/')}` : '';
-          return `- "${c.title || '无标题'}" (${c.messages.length}条消息${toolSuffix}, ${formatTime(c.updatedAt)})`;
-        });
+        const lines = matched.map(c =>
+          `- "${c.title || '无标题'}" (${c.messageCount}条消息, ${formatTime(c.updatedAt)})`
+        );
         sections.push(`## 历史会话 (${matched.length}条)\n${lines.join('\n')}`);
       }
 
@@ -151,7 +142,7 @@ export const recallTool: ToolDefinition = {
       const backend = getMemoryBackend();
       const indexEntries = await backend.list({ scope: 'user', category: 'conversation_index' as import('../../memory/types').MemoryCategory });
       // Only show index entries for conversations NOT in current chatStore
-      const liveConvIds = new Set(Object.keys(conversations));
+      const liveConvIds = new Set(Object.keys(conversationIndex));
       const archivedEntries = indexEntries
         .filter(e => {
           const convId = e.keywords.find(k => k.startsWith('conv:'));

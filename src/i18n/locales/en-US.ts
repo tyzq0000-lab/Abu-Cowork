@@ -33,6 +33,7 @@ const enUS: TranslationDict = {
     categoryDecision: 'Decision',
     categoryAction: 'Action',
     categoryConversationIndex: 'Conversation',
+    categoryFeedback: 'Feedback',
     entryCount: '{count} memories',
     sourceAutoFlush: 'Auto-extracted',
     sourceAgentExplicit: 'AI recorded',
@@ -41,6 +42,18 @@ const enUS: TranslationDict = {
     deleteTitle: 'Delete Memory',
     legacyHint: 'Legacy memory (will be auto-migrated on next conversation)',
     emptyHint: 'AI will automatically accumulate memories during conversations',
+  },
+
+  soul: {
+    title: 'Abu\'s Personality',
+    subtitle: 'Abu comes with a default personality — customize it to your liking',
+    defaultLabel: 'Using default personality',
+    customize: 'Customize',
+    placeholder: 'Describe Abu\'s personality in markdown...',
+    save: 'Save',
+    saved: 'Saved',
+    restore: 'Restore Default',
+    filePath: 'File: ~/.abu/SOUL.md (advanced users can edit directly)',
   },
 
   sidebar: {

@@ -104,7 +104,7 @@ export class SessionMapper {
 
     if (existing) {
       // Check if the underlying conversation still exists (user may have deleted it in Abu)
-      const convExists = !!useChatStore.getState().conversations[existing.conversationId];
+      const convExists = !!useChatStore.getState().conversationIndex[existing.conversationId];
       const timeoutMs = channel.sessionTimeoutMinutes * 60 * 1000;
       const isExpired = timeoutMs > 0 && (Date.now() - existing.lastActiveAt > timeoutMs);
 

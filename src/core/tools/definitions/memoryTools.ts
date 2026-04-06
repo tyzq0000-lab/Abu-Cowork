@@ -52,8 +52,8 @@ export const updateMemoryTool: ToolDefinition = {
       summary: { type: 'string', description: '一句话摘要' },
       category: {
         type: 'string',
-        description: '分类: user_preference(用户偏好) / project_knowledge(项目知识) / conversation_fact(对话事实) / decision(决策) / action_item(待办)',
-        enum: ['user_preference', 'project_knowledge', 'conversation_fact', 'decision', 'action_item'],
+        description: '分类: user_preference(用户偏好) / project_knowledge(项目知识) / conversation_fact(对话事实) / decision(决策) / action_item(待办) / feedback(行为纠正)',
+        enum: ['user_preference', 'project_knowledge', 'conversation_fact', 'decision', 'action_item', 'feedback'],
       },
       keywords: {
         type: 'array',

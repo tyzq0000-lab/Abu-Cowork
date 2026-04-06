@@ -235,7 +235,7 @@ function createDefaultProviders(): ProviderInstance[] {
 
 export type ViewMode = 'chat' | 'automation' | 'toolbox' | 'settings';
 export type AutomationTab = 'schedule' | 'trigger';
-export type SystemSettingsTab = 'general' | 'ai-services' | 'sandbox' | 'im-channels' | 'personal-memory' | 'about' | 'feedback' | 'sponsor';
+export type SystemSettingsTab = 'general' | 'ai-services' | 'sandbox' | 'im-channels' | 'personal-memory' | 'soul' | 'about' | 'feedback' | 'sponsor';
 export type ToolboxTab = 'skills' | 'agents' | 'mcp';
 
 // ============================================================
@@ -283,6 +283,7 @@ interface SettingsState {
   behaviorSensorEnabled: boolean;
   computerUseEnabled: boolean;
   allowSkillCommands: boolean;
+  soulInitialized: boolean;
   skillRegistry: string;
   permissionMode: PermissionMode;
 }
@@ -349,6 +350,7 @@ interface SettingsActions {
   setGuideShown: (shown: boolean) => void;
   setBehaviorSensorEnabled: (enabled: boolean) => void;
   setComputerUseEnabled: (enabled: boolean) => void;
+  setSoulInitialized: (initialized: boolean) => void;
   setPermissionMode: (mode: PermissionMode) => void;
 }
 
@@ -467,6 +469,7 @@ export const useSettingsStore = create<SettingsStore>()(
       behaviorSensorEnabled: false,
       computerUseEnabled: false,
       allowSkillCommands: true,
+      soulInitialized: false,
       skillRegistry: '',
       permissionMode: 'default' as PermissionMode,
 
@@ -679,13 +682,23 @@ export const useSettingsStore = create<SettingsStore>()(
       setGuideShown: (guideShown) => set({ guideShown }),
       setBehaviorSensorEnabled: (behaviorSensorEnabled) => set({ behaviorSensorEnabled }),
       setComputerUseEnabled: (computerUseEnabled) => set({ computerUseEnabled }),
+      setSoulInitialized: (soulInitialized) => set({ soulInitialized }),
       setPermissionMode: (mode) => set({ permissionMode: mode }),
     }),
     {
       name: 'abu-settings',
-      version: 14,
+      version: 15,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>;
+
+        // ════════════════════════════════════════════════
+        // V15: Soul personality — add soulInitialized flag
+        // ════════════════════════════════════════════════
+        if (version < 15) {
+          if (state.soulInitialized === undefined) {
+            state.soulInitialized = false;
+          }
+        }
 
         // ════════════════════════════════════════════════
         // V14: Provider V2 migration
@@ -967,6 +980,7 @@ export const useSettingsStore = create<SettingsStore>()(
         behaviorSensorEnabled: state.behaviorSensorEnabled,
         computerUseEnabled: state.computerUseEnabled,
         allowSkillCommands: state.allowSkillCommands,
+        soulInitialized: state.soulInitialized,
         skillRegistry: state.skillRegistry,
         permissionMode: state.permissionMode,
       }),

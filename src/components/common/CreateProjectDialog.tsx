@@ -25,7 +25,7 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
   const createProject = useProjectStore((s) => s.createProject);
   const getProjectByWorkspace = useProjectStore((s) => s.getProjectByWorkspace);
   const setConversationProject = useChatStore((s) => s.setConversationProject);
-  const conversations = useChatStore((s) => s.conversations);
+  const conversationIndex = useChatStore((s) => s.conversationIndex);
 
   // Which step: pick mode, or fill form
   const [mode, setMode] = useState<CreateMode | null>(null);
@@ -123,7 +123,7 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
     });
 
     // Auto-assign existing conversations with the same workspace
-    const matchingConvs = Object.values(conversations).filter(
+    const matchingConvs = Object.values(conversationIndex).filter(
       (c) => c.workspacePath === finalFolder && !c.projectId
     );
     for (const conv of matchingConvs) {

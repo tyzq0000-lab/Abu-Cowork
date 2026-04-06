@@ -178,9 +178,13 @@ export default function ChatView() {
 
 
   // Welcome screen - new conversation state (activeConversationId is null)
-  const apiKey = useSettingsStore((s) => getActiveApiKey(s));
-  const isOllamaProvider = useSettingsStore((s) => s.activeModel.providerId === 'ollama');
-  const needsSetup = !isOllamaProvider && !apiKey?.trim();
+  // Only show setup prompt when NO enabled provider has an API key at all
+  const needsSetup = useSettingsStore((s) => {
+    const hasAnyConfigured = s.providers.some(
+      p => p.enabled && (p.apiKey.trim().length > 0 || p.id === 'ollama')
+    );
+    return !hasAnyConfigured;
+  });
 
   // Scenario guide state — lifted here so ChatInput can receive the custom placeholder
   const [scenarioPlaceholder, setScenarioPlaceholder] = useState<string | null>(null);

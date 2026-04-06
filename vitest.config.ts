@@ -27,6 +27,13 @@ export default defineConfig({
         'src/App.tsx',
         '**/*.d.ts',
       ],
+      thresholds: {
+        // Core modules — enforce minimum coverage
+        'src/core/llm/': { statements: 50 },
+        'src/core/tools/': { statements: 50 },
+        'src/core/context/': { statements: 60 },
+        'src/stores/': { statements: 40 },
+      },
     },
   },
 });

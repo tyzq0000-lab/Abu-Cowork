@@ -44,6 +44,9 @@ src-tauri/python-runtime/
 # Test files
 test-browser.html
 
+# Eval results (API-generated, not version controlled)
+eval-results/*.json
+
 # Internal reference docs (not for release)
 仅供了解*
 docs/

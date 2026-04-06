@@ -1,0 +1,455 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Tool count stability > total builtin tool count matches snapshot 1`] = `35`;
+
+exports[`Tool schema snapshot > all tool schemas match snapshot 1`] = `
+[
+  {
+    "name": "clipboard_read",
+    "paramNames": [],
+    "requiredParams": [],
+  },
+  {
+    "name": "clipboard_write",
+    "paramNames": [
+      "text",
+    ],
+    "requiredParams": [
+      "text",
+    ],
+  },
+  {
+    "name": "computer",
+    "paramNames": [
+      "action",
+      "amount",
+      "button",
+      "direction",
+      "duration",
+      "endX",
+      "endY",
+      "height",
+      "key",
+      "modifiers",
+      "show_user",
+      "startX",
+      "startY",
+      "text",
+      "width",
+      "x",
+      "y",
+    ],
+    "requiredParams": [
+      "action",
+    ],
+  },
+  {
+    "name": "delegate_to_agent",
+    "paramNames": [
+      "agent_name",
+      "async",
+      "context",
+      "task",
+      "type",
+    ],
+    "requiredParams": [
+      "task",
+    ],
+  },
+  {
+    "name": "edit_file",
+    "paramNames": [
+      "new_content",
+      "old_content",
+      "path",
+    ],
+    "requiredParams": [
+      "path",
+      "old_content",
+      "new_content",
+    ],
+  },
+  {
+    "name": "find_files",
+    "paramNames": [
+      "max_results",
+      "path",
+      "pattern",
+    ],
+    "requiredParams": [
+      "pattern",
+      "path",
+    ],
+  },
+  {
+    "name": "generate_image",
+    "paramNames": [
+      "prompt",
+      "save_path",
+      "size",
+      "style",
+    ],
+    "requiredParams": [
+      "prompt",
+    ],
+  },
+  {
+    "name": "get_system_info",
+    "paramNames": [],
+    "requiredParams": [],
+  },
+  {
+    "name": "http_fetch",
+    "paramNames": [
+      "body",
+      "extract",
+      "headers",
+      "method",
+      "url",
+    ],
+    "requiredParams": [
+      "url",
+    ],
+  },
+  {
+    "name": "improve_skill_description",
+    "paramNames": [
+      "current_description",
+      "eval_results",
+      "skill_content",
+      "skill_name",
+    ],
+    "requiredParams": [
+      "skill_name",
+      "current_description",
+      "eval_results",
+    ],
+  },
+  {
+    "name": "list_directory",
+    "paramNames": [
+      "path",
+    ],
+    "requiredParams": [
+      "path",
+    ],
+  },
+  {
+    "name": "log_task_completion",
+    "paramNames": [
+      "agent_used",
+      "category",
+      "skill_used",
+      "success",
+      "summary",
+      "tools_used",
+    ],
+    "requiredParams": [
+      "summary",
+      "category",
+      "success",
+    ],
+  },
+  {
+    "name": "manage_file_watch",
+    "paramNames": [
+      "action",
+      "event",
+      "path",
+      "pattern",
+      "prompt",
+      "rule_id",
+      "skill_name",
+    ],
+    "requiredParams": [
+      "action",
+    ],
+  },
+  {
+    "name": "manage_mcp_server",
+    "paramNames": [
+      "action",
+      "env",
+      "name",
+      "query",
+    ],
+    "requiredParams": [
+      "action",
+    ],
+  },
+  {
+    "name": "manage_scheduled_task",
+    "paramNames": [
+      "action",
+      "day_of_week",
+      "description",
+      "frequency",
+      "name",
+      "prompt",
+      "skill_name",
+      "status_filter",
+      "task_id",
+      "time_hour",
+      "time_minute",
+      "workspace_path",
+    ],
+    "requiredParams": [
+      "action",
+    ],
+  },
+  {
+    "name": "manage_trigger",
+    "paramNames": [
+      "action",
+      "allowed_commands",
+      "allowed_paths",
+      "allowed_tools",
+      "capability",
+      "debounce_enabled",
+      "debounce_seconds",
+      "description",
+      "filter_field",
+      "filter_keywords",
+      "filter_pattern",
+      "filter_type",
+      "name",
+      "prompt",
+      "skill_name",
+      "source_events",
+      "source_interval",
+      "source_path",
+      "source_pattern",
+      "source_type",
+      "status_filter",
+      "trigger_id",
+      "workspace_path",
+    ],
+    "requiredParams": [
+      "action",
+    ],
+  },
+  {
+    "name": "process_image",
+    "paramNames": [
+      "action",
+      "format",
+      "height",
+      "input_path",
+      "output_path",
+      "quality",
+      "width",
+      "x",
+      "y",
+    ],
+    "requiredParams": [
+      "input_path",
+      "output_path",
+      "action",
+    ],
+  },
+  {
+    "name": "read_file",
+    "paramNames": [
+      "limit",
+      "offset",
+      "path",
+    ],
+    "requiredParams": [
+      "path",
+    ],
+  },
+  {
+    "name": "read_skill_file",
+    "paramNames": [
+      "path",
+      "skill_name",
+    ],
+    "requiredParams": [
+      "skill_name",
+      "path",
+    ],
+  },
+  {
+    "name": "recall",
+    "paramNames": [
+      "limit",
+      "query",
+      "scope",
+    ],
+    "requiredParams": [],
+  },
+  {
+    "name": "report_plan",
+    "paramNames": [
+      "steps",
+    ],
+    "requiredParams": [
+      "steps",
+    ],
+  },
+  {
+    "name": "request_workspace",
+    "paramNames": [
+      "folder_hint",
+      "reason",
+    ],
+    "requiredParams": [
+      "reason",
+    ],
+  },
+  {
+    "name": "run_command",
+    "paramNames": [
+      "background",
+      "command",
+      "cwd",
+      "timeout",
+    ],
+    "requiredParams": [
+      "command",
+    ],
+  },
+  {
+    "name": "save_agent",
+    "paramNames": [
+      "content",
+      "files",
+      "name",
+    ],
+    "requiredParams": [
+      "name",
+      "content",
+    ],
+  },
+  {
+    "name": "save_skill",
+    "paramNames": [
+      "content",
+      "files",
+      "name",
+    ],
+    "requiredParams": [
+      "name",
+      "content",
+    ],
+  },
+  {
+    "name": "search_files",
+    "paramNames": [
+      "include",
+      "max_results",
+      "path",
+      "pattern",
+    ],
+    "requiredParams": [
+      "pattern",
+      "path",
+    ],
+  },
+  {
+    "name": "system_notify",
+    "paramNames": [
+      "body",
+      "title",
+    ],
+    "requiredParams": [
+      "title",
+      "body",
+    ],
+  },
+  {
+    "name": "test_skill_trigger",
+    "paramNames": [
+      "queries",
+      "skill_description",
+      "skill_name",
+    ],
+    "requiredParams": [
+      "skill_name",
+      "skill_description",
+      "queries",
+    ],
+  },
+  {
+    "name": "todo_write",
+    "paramNames": [
+      "action",
+      "content",
+      "items",
+      "status",
+      "todo_id",
+    ],
+    "requiredParams": [
+      "action",
+    ],
+  },
+  {
+    "name": "tool_search",
+    "paramNames": [
+      "max_results",
+      "query",
+    ],
+    "requiredParams": [
+      "query",
+    ],
+  },
+  {
+    "name": "update_memory",
+    "paramNames": [
+      "action",
+      "agent_name",
+      "category",
+      "content",
+      "keywords",
+      "scope",
+      "summary",
+    ],
+    "requiredParams": [
+      "agent_name",
+      "content",
+    ],
+  },
+  {
+    "name": "update_soul",
+    "paramNames": [
+      "content",
+    ],
+    "requiredParams": [
+      "content",
+    ],
+  },
+  {
+    "name": "use_skill",
+    "paramNames": [
+      "context",
+      "skill_name",
+    ],
+    "requiredParams": [
+      "skill_name",
+    ],
+  },
+  {
+    "name": "web_search",
+    "paramNames": [
+      "count",
+      "freshness",
+      "market",
+      "query",
+    ],
+    "requiredParams": [
+      "query",
+    ],
+  },
+  {
+    "name": "write_file",
+    "paramNames": [
+      "content",
+      "path",
+    ],
+    "requiredParams": [
+      "path",
+      "content",
+    ],
+  },
+]
+`;

@@ -10,19 +10,21 @@
  */
 
 import type { Message, ToolCallForContext } from '../../types';
-import { TOOL_NAMES } from '../tools/toolNames';
 
-/** Tools whose results can be safely truncated without losing critical semantics */
-const COMPACTABLE_TOOLS = new Set<string>([
-  TOOL_NAMES.READ_FILE,
-  TOOL_NAMES.RUN_COMMAND,
-  TOOL_NAMES.SEARCH_FILES,
-  TOOL_NAMES.FIND_FILES,
-  TOOL_NAMES.LIST_DIRECTORY,
-  TOOL_NAMES.WEB_SEARCH,
-  TOOL_NAMES.HTTP_FETCH,
-  TOOL_NAMES.EDIT_FILE,
-  TOOL_NAMES.WRITE_FILE,
+/**
+ * Tools whose results should NOT be micro-compacted.
+ * These either have very short results or contain structural information
+ * that breaks when truncated. All other tools are compacted by default.
+ */
+const SKIP_COMPACT = new Set<string>([
+  'report_plan',       // Plan steps — structure matters
+  'recall',            // Memory content — already concise
+  'get_system_info',   // System info — always short
+  'clipboard_read',    // Clipboard — typically short
+  'system_notify',     // Notification — very short
+  'update_memory',     // Memory write result — very short
+  'todo_write',        // Todo result — very short
+  'computer',          // Screenshot results — images, not compactable text
 ]);
 
 /**
@@ -41,7 +43,8 @@ const TAIL_KEEP_CHARS = 500;
  * Check if a tool result should be micro-compacted.
  */
 export function shouldMicroCompact(toolName: string, resultText: string): boolean {
-  return COMPACTABLE_TOOLS.has(toolName) && resultText.length > MICRO_COMPACT_CHAR_THRESHOLD;
+  if (SKIP_COMPACT.has(toolName)) return false;
+  return resultText.length > MICRO_COMPACT_CHAR_THRESHOLD;
 }
 
 /**

@@ -42,6 +42,7 @@ vi.mock('../../stores/chatStore', () => ({
   useChatStore: {
     getState: () => ({
       conversations: { 'conv-new': { messages: [] } },
+      conversationIndex: { 'conv-new': { id: 'conv-new', title: '', messageCount: 0, createdAt: 0, updatedAt: 0 } },
       createConversation: vi.fn(() => 'conv-new'),
       renameConversation: vi.fn(),
     }),

@@ -1,8 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { LLMAdapter, ChatOptions, ToolChoice } from './adapter';
 import { LLMError, classifyError } from './adapter';
-import type { Message, StreamEvent, ToolDefinition, MessageContent } from '../../types';
+import type { Message, StreamEvent, ToolDefinition } from '../../types';
 import { getTauriFetch } from './tauriFetch';
+import { normalizeMessages } from './messageNormalizer';
+import type { PreparedTurn, PreparedToolCall } from './messageNormalizer';
+import { createHeartbeat } from './heartbeat';
 
 function convertTools(tools: ToolDefinition[]): Anthropic.Tool[] {
   return tools.map((t) => ({
@@ -25,142 +28,104 @@ function convertToolChoice(choice: ToolChoice | undefined): Anthropic.MessageCre
   }
 }
 
-// Helper to get text content from Message
-function getTextContent(content: string | MessageContent[]): string {
-  if (typeof content === 'string') return content;
-  const textBlock = content.find((c) => c.type === 'text');
-  return textBlock?.type === 'text' ? textBlock.text : '';
-}
-
-// Convert Message content to Anthropic content blocks
-function convertContentToBlocks(content: string | MessageContent[]): Anthropic.ContentBlockParam[] {
-  if (typeof content === 'string') {
-    return [{ type: 'text', text: content }];
+/**
+ * Serialize a PreparedToolCall into an Anthropic tool_result content block.
+ * Images are inlined as image content blocks (Anthropic supports images in tool_result).
+ */
+function serializeToolResult(tc: PreparedToolCall): Anthropic.ToolResultBlockParam {
+  if (tc.resultImages.length > 0) {
+    const contentBlocks: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] = [
+      { type: 'text', text: tc.result },
+      ...tc.resultImages.map((img) => ({
+        type: 'image' as const,
+        source: {
+          type: 'base64' as const,
+          media_type: img.mediaType,
+          data: img.data,
+        },
+      })),
+    ];
+    return {
+      type: 'tool_result',
+      tool_use_id: tc.id,
+      content: contentBlocks,
+      ...(tc.isError ? { is_error: true } : {}),
+    };
   }
-  return content.map((c) => {
-    switch (c.type) {
-      case 'text':
-        return { type: 'text' as const, text: c.text };
-      case 'image':
-        return {
-          type: 'image' as const,
-          source: {
-            type: 'base64' as const,
-            media_type: c.source.media_type,
-            data: c.source.data,
-          },
-        };
-      case 'document':
-        return {
-          type: 'document' as const,
-          source: {
-            type: 'base64' as const,
-            media_type: c.source.media_type,
-            data: c.source.data,
-          },
-        };
-      default:
-        return { type: 'text' as const, text: JSON.stringify(c) };
-    }
-  });
+  return {
+    type: 'tool_result',
+    tool_use_id: tc.id,
+    content: tc.result,
+    ...(tc.isError ? { is_error: true } : {}),
+  };
 }
 
-function convertMessages(messages: Message[]): Anthropic.MessageParam[] {
+/**
+ * Serialize PreparedTurn[] into Anthropic MessageParam[].
+ *
+ * Thin serializer — all logic (orphan fix, ID gen, image extraction) is in normalizeMessages.
+ */
+function serializeForAnthropic(turns: PreparedTurn[]): Anthropic.MessageParam[] {
   const result: Anthropic.MessageParam[] = [];
 
-  for (const msg of messages) {
-    if (msg.role === 'system') continue;
-
-    if (msg.role === 'user') {
-      // Support multimodal user messages
-      const content = typeof msg.content === 'string'
-        ? msg.content
-        : convertContentToBlocks(msg.content);
+  for (const turn of turns) {
+    if (turn.kind === 'user') {
+      const content: Anthropic.ContentBlockParam[] = turn.content.map((b) => {
+        if (b.type === 'image') {
+          return {
+            type: 'image' as const,
+            source: { type: 'base64' as const, media_type: b.mediaType, data: b.data },
+          } as Anthropic.ContentBlockParam;
+        }
+        if (b.type === 'document') {
+          return {
+            type: 'document' as const,
+            source: { type: 'base64' as const, media_type: b.mediaType, data: b.data },
+          } as Anthropic.ContentBlockParam;
+        }
+        return { type: 'text' as const, text: b.text };
+      });
       result.push({ role: 'user', content });
-    } else if (msg.role === 'assistant') {
+    } else {
+      // Assistant turn
       const content: Anthropic.ContentBlockParam[] = [];
 
-      // Add thinking block if present
-      if (msg.thinking) {
-        content.push({ type: 'thinking', thinking: msg.thinking } as Anthropic.ContentBlockParam);
+      if (turn.thinking) {
+        content.push({ type: 'thinking', thinking: turn.thinking } as Anthropic.ContentBlockParam);
+      }
+      if (turn.text) {
+        content.push({ type: 'text', text: turn.text });
       }
 
-      const textContent = getTextContent(msg.content);
-      if (textContent) {
-        content.push({ type: 'text', text: textContent });
-      }
-
-      // Prefer toolCallsForContext over toolCalls for LLM history
-      const toolCallsSource = msg.toolCallsForContext || msg.toolCalls;
-
-      if (toolCallsSource && toolCallsSource.length > 0) {
-        // Build tool_use blocks
-        const toolUseBlocks: Anthropic.ToolUseBlockParam[] = [];
-        const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
-
-        for (const tc of toolCallsSource) {
-          // Generate ID if using toolCallsForContext (which doesn't have id)
-          const toolId = 'id' in tc ? tc.id : `tool_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-          toolUseBlocks.push({
+      if (turn.toolCalls.length > 0) {
+        // tool_use blocks go into the assistant message
+        for (const tc of turn.toolCalls) {
+          content.push({
             type: 'tool_use',
-            id: toolId,
+            id: tc.id,
             name: tc.name,
             input: tc.input,
           });
-
-          // Add tool result if available — use rich content (images) when present
-          const result = 'result' in tc ? tc.result : undefined;
-          const resultContent = 'resultContent' in tc ? tc.resultContent : undefined;
-          const isError = 'isError' in tc ? tc.isError : undefined;
-          if (result !== undefined) {
-            if (resultContent && Array.isArray(resultContent)) {
-              // Rich content: convert to Anthropic content blocks
-              const contentBlocks = resultContent.map((block) => {
-                if (block.type === 'image') {
-                  return {
-                    type: 'image' as const,
-                    source: {
-                      type: 'base64' as const,
-                      media_type: block.source.media_type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-                      data: block.source.data,
-                    },
-                  };
-                }
-                return { type: 'text' as const, text: block.text };
-              });
-              toolResultBlocks.push({
-                type: 'tool_result',
-                tool_use_id: toolId,
-                content: contentBlocks,
-                ...(isError ? { is_error: true } : {}),
-              });
-            } else {
-              toolResultBlocks.push({
-                type: 'tool_result',
-                tool_use_id: toolId,
-                content: result,
-                ...(isError ? { is_error: true } : {}),
-              });
-            }
-          }
         }
-
-        // Add tool_use blocks to assistant content
-        content.push(...toolUseBlocks);
         result.push({ role: 'assistant', content });
 
-        // Add tool results as the next user message
-        if (toolResultBlocks.length > 0) {
-          result.push({ role: 'user', content: toolResultBlocks });
-        }
+        // tool_result blocks go into the next user message
+        // normalizeMessages guarantees every tool_use has a result
+        const toolResultBlocks = turn.toolCalls.map(serializeToolResult);
+        result.push({ role: 'user', content: toolResultBlocks });
       } else {
-        result.push({ role: 'assistant', content: textContent });
+        result.push({ role: 'assistant', content: turn.text || '' });
       }
     }
   }
 
   return result;
+}
+
+/** Convert messages through normalize → serialize pipeline */
+function convertMessages(messages: Message[]): Anthropic.MessageParam[] {
+  const turns = normalizeMessages(messages);
+  return serializeForAnthropic(turns);
 }
 
 export class ClaudeAdapter implements LLMAdapter {
@@ -286,26 +251,21 @@ export class ClaudeAdapter implements LLMAdapter {
 
     // Idle timeout: if no data received for 90s, treat as network hang.
     // 90s is the CC-validated threshold — long enough for thinking models, short enough to detect hangs.
-    let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
-    const HEARTBEAT_TIMEOUT_MS = 90000;
-    const resetHeartbeat = () => {
-      if (heartbeatTimer) clearTimeout(heartbeatTimer);
-      heartbeatTimer = setTimeout(() => {
-        onEvent({ type: 'error', error: 'Stream idle timeout: no data received for 90s' });
-        onEvent({ type: 'done', stopReason: 'end_turn' });
-      }, HEARTBEAT_TIMEOUT_MS);
-    };
+    const heartbeat = createHeartbeat(90_000, () => {
+      onEvent({ type: 'error', error: 'Stream idle timeout: no data received for 90s' });
+      onEvent({ type: 'done', stopReason: 'end_turn' });
+    });
 
     try {
       const stream = await client.messages.create(params, streamOptions);
-      resetHeartbeat();
+      heartbeat.reset();
 
       for await (const event of stream as AsyncIterable<Anthropic.MessageStreamEvent>) {
-        resetHeartbeat();
+        heartbeat.reset();
 
         // Check for cancellation
         if (options.signal?.aborted) {
-          if (heartbeatTimer) clearTimeout(heartbeatTimer);
+          heartbeat.clear();
           onEvent({ type: 'done', stopReason: 'cancelled' });
           return;
         }
@@ -378,7 +338,7 @@ export class ClaudeAdapter implements LLMAdapter {
 
           case 'message_delta':
             if ('stop_reason' in event.delta) {
-              if (heartbeatTimer) clearTimeout(heartbeatTimer);
+              heartbeat.clear();
               const usage = event.usage ? {
                 inputTokens: event.usage.input_tokens ?? 0,
                 outputTokens: event.usage.output_tokens,
@@ -391,10 +351,10 @@ export class ClaudeAdapter implements LLMAdapter {
       }
 
       // Fallback: stream ended without message_delta stop_reason (e.g. connection dropped)
-      if (heartbeatTimer) clearTimeout(heartbeatTimer);
+      heartbeat.clear();
       onEvent({ type: 'done', stopReason: 'end_turn' });
     } catch (err) {
-      if (heartbeatTimer) clearTimeout(heartbeatTimer);
+      heartbeat.clear();
       // Handle abort errors gracefully
       if (err instanceof Error && err.name === 'AbortError') {
         onEvent({ type: 'done', stopReason: 'cancelled' });

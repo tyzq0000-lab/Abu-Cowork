@@ -9,7 +9,7 @@
  * preview. The full content can be loaded on demand.
  *
  * Layout:
- *   ~/Library/Application Support/com.abu.app/sessions/{convId}/results/{toolCallId}.txt
+ *   ~/Library/Application Support/com.abu.app/conversations/{convId}/results/{toolCallId}.txt
  */
 
 import { exists, mkdir, readTextFile, writeTextFile, remove } from '@tauri-apps/plugin-fs';
@@ -34,7 +34,7 @@ let cachedSessionBase: string | null = null;
 async function getResultsDir(conversationId: string): Promise<string> {
   if (!cachedSessionBase) {
     const appData = await appDataDir();
-    cachedSessionBase = joinPath(appData, 'sessions');
+    cachedSessionBase = joinPath(appData, 'conversations');
   }
   return joinPath(cachedSessionBase, conversationId, 'results');
 }
@@ -108,6 +108,12 @@ export async function loadResult(
   try {
     if (await exists(filePath)) {
       return await readTextFile(filePath);
+    }
+    // Fallback: check old `sessions/` path for backward compatibility with pre-migration data
+    const appData = await appDataDir();
+    const legacyPath = joinPath(appData, 'sessions', conversationId, 'results', `${toolCallId}.txt`);
+    if (await exists(legacyPath)) {
+      return await readTextFile(legacyPath);
     }
   } catch {
     // File read failed — return null

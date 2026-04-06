@@ -3,6 +3,8 @@ import { agentRegistry } from './registry';
 import { skillLoader } from '../skill/loader';
 import { loadAgentMemory, loadProjectMemory } from './agentMemory';
 import { loadAllRules } from './projectRules';
+import { loadSoul } from './soulConfig';
+import { getDefaultSoul } from './agentLoop';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { getSessionOutputDir } from '../session/sessionDir';
@@ -289,6 +291,10 @@ export async function buildSystemPromptSections(
     }
   }
 
+  // Load user-customized soul (Abu's personality) — falls back to default if empty/missing
+  const soulContent = await loadSoul();
+  const soulText = soulContent || getDefaultSoul();
+
   if (isForkContext && route.skill) {
     // Fork mode: Skill instructions come FIRST with maximum priority
     sections.push({ name: 'fork-task', text: '## 当前任务 — 严格按以下步骤执行\n' + processedSkillContent, cacheable: true });
@@ -318,13 +324,15 @@ export async function buildSystemPromptSections(
     }
     // No PLANNING_INSTRUCTION — the skill defines its own workflow
   } else if (isSkillMode) {
-    // Inline mode (default): Skill content right after persona, BEFORE planning
+    // Inline mode (default): capability + soul + skill content
     sections.push({ name: 'persona', text: basePrompt, cacheable: true });
+    sections.push({ name: 'soul', text: '\n## 你的性格\n' + soulText, cacheable: true });
     sections.push({ name: 'skill-content', text: '\n## 当前技能指令\n' + processedSkillContent, cacheable: true });
     // No PLANNING_INSTRUCTION — skill already defines its own workflow
   } else {
-    // Normal mode: full persona + planning instruction
+    // Normal mode: capability + soul + planning instruction
     sections.push({ name: 'persona', text: basePrompt, cacheable: true });
+    sections.push({ name: 'soul', text: '\n## 你的性格\n以下是你的性格特质和沟通风格，请自然地体现在所有交互中。\n\n' + soulText, cacheable: true });
     // Append examples only on first turn to save ~400 tokens per subsequent turn
     const planningText = (turnCount === 0 ? PLANNING_INSTRUCTION + PLANNING_EXAMPLES : PLANNING_INSTRUCTION)
       .replace(
@@ -334,6 +342,26 @@ export async function buildSystemPromptSections(
           : '- 系统设置 → run_command（osascript/defaults），不要截屏操作系统设置',
       );
     sections.push({ name: 'planning', text: planningText, cacheable: true });
+  }
+
+  // Soul bootstrap: one-time personality introduction prompt
+  // Triggers after user has had at least one deep conversation (≥3 user messages)
+  const settings = useSettingsStore.getState();
+  if (!settings.soulInitialized && !isForkContext && !isSkillMode) {
+    const chatMod = await import('../../stores/chatStore');
+    const conversations = Object.values(chatMod.useChatStore.getState().conversations);
+    const hasDeep = conversations.some(c =>
+      c.messages.filter(m => m.role === 'user').length >= 3,
+    );
+    if (hasDeep) {
+      sections.push({
+        name: 'soul-bootstrap',
+        text: '\n## 一次性引导（完成任务后执行）\n当你完成了用户的任务后，在回复末尾自然地问用户觉得你现在的性格怎么样，要不要调整（称呼、详略、边界等）。\n语气轻松自然，不要像问卷调查。如果用户回复了调整意见，用 update_soul 工具更新你的性格设定。这个引导只出现一次。',
+        cacheable: false,
+      });
+      // Mark as initialized — inject once, don't repeat
+      useSettingsStore.getState().setSoulInitialized(true);
+    }
   }
 
   // Inject current date and time so the model knows "today" — volatile, changes every turn
@@ -475,7 +503,7 @@ export async function buildSystemPromptSections(
           .join('\n');
 
         sections.push({ name: 'memories', text: `\n## 你的长期记忆
-以下是你跨会话保持的记忆，始终参考这些信息来个性化你的回复。
+以下是你跨会话保持的记忆，始终参考这些信息来个性化你的回复。标记为 [feedback] 的记忆是用户对你行为的指导，应当遵守。
 <agent-memory>
 ${memoryText}
 </agent-memory>`, cacheable: true });
@@ -518,6 +546,7 @@ ${projectMemory}
 - 用户在方案间做出选择 → category="decision"
 - 发现项目技术栈/架构/约定 → category="project_knowledge"（scope="project"）
 - 确定了后续行动 → category="action_item"
+- 用户纠正你的做法（"不要这样"、"下次先…"）或确认你的非常规做法 → category="feedback"
 每条记忆需提供 summary、content、keywords。
 
 ### 不要保存

@@ -9,13 +9,13 @@ let cachedBasePath: string | null = null;
  * Creates the directory if it doesn't exist.
  *
  * Directory structure (platform-dependent):
- * macOS: ~/Library/Application Support/com.abu.app/sessions/{id}/outputs/
- * Windows: %APPDATA%/com.abu.app/sessions/{id}/outputs/
+ * macOS: ~/Library/Application Support/com.abu.app/conversations/{id}/outputs/
+ * Windows: %APPDATA%/com.abu.app/conversations/{id}/outputs/
  */
 export async function getSessionOutputDir(conversationId: string): Promise<string> {
   if (!cachedBasePath) {
     const appData = await appDataDir();
-    cachedBasePath = joinPath(appData, 'sessions');
+    cachedBasePath = joinPath(appData, 'conversations');
   }
 
   const outputDir = joinPath(cachedBasePath, conversationId, 'outputs');

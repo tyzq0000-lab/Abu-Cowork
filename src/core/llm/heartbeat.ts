@@ -1,0 +1,39 @@
+/**
+ * Heartbeat — shared idle timeout for LLM streaming connections.
+ *
+ * Detects when a streaming connection stops sending data (network hang,
+ * server stall) without closing the connection. Both Claude and OpenAI
+ * adapters use this to trigger a timeout error after 90s of silence.
+ *
+ * Usage:
+ *   const hb = createHeartbeat(90_000, () => emit('error', ...));
+ *   hb.reset();           // Start / reset timer
+ *   for await (chunk) {
+ *     hb.reset();         // Reset on each data chunk
+ *   }
+ *   hb.clear();           // Clean up on stream end
+ */
+
+/**
+ * Create a heartbeat timer that calls `onTimeout` if not reset within `timeoutMs`.
+ */
+export function createHeartbeat(
+  timeoutMs: number,
+  onTimeout: () => void,
+): { reset: () => void; clear: () => void } {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  function reset(): void {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(onTimeout, timeoutMs);
+  }
+
+  function clear(): void {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  }
+
+  return { reset, clear };
+}

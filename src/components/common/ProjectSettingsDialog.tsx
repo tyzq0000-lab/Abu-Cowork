@@ -19,7 +19,7 @@ export default function ProjectSettingsDialog({ open, onClose, projectId }: Proj
   const projects = useProjectStore((s) => s.projects);
   const updateProject = useProjectStore((s) => s.updateProject);
   const archiveProject = useProjectStore((s) => s.archiveProject);
-  const conversations = useChatStore((s) => s.conversations);
+  const conversationIndex = useChatStore((s) => s.conversationIndex);
 
   const project: Project | undefined = projectId ? projects[projectId] : undefined;
 
@@ -57,7 +57,7 @@ export default function ProjectSettingsDialog({ open, onClose, projectId }: Proj
 
   if (!open || !project) return null;
 
-  const convCount = Object.values(conversations).filter((c) => c.projectId === projectId).length;
+  const convCount = Object.values(conversationIndex).filter((c) => c.projectId === projectId).length;
 
   return (
     <>

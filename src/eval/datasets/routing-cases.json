@@ -1,0 +1,17 @@
+[
+  { "input": "你好", "expectedType": "general", "description": "plain greeting" },
+  { "input": "帮我看看这个文件", "expectedType": "general", "description": "general file request" },
+  { "input": "TypeScript 的泛型怎么用", "expectedType": "general", "description": "knowledge question" },
+  { "input": "", "expectedType": "general", "description": "empty input" },
+  { "input": "/", "expectedType": "general", "description": "bare slash" },
+  { "input": "/ ", "expectedType": "general", "description": "slash with space" },
+  { "input": "@", "expectedType": "general", "description": "bare at sign" },
+  { "input": "@ 带空格", "expectedType": "general", "description": "at sign with space" },
+  { "input": "/不存在的技能", "expectedType": "general", "description": "unregistered skill slash command" },
+  { "input": "@不存在的agent 做事", "expectedType": "general", "description": "unregistered agent delegation" },
+  { "input": "   ", "expectedType": "general", "description": "whitespace only" },
+  { "input": "帮我写一份报告，主题是 AI 发展趋势", "expectedType": "general", "description": "long general request" },
+  { "input": "今天天气怎么样", "expectedType": "general", "description": "casual chat" },
+  { "input": "把这段代码从 Python 翻译成 TypeScript", "expectedType": "general", "description": "code translation request" },
+  { "input": "//这不是slash命令", "expectedType": "general", "description": "double slash not a command" }
+]

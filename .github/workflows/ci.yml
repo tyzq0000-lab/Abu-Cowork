@@ -28,8 +28,12 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
-      - name: Test
+      - name: Unit Tests
         run: npm test
+
+      - name: Test Coverage
+        run: npm run test:coverage
+        continue-on-error: true
 
       - name: Build frontend
         run: npm run build

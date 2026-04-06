@@ -106,6 +106,47 @@ export function trimOldScreenshots(messages: Message[], usagePercent?: number): 
 }
 
 /**
+ * Ensure compressed/truncated messages don't produce orphaned tool_use blocks.
+ *
+ * After truncation, an assistant message with toolCalls might lose its
+ * corresponding tool results (which live in the next user message) if the
+ * next round is kept but the current round's context is broken.
+ *
+ * This function strips tool data from any assistant message whose tool
+ * results are incomplete — the normalizer will handle the rest at send time.
+ */
+function sanitizeToolPairs(messages: Message[]): Message[] {
+  return messages.map((msg) => {
+    if (msg.role !== 'assistant') return msg;
+    // If toolCalls exist but all results are missing, strip them
+    // (they were likely orphaned by truncation)
+    const tc = msg.toolCallsForContext || msg.toolCalls;
+    if (!tc || tc.length === 0) return msg;
+
+    const allMissing = tc.every((t) => {
+      const result = 'result' in t ? t.result : undefined;
+      return result === undefined;
+    });
+
+    if (allMissing) {
+      // Convert to a compressed summary instead of leaving orphaned tool_use
+      const toolNames = tc.map((t) => `[${t.name}]`).join(', ');
+      const text = getMessageText(msg.content);
+      const summary = text
+        ? `${toolNames}\n${text.slice(0, ASSISTANT_SUMMARY_MAX_CHARS)}`
+        : `${toolNames} [tool results lost during context compression]`;
+      return {
+        ...msg,
+        content: summary,
+        toolCalls: undefined,
+        toolCallsForContext: undefined,
+      };
+    }
+    return msg;
+  });
+}
+
+/**
  * Compress an assistant message to a brief summary
  */
 function compressAssistantMessage(msg: Message): Message {
@@ -206,9 +247,9 @@ export function prepareContextMessages(
     ...recentRounds.flat(),
   ];
 
-  const tokens1 = systemTokens + estimateMessageTokens(result1);
+  const tokens1 = systemTokens + (toolSchemaTokens ?? 0) + estimateMessageTokens(sanitizeToolPairs(result1));
   if (tokens1 <= maxInputTokens) {
-    return result1;
+    return stripOldThinking(sanitizeToolPairs(result1));
   }
 
   // Step 2: Drop middle entirely, keep first + recent
@@ -217,9 +258,9 @@ export function prepareContextMessages(
     ...recentRounds.flat(),
   ];
 
-  const tokens2 = systemTokens + estimateMessageTokens(result2);
+  const tokens2 = systemTokens + (toolSchemaTokens ?? 0) + estimateMessageTokens(sanitizeToolPairs(result2));
   if (tokens2 <= maxInputTokens) {
-    return result2;
+    return stripOldThinking(sanitizeToolPairs(result2));
   }
 
   // Step 3: Aggressive — keep first user message (if recent) + last 2 rounds
@@ -227,8 +268,32 @@ export function prepareContextMessages(
   if (keepFirstRound) {
     const firstUserMsg = messages.find((m) => m.role === 'user');
     if (firstUserMsg) {
-      return [firstUserMsg, ...lastTwoRounds.flat()];
+      return stripOldThinking(sanitizeToolPairs([firstUserMsg, ...lastTwoRounds.flat()]));
     }
   }
-  return lastTwoRounds.flat();
+  return stripOldThinking(sanitizeToolPairs(lastTwoRounds.flat()));
+}
+
+/**
+ * Strip thinking content from all but the most recent assistant message.
+ * Thinking blocks are valuable for the current turn but waste 10-50% of
+ * context when accumulated across many turns.
+ */
+function stripOldThinking(messages: Message[]): Message[] {
+  // Find the last assistant message with thinking
+  let lastThinkingIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'assistant' && messages[i].thinking) {
+      lastThinkingIdx = i;
+      break;
+    }
+  }
+  if (lastThinkingIdx === -1) return messages;
+
+  return messages.map((msg, i) => {
+    if (i < lastThinkingIdx && msg.role === 'assistant' && msg.thinking) {
+      return { ...msg, thinking: undefined };
+    }
+    return msg;
+  });
 }

@@ -7,7 +7,8 @@ import { FolderClosed, FolderOpen, Plus, Pin, PinOff, Settings, Archive, Trash2 
 import { cn } from '@/lib/utils';
 import { format } from '@/i18n';
 import type { Project } from '@/types/project';
-import type { Conversation, ConversationStatus } from '@/types';
+import type { ConversationStatus } from '@/types';
+import type { ConversationMeta } from '@/core/session/conversationStorage';
 
 const MAX_VISIBLE_CONVERSATIONS = 5;
 
@@ -20,7 +21,7 @@ function ConvStatusDot({ status }: { status: ConversationStatus }) {
 
 interface ProjectItemProps {
   project: Project;
-  conversations: Conversation[];
+  conversations: ConversationMeta[];
   expanded: boolean;
   onNewTask: (projectId: string) => void;
   onOpenSettings: (projectId: string) => void;
@@ -35,6 +36,7 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
   const switchConversation = useChatStore((s) => s.switchConversation);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
+  const loadedConversations = useChatStore((s) => s.conversations);
   const setViewMode = useSettingsStore((s) => s.setViewMode);
   const viewMode = useSettingsStore((s) => s.viewMode);
 
@@ -129,7 +131,7 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
                     : 'text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-hover)] hover:text-[var(--abu-text-primary)]'
                 )}
               >
-                <ConvStatusDot status={conv.status ?? 'idle'} />
+                <ConvStatusDot status={loadedConversations[conv.id]?.status ?? 'idle'} />
                 <span className="flex-1 truncate">
                   {conv.title.replace(/\[Attachment:\s*`[^`]*`\]\s*/g, '').trim() || conv.title}
                 </span>

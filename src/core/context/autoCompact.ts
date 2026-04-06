@@ -86,8 +86,19 @@ export class AutoCompactTracker {
 
   /**
    * Record a failed compression — may trip the circuit breaker with cooldown.
+   * Error-type-aware: network errors don't accumulate, auth errors disable immediately.
    */
-  recordFailure(): void {
+  recordFailure(errorCode?: string): void {
+    // Network/rate-limit errors are transient — don't punish the compressor
+    if (errorCode === 'network_error' || errorCode === 'rate_limit' || errorCode === 'overloaded') {
+      return;
+    }
+    // Authentication errors — disable for a long time (likely needs user action)
+    if (errorCode === 'authentication') {
+      this.disabledUntil = Date.now() + 30 * 60 * 1000; // 30 minutes
+      return;
+    }
+    // Other errors (LLM quality, invalid request, etc.) — accumulate toward circuit breaker
     this.consecutiveFailures++;
     if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       this.disabledUntil = Date.now() + COOLDOWN_MS;

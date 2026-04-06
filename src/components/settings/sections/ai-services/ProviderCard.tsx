@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Toggle } from '@/components/ui/toggle';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { checkProviderHealth } from '@/core/llm/healthCheck';
-// fetchProviderModels removed — model fetching deferred to future version
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import type { ProviderInstance, ModelInfo } from '@/types/provider';
 
 interface ProviderCardProps {
@@ -64,7 +64,8 @@ export default function ProviderCard({ provider, isActive }: ProviderCardProps) 
   const [formBaseUrl, setFormBaseUrl] = useState(provider.baseUrl);
   const [formModels, setFormModels] = useState<ModelInfo[]>(provider.models);
   const [newModelId, setNewModelId] = useState('');
-  const [showStatus, setShowStatus] = useState(false); // only true briefly after revalidate
+  const [showStatus, setShowStatus] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const isOllama = isOllamaProvider(provider);
 
   const handleEditStart = useCallback(() => {
@@ -87,14 +88,28 @@ export default function ProviderCard({ provider, isActive }: ProviderCardProps) 
     setEditing(false);
   }, [provider.id, formName, formApiKey, formBaseUrl, formModels, updateProvider]);
 
-  const handleDelete = useCallback(() => {
-    if (!confirm(t.settings.deleteProviderConfirm)) return;
+  const selectModel = useSettingsStore((s) => s.selectModel);
+
+  const handleDeleteConfirm = useCallback(() => {
+    const wasActive = isActive;
+
     if (provider.source === 'custom') {
       removeProvider(provider.id);
     } else {
       updateProvider(provider.id, { enabled: false, apiKey: '', status: 'unchecked' });
     }
-  }, [provider, removeProvider, updateProvider, t.settings.deleteProviderConfirm]);
+
+    // If we deleted the active provider, switch to next enabled one
+    if (wasActive) {
+      const state = useSettingsStore.getState();
+      const next = state.providers.find(p => p.enabled && p.id !== provider.id);
+      if (next && next.models.length > 0) {
+        selectModel(next.id, next.models[0].id);
+      }
+    }
+
+    setShowDeleteConfirm(false);
+  }, [provider, isActive, removeProvider, updateProvider, selectModel]);
 
   const handleRevalidate = useCallback(async () => {
     setShowStatus(true);
@@ -276,7 +291,7 @@ export default function ProviderCard({ provider, isActive }: ProviderCardProps) 
             <RefreshCw className={cn('h-3.5 w-3.5', provider.status === 'checking' && 'animate-spin')} />
           </button>
           <button
-            onClick={handleDelete}
+            onClick={() => setShowDeleteConfirm(true)}
             className="p-1 rounded text-[var(--abu-text-muted)] hover:text-red-500 hover:bg-red-50 transition-colors"
             title={t.settings.deleteProvider}
           >
@@ -284,6 +299,18 @@ export default function ProviderCard({ provider, isActive }: ProviderCardProps) 
           </button>
         </div>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title={t.settings.deleteProvider}
+        message={t.settings.deleteProviderConfirm}
+        confirmText={t.common.confirm}
+        cancelText={t.common.cancel}
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

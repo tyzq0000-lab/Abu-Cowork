@@ -1,0 +1,160 @@
+[
+  {
+    "id": "file-read-01",
+    "category": "file-ops",
+    "input": "帮我看看 ~/Documents/report.md 的内容",
+    "expected": {
+      "requiredTools": ["read_file"],
+      "forbiddenTools": ["run_command"],
+      "toolParams": { "read_file": { "path": "report.md" } }
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "file-write-01",
+    "category": "file-ops",
+    "input": "创建一个 hello.txt，内容写 Hello World",
+    "expected": {
+      "requiredTools": ["write_file"],
+      "forbiddenTools": ["run_command"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "file-edit-01",
+    "category": "file-ops",
+    "input": "把 src/config.ts 里的 API_URL 从 localhost 改成 production.api.com",
+    "expected": {
+      "requiredTools": ["read_file"],
+      "optionalTools": ["edit_file"],
+      "forbiddenTools": ["write_file"]
+    },
+    "difficulty": "medium"
+  },
+  {
+    "id": "file-list-01",
+    "category": "file-ops",
+    "input": "看看 src 目录下有什么文件",
+    "expected": {
+      "requiredTools": ["list_directory"],
+      "forbiddenTools": ["run_command"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "search-content-01",
+    "category": "search",
+    "input": "项目里哪些文件用到了 useState",
+    "expected": {
+      "requiredTools": ["search_files"],
+      "forbiddenTools": ["run_command"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "search-file-01",
+    "category": "search",
+    "input": "找到所有 .test.ts 文件",
+    "expected": {
+      "requiredTools": ["find_files"],
+      "forbiddenTools": ["run_command"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "cmd-test-01",
+    "category": "command",
+    "input": "跑一下 npm test",
+    "expected": {
+      "requiredTools": ["run_command"],
+      "toolParams": { "run_command": { "command": "npm test" } }
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "cmd-git-01",
+    "category": "command",
+    "input": "看看当前 git 状态",
+    "expected": {
+      "requiredTools": ["run_command"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "multi-read-edit-01",
+    "category": "multi-step",
+    "input": "读取 package.json，把版本号改成 2.0.0",
+    "expected": {
+      "requiredTools": ["read_file"],
+      "optionalTools": ["edit_file"]
+    },
+    "difficulty": "medium"
+  },
+  {
+    "id": "multi-search-write-01",
+    "category": "multi-step",
+    "input": "搜索项目里所有 TODO 注释，汇总到 todo-summary.md",
+    "expected": {
+      "requiredTools": ["search_files"],
+      "optionalTools": ["write_file"]
+    },
+    "difficulty": "hard"
+  },
+  {
+    "id": "web-search-01",
+    "category": "web",
+    "input": "搜索一下 Tauri 2.0 的最新发布日期",
+    "expected": {
+      "requiredTools": ["web_search"],
+      "forbiddenTools": ["run_command"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "memory-save-01",
+    "category": "memory",
+    "input": "记住我喜欢用 vim 编辑器",
+    "expected": {
+      "requiredTools": ["update_memory"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "memory-recall-01",
+    "category": "memory",
+    "input": "我之前让你记住的编辑器偏好是什么",
+    "expected": {
+      "requiredTools": ["recall"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "knowledge-01",
+    "category": "knowledge",
+    "input": "TypeScript 的 interface 和 type 有什么区别？",
+    "expected": {
+      "requiredTools": [],
+      "forbiddenTools": ["run_command", "read_file", "search_files", "web_search"]
+    },
+    "difficulty": "easy"
+  },
+  {
+    "id": "ambiguous-01",
+    "category": "search",
+    "input": "这个项目是干什么的？",
+    "expected": {
+      "requiredTools": ["read_file"],
+      "optionalTools": ["list_directory", "search_files"]
+    },
+    "difficulty": "medium"
+  },
+  {
+    "id": "delegate-01",
+    "category": "delegate",
+    "input": "让 coder agent 帮我写一个冒泡排序",
+    "expected": {
+      "requiredTools": ["delegate_to_agent"]
+    },
+    "difficulty": "medium"
+  }
+]

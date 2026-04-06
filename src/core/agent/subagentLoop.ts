@@ -184,8 +184,8 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
       const blocked = new Set(agent.disallowedTools);
       tools = tools.filter((t) => !blocked.has(t.name));
     }
-    // Always remove delegate_to_agent to prevent recursion
-    tools = tools.filter((t) => t.name !== TOOL_NAMES.DELEGATE_TO_AGENT);
+    // Always remove delegate_to_agent (prevent recursion) and update_soul (main agent only)
+    tools = tools.filter((t) => t.name !== TOOL_NAMES.DELEGATE_TO_AGENT && t.name !== TOOL_NAMES.UPDATE_SOUL);
 
     // 4. Create LLM adapter
     const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
@@ -374,9 +374,9 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
         }
       }
 
-      // Append tool results as context (without id — only for LLM context)
+      // Append tool results as context (preserve id for API tool_use/tool_result pairing)
       assistantMsg.toolCallsForContext = toolResultEntries.map(
-        ({ name, input, result }) => ({ name, input, result })
+        ({ id, name, input, result }) => ({ id, name, input, result })
       );
     }
 

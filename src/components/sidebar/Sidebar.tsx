@@ -59,6 +59,7 @@ function IMPlatformDot({ platform }: { platform: string }) {
 }
 
 export default function Sidebar() {
+  const conversationIndex = useChatStore((s) => s.conversationIndex);
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const startNewConversation = useChatStore((s) => s.startNewConversation);
@@ -68,6 +69,7 @@ export default function Sidebar() {
   const clearCompletedStatus = useChatStore((s) => s.clearCompletedStatus);
   const exportConversation = useChatStore((s) => s.exportConversation);
   const importConversation = useChatStore((s) => s.importConversation);
+  const loadConversation = useChatStore((s) => s.loadConversation);
   const openToolbox = useSettingsStore((s) => s.openToolbox);
   const openAutomation = useSettingsStore((s) => s.openAutomation);
   const openSystemSettings = useSettingsStore((s) => s.openSystemSettings);
@@ -130,13 +132,16 @@ export default function Sidebar() {
 
   // Sort by createdAt to keep positions stable during status updates
   // Filter out conversations belonging to projects, scheduled tasks, or triggers — they appear in their own sections
-  const sortedConvs = Object.values(conversations)
+  // Use conversationIndex (lightweight metadata) instead of full conversations for listing
+  const sortedConvs = Object.values(conversationIndex)
     .filter((c) => !c.scheduledTaskId && !c.triggerId && !c.projectId)
     .filter((c) => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => b.createdAt - a.createdAt);
 
-  const handleDeleteConversation = (e: React.MouseEvent, convId: string) => {
+  const handleDeleteConversation = async (e: React.MouseEvent, convId: string) => {
     e.stopPropagation();
+    // Ensure conversation is loaded before exporting for undo
+    await loadConversation(convId);
     // Save conversation data for undo before deleting
     const json = exportConversation(convId);
     deleteConversation(convId);
@@ -173,8 +178,8 @@ export default function Sidebar() {
   const handleExport = async (convId: string) => {
     const json = exportConversation(convId);
     if (!json) return;
-    const conv = conversations[convId];
-    const defaultName = `abu-conversation-${conv?.title || convId}.json`;
+    const meta = conversationIndex[convId];
+    const defaultName = `abu-conversation-${meta?.title || convId}.json`;
     try {
       const filePath = await saveDialog({
         defaultPath: defaultName,
@@ -301,12 +306,15 @@ export default function Sidebar() {
           </div>
         ) : (
           <div className="space-y-0.5">
-            {sortedConvs.map((conv) => (
+            {sortedConvs.map((conv) => {
+              // Look up runtime status from loaded conversations (ConversationMeta doesn't have status)
+              const convStatus = conversations[conv.id]?.status ?? 'idle';
+              return (
               <div
                 key={conv.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => { switchConversation(conv.id); setViewMode('chat'); if (conv.status === 'error') clearCompletedStatus(conv.id); }}
+                onClick={() => { switchConversation(conv.id); setViewMode('chat'); if (convStatus === 'error') clearCompletedStatus(conv.id); }}
                 onContextMenu={(e) => handleContextMenu(e, conv.id)}
                 aria-current={conv.id === activeConversationId && viewMode === 'chat' ? 'true' : undefined}
                 className={cn(
@@ -339,7 +347,7 @@ export default function Sidebar() {
                   <span className="flex-1 truncate text-[13px]">{conv.title.replace(/\[Attachment:\s*`[^`]*`\]\s*/g, '').trim() || conv.title}</span>
                 )}
                 <StatusIndicator
-                  status={conv.status ?? 'idle'}
+                  status={convStatus}
                   onComplete={() => handleClearCompletedStatus(conv.id)}
                 />
                 <Button
@@ -351,7 +359,8 @@ export default function Sidebar() {
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
         </div>
@@ -437,7 +446,7 @@ export default function Sidebar() {
           {(() => {
             const activeProjects = Object.values(projectsMap).filter(p => !p.archived);
             if (activeProjects.length === 0) return null;
-            const conv = conversations[contextMenu.convId];
+            const convMeta = conversationIndex[contextMenu.convId];
             return (
               <div className="relative">
                 <button
@@ -460,14 +469,14 @@ export default function Sidebar() {
                         }}
                         className={cn(
                           'flex items-center gap-2 w-full px-3 py-1.5 text-[13px] hover:bg-[var(--abu-bg-active)]',
-                          conv?.projectId === p.id ? 'text-[var(--abu-clay)]' : 'text-[var(--abu-text-secondary)]'
+                          convMeta?.projectId === p.id ? 'text-[var(--abu-clay)]' : 'text-[var(--abu-text-secondary)]'
                         )}
                       >
                         <FolderClosed className="h-3.5 w-3.5" strokeWidth={1.5} />
                         <span className="truncate">{p.name}</span>
                       </button>
                     ))}
-                    {conv?.projectId && (
+                    {convMeta?.projectId && (
                       <>
                         <div className="my-1 border-t border-[var(--abu-border)]" />
                         <button

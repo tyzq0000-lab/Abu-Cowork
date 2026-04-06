@@ -33,6 +33,7 @@ const zhCN: TranslationDict = {
     categoryDecision: '决策',
     categoryAction: '待办',
     categoryConversationIndex: '会话',
+    categoryFeedback: '反馈',
     entryCount: '{count} 条记忆',
     sourceAutoFlush: '自动提取',
     sourceAgentExplicit: 'AI 主动记忆',
@@ -41,6 +42,18 @@ const zhCN: TranslationDict = {
     deleteTitle: '删除记忆',
     legacyHint: '旧版记忆（将在下次对话时自动迁移为结构化格式）',
     emptyHint: '对话时 AI 会自动积累记忆，或你可以让 AI "记住这个"',
+  },
+
+  soul: {
+    title: '阿布的性格',
+    subtitle: '阿布出厂自带性格，你可以按自己的喜好调整',
+    defaultLabel: '当前使用默认性格',
+    customize: '自定义',
+    placeholder: '用 markdown 描述阿布的性格...',
+    save: '保存',
+    saved: '已保存',
+    restore: '恢复默认',
+    filePath: '文件位置：~/.abu/SOUL.md（高级用户可直接编辑）',
   },
 
   sidebar: {

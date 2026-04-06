@@ -28,10 +28,10 @@ export default function ScheduleRunHistory({ runs }: Props) {
   const { t } = useI18n();
   const switchConversation = useChatStore((s) => s.switchConversation);
   const setViewMode = useSettingsStore((s) => s.setViewMode);
-  const conversations = useChatStore((s) => s.conversations);
+  const conversationIndex = useChatStore((s) => s.conversationIndex);
 
   const handleViewConversation = (conversationId: string) => {
-    if (conversations[conversationId]) {
+    if (conversationIndex[conversationId]) {
       switchConversation(conversationId);
       setViewMode('chat');
     }
@@ -82,7 +82,7 @@ export default function ScheduleRunHistory({ runs }: Props) {
           </span>
 
           {/* View conversation button */}
-          {conversations[run.conversationId] && (
+          {conversationIndex[run.conversationId] && (
             <button
               onClick={() => handleViewConversation(run.conversationId)}
               className="text-[var(--abu-text-tertiary)] hover:text-[var(--abu-clay)] p-0.5 shrink-0"

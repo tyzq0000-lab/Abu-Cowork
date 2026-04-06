@@ -22,7 +22,7 @@ import { prepareContextMessages, trimOldScreenshots } from '../context/contextMa
 import { compressContextIfNeeded } from '../context/contextCompressor';
 import { applyMicroCompaction } from '../context/microCompactor';
 import { AutoCompactTracker, getUsagePercent } from '../context/autoCompact';
-import { estimateToolSchemaTokens, estimateTokens, estimateMessageTokens, calibrateFromUsage } from '../context/tokenEstimator';
+import { estimateToolSchemaTokens, estimateTokens, estimateMessageTokens, calibrateFromUsage, setActiveModel } from '../context/tokenEstimator';
 import { identifyRounds, RECENT_ROUNDS_TO_KEEP } from '../context/contextUtils';
 import { withRetry } from './retry';
 import { runSubagentLoop, extractParentConversationSummary } from './subagentLoop';
@@ -115,13 +115,12 @@ function persistExecutionSnapshot(conversationId: string, loopId: string): void 
   }
 }
 
-function getBaseSystemPrompt(): string {
-  const win = isWindows();
-  const dangerousCmd = win ? 'del /s /q' : 'rm -rf';
-  const abuDir = win ? '%USERPROFILE%\\.abu\\' : '~/.abu/';
-  const skillPathTmpl = win ? '%USERPROFILE%\\.abu\\skills\\{技能名}\\' : '~/.abu/skills/{技能名}/';
-  const agentPathTmpl = win ? '%USERPROFILE%\\.abu\\agents\\{代理名}\\' : '~/.abu/agents/{代理名}/';
-
+/**
+ * Abu's default soul — factory personality.
+ * Used when ~/.abu/SOUL.md is empty or doesn't exist.
+ * Exported so orchestrator can use it as fallback.
+ */
+export function getDefaultSoul(): string {
   return `你叫阿布，是一个专业、靠谱、好沟通的桌面 AI 助手。你的职责是帮用户高效地完成各种工作——文件管理、信息查找、内容创作、日常办公，什么都能搭把手。
 
 ## 核心原则
@@ -139,9 +138,21 @@ function getBaseSystemPrompt(): string {
   - 执行完成 → "搞定了"
   - 读取文件 → "看了一下，这个文件是..."
   - 出错了 → "没成功，[简短原因]，要再试试吗？"
-- **例外情况**（可以详细）：用户明确问"你怎么做的"、任务失败需解释、复杂任务需确认步骤
+- **例外情况**（可以详细）：用户明确问"你怎么做的"、任务失败需解释、复杂任务需确认步骤`;
+}
 
-## 可视化输出 — 生成式 UI（重要！）
+/**
+ * Abu's capability prompt — always injected, cannot be overridden by SOUL.md.
+ * Contains operational rules: visualization, work style, permissions, extensions.
+ */
+export function getCapabilityPrompt(): string {
+  const win = isWindows();
+  const dangerousCmd = win ? 'del /s /q' : 'rm -rf';
+  const abuDir = win ? '%USERPROFILE%\\.abu\\' : '~/.abu/';
+  const skillPathTmpl = win ? '%USERPROFILE%\\.abu\\skills\\{技能名}\\' : '~/.abu/skills/{技能名}/';
+  const agentPathTmpl = win ? '%USERPROFILE%\\.abu\\agents\\{代理名}\\' : '~/.abu/agents/{代理名}/';
+
+  return `## 可视化输出 — 生成式 UI（重要！）
 当用户需要图表、可视化、交互式演示、动画、UI 原型、数据展示、流程解释等视觉内容时，
 **必须直接在回复中输出 \`\`\`html 代码块**。前端会自动将其渲染为可交互的内联组件。
 
@@ -478,7 +489,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   }
 
   // Build static system prompt sections once (active skills are injected dynamically per-turn)
-  const systemPromptSections = await buildSystemPromptSections(route, getBaseSystemPrompt(), conversationId, options?.imContext, 0);
+  const systemPromptSections = await buildSystemPromptSections(route, getCapabilityPrompt(), conversationId, options?.imContext, 0);
 
   // Build tool execution context — provides resolved workspace for tools like update_memory
   const toolContext: ToolExecutionContext = {
@@ -491,6 +502,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   if (route.type === 'agent' && route.definition?.model) {
     effectiveModelId = resolveAgentModel(route.definition.model, settings);
   }
+  // Set active model for per-model token calibration
+  setActiveModel(effectiveModelId);
 
   // Add user message with loopId (use cleanInput for display)
   // Include skill info if a skill was triggered
@@ -640,7 +653,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       chatStore.setAgentStatus('idle');
       chatStore.setConversationStatus(conversationId, 'completed');
       indexConversationAsync(conversationId);
-      const convTitle = useChatStore.getState().conversations[conversationId]?.title ?? '任务';
+      const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
       notifyTaskCompleted(convTitle);
     } catch (err) {
       subagentCleanup();
@@ -666,7 +679,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       eventRouter.route({ type: 'error', loopId, error: errorMessage });
       persistExecutionSnapshot(conversationId, loopId);
       chatStore.setConversationStatus(conversationId, 'error');
-      const convTitle = useChatStore.getState().conversations[conversationId]?.title ?? '任务';
+      const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
       notifyTaskError(convTitle);
     }
     return;
@@ -706,6 +719,19 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     turnCount++;
 
     logger.info('Turn started', { turnCount, maxTurns });
+
+    // Write checkpoint for crash recovery — if app crashes during this turn,
+    // we can detect and offer to resume on next launch.
+    import('../session/checkpoint').then(({ writeCheckpoint }) => {
+      writeCheckpoint({
+        conversationId,
+        loopId,
+        turnCount,
+        lastMessageId: useChatStore.getState().conversations[conversationId]?.messages.slice(-1)[0]?.id ?? '',
+        status: 'llm_calling',
+        timestamp: Date.now(),
+      });
+    }).catch(() => {});
 
     // Check for mid-task user input (already added to UI by ChatInput)
     // Regular messages are already in the conversation store — just drain.
@@ -835,9 +861,9 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       if (deferredToolsSummary) {
         dynamicSections.push({ name: 'deferred-tools', text: deferredToolsSummary, cacheable: false });
       }
-      const allSections = mergeSections([...systemPromptSections, ...dynamicSections]);
+      let allSections = mergeSections([...systemPromptSections, ...dynamicSections]);
       // String form for token estimation and context management
-      const effectiveSystemPrompt = sectionsToString(allSections);
+      let effectiveSystemPrompt = sectionsToString(allSections);
 
       // Compute context warning level for UI feedback and compression decisions
       const preCompressionTokens = estimateTokens(effectiveSystemPrompt) + estimateMessageTokens(historyMessages) + toolTokens;
@@ -850,6 +876,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       // Step 1: Semantic compression — use cached summary or auto-compact based on warning level
       // Compression triggers when: enough turns AND (cached result available OR warning level triggers compaction)
       let messagesForContext = historyMessages;
+      let compressionApplied = false;
       if (turnCount >= 3) {
         const convForCache = useChatStore.getState().conversations[conversationId];
         const cache = convForCache?.contextCache;
@@ -860,6 +887,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
           const firstRound = rounds[0] ?? [];
           const newMessages = historyMessages.slice(cache.summarizedRange[1]);
           messagesForContext = [...firstRound, cache.summaryMessage, ...newMessages];
+          compressionApplied = true;
         } else {
           // No valid cache — attempt compression
           try {
@@ -879,6 +907,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
             );
             if (compressionResult.compressed) {
               messagesForContext = compressionResult.messages;
+              compressionApplied = true;
               autoCompactTracker.recordSuccess();
               // Cache the compression result for future turns
               const summaryMsg = compressionResult.messages.find(m => m.id.startsWith('context-summary-'));
@@ -904,6 +933,17 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       // This prevents single large tool outputs (e.g. grep returning 10KB) from bloating context.
       // Only affects toolCallsForContext (sent to LLM), not toolCalls (shown in UI).
       messagesForContext = applyMicroCompaction(messagesForContext);
+
+      // Inject compression hint into volatile system prompt so Abu can naturally acknowledge it
+      if (compressionApplied) {
+        const compressionHint: PromptSection = {
+          name: 'compression-hint',
+          text: '\n[本轮对话历史经过压缩，较早的细节已摘要化。如果用户提到你不确定的早期细节，坦诚告知并请用户确认，不要编造。]',
+          cacheable: false,
+        };
+        allSections = mergeSections([...allSections, compressionHint]);
+        effectiveSystemPrompt = sectionsToString(allSections);
+      }
 
       // Step 2: Trim old screenshots dynamically based on context usage
       const postCompressionTokens = estimateTokens(effectiveSystemPrompt) + estimateMessageTokens(messagesForContext) + toolTokens;
@@ -937,6 +977,11 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
 
       const chatFn = () => adapter.chat(preparedMessages, chatOptions, eventHandler);
 
+      // Periodic flush during streaming — write current assistant message to disk every 5s
+      // so crash during long streaming doesn't lose all content
+      let lastStreamFlushTime = Date.now();
+      const STREAM_FLUSH_INTERVAL = 5000;
+
       const eventHandler = (event: StreamEvent) => {
           switch (event.type) {
             case 'text':
@@ -946,6 +991,16 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
               }
               chatStore.setAgentStatus('streaming');
               chatStore.appendToLastMessage(conversationId, event.text);
+              // Periodic disk flush for crash safety
+              if (Date.now() - lastStreamFlushTime > STREAM_FLUSH_INTERVAL) {
+                lastStreamFlushTime = Date.now();
+                const currentMsg = useChatStore.getState().conversations[conversationId]?.messages.slice(-1)[0];
+                if (currentMsg) {
+                  import('../session/conversationStorage').then(({ updateLastMessage }) => {
+                    updateLastMessage(conversationId, currentMsg).catch(() => {});
+                  }).catch(() => {});
+                }
+              }
               break;
 
             case 'thinking':
@@ -1161,6 +1216,16 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // Calibrate token estimator with actual API usage
         const estimatedInput = estimateTokens(effectiveSystemPrompt) + estimateMessageTokens(preparedMessages) + toolTokens;
         calibrateFromUsage(estimatedInput, finalUsage.inputTokens);
+        // Record cost for fee tracking
+        const usageSnapshot = { ...finalUsage };
+        import('../llm/costTracker').then(({ recordTurnCost }) => {
+          recordTurnCost(conversationId, effectiveModelId, {
+            inputTokens: usageSnapshot.inputTokens,
+            outputTokens: usageSnapshot.outputTokens,
+            cacheReadInputTokens: usageSnapshot.cacheReadInputTokens,
+            cacheCreationInputTokens: usageSnapshot.cacheCreationInputTokens,
+          });
+        }).catch(() => {});
       }
 
       // If there are tool calls, execute them via toolExecutor
@@ -1265,6 +1330,10 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         });
         // Auto-deactivate skills after loop completes (single-turn lifecycle)
         deactivateAllSkills(conversationId);
+        // Clear crash recovery checkpoint — loop completed normally
+        import('../session/checkpoint').then(({ clearCheckpoint }) => {
+          clearCheckpoint(conversationId);
+        }).catch(() => {});
         // Mark conversation as completed and send notification
         chatStore.setConversationStatus(conversationId, 'completed');
         indexConversationAsync(conversationId);
@@ -1275,13 +1344,31 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
             extractMemoriesFromConversation(conversationId)
           ).catch(() => {});
         }
-        const convTitle = useChatStore.getState().conversations[conversationId]?.title ?? '任务';
+        const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
         notifyTaskCompleted(convTitle);
       }
     } catch (err) {
       // Handle abort errors gracefully
       if (err instanceof Error && (err.name === 'AbortError' || abortController.signal.aborted)) {
         logger.warn('Agent loop aborted', { conversationId, loopId });
+
+        // Backfill missing tool results for interrupted tool calls.
+        // Without this, orphaned tool_use blocks cause API 400 errors on the next turn.
+        for (const tc of collectedToolCalls) {
+          const existing = useChatStore.getState().conversations[conversationId]
+            ?.messages.find((m) => m.id === assistantMsgId)
+            ?.toolCalls?.find((t) => t.id === tc.id);
+          if (existing && existing.result === undefined) {
+            chatStore.updateToolCall(conversationId, assistantMsgId, tc.id,
+              '[Tool execution interrupted by user]', undefined, true);
+            chatStore.appendToolCallContext(conversationId, loopId, {
+              name: tc.name,
+              input: tc.input,
+              result: '[Tool execution interrupted by user]',
+            });
+          }
+        }
+
         // Clear loop context and any pending confirmation/permission dialogs
         clearLoopContext(loopId);
         clearInputQueue(conversationId);
@@ -1295,6 +1382,10 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         taskExecutionStore.cancelExecution(execution.id);
         // Auto-deactivate skills on abort
         deactivateAllSkills(conversationId);
+        // Clear crash recovery checkpoint — loop aborted by user
+        import('../session/checkpoint').then(({ clearCheckpoint }) => {
+          clearCheckpoint(conversationId);
+        }).catch(() => {});
         // Set status back to idle on cancel
         chatStore.setConversationStatus(conversationId, 'idle');
         indexConversationAsync(conversationId);
@@ -1318,10 +1409,14 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       persistExecutionSnapshot(conversationId, loopId);
       // Auto-deactivate skills on error
       deactivateAllSkills(conversationId);
+      // Clear crash recovery checkpoint — loop ended with error
+      import('../session/checkpoint').then(({ clearCheckpoint }) => {
+        clearCheckpoint(conversationId);
+      }).catch(() => {});
       // Mark conversation as error and send notification
       chatStore.setConversationStatus(conversationId, 'error');
       indexConversationAsync(conversationId);
-      const convTitle = useChatStore.getState().conversations[conversationId]?.title ?? '任务';
+      const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
       notifyTaskError(convTitle);
       continueLoop = false;
     }

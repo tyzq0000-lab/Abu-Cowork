@@ -14,6 +14,7 @@ function getCategoryLabel(category: MemoryCategory, t: ReturnType<typeof useI18n
     decision: t.memory.categoryDecision,
     action_item: t.memory.categoryAction,
     conversation_index: t.memory.categoryConversationIndex,
+    feedback: t.memory.categoryFeedback,
   };
   return map[category];
 }
@@ -25,6 +26,7 @@ const CATEGORY_COLORS: Record<MemoryCategory, string> = {
   decision: 'bg-green-100 text-green-700',
   action_item: 'bg-yellow-100 text-yellow-700',
   conversation_index: 'bg-[var(--abu-bg-muted)] text-[var(--abu-text-secondary)]',
+  feedback: 'bg-teal-100 text-teal-700',
 };
 
 function formatAge(timestamp: number): string {

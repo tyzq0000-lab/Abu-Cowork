@@ -10,6 +10,7 @@ import { clearInputQueue } from '../core/agent/userInputQueue';
 import { clearSkillHooksByConversation } from '../core/tools/builtins';
 import { removeAgentsByConversation, setConversationLookup } from '../core/agent/backgroundAgentRegistry';
 import { cancelSubagent } from '../core/agent/subagentAbort';
+import type { ConversationMeta } from '../core/session/conversationStorage';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
@@ -92,81 +93,16 @@ export function flushTokenBuffer(convId?: string) {
   }
 }
 
-// Persistence limits
-const MAX_CONVERSATIONS = 50;
-const MAX_MESSAGES_PER_CONVERSATION = 200;
-const KEEP_FIRST_MESSAGES = 5;
-
-/**
- * Strip large base64 image data from resultContent before persisting to localStorage.
- * Screenshots are saved to disk; we replace base64 data with a placeholder to avoid
- * exceeding the ~5MB localStorage quota.
- */
-function stripImageDataForPersist(conversations: Record<string, Conversation>): Record<string, Conversation> {
-  const result: Record<string, Conversation> = {};
-  for (const [id, conv] of Object.entries(conversations)) {
-    const messages = conv.messages.map((msg) => {
-      const hasToolImages = msg.toolCalls?.some((tc) => tc.resultContent?.some((b) => b.type === 'image'));
-      const hasContextImages = msg.toolCallsForContext?.some((tc) => tc.resultContent?.some((b) => b.type === 'image'));
-      const hasContentImages = Array.isArray(msg.content) && msg.content.some((b) => b.type === 'image');
-      if (!hasToolImages && !hasContentImages && !hasContextImages) return msg;
-
-      const strippedMsg = { ...msg };
-
-      // Strip base64 data from user message images, but preserve filePath for disk recovery
-      if (hasContentImages && Array.isArray(msg.content)) {
-        strippedMsg.content = msg.content.map((block) => {
-          if (block.type !== 'image') return block;
-          // If image was saved to disk, keep the ImageContent structure with empty data
-          if (block.filePath) {
-            return {
-              ...block,
-              source: { ...block.source, data: '' },
-            };
-          }
-          // No disk path — fallback to placeholder text
-          return { type: 'text' as const, text: '[image]' };
-        });
-      }
-
-      // Strip images from tool result content
-      if (hasToolImages) {
-        strippedMsg.toolCalls = msg.toolCalls!.map((tc) => {
-          if (!tc.resultContent?.some((b) => b.type === 'image')) return tc;
-          return {
-            ...tc,
-            resultContent: tc.resultContent!.map((block) =>
-              block.type === 'image'
-                ? { type: 'text' as const, text: '[screenshot saved to disk]' }
-                : block
-            ),
-          };
-        });
-      }
-
-      // Strip images from toolCallsForContext too
-      if (hasContextImages) {
-        strippedMsg.toolCallsForContext = msg.toolCallsForContext!.map((tc) => {
-          if (!tc.resultContent?.some((b) => b.type === 'image')) return tc;
-          return {
-            ...tc,
-            resultContent: tc.resultContent!.map((block) =>
-              block.type === 'image'
-                ? { type: 'text' as const, text: '[screenshot saved to disk]' }
-                : block
-            ),
-          };
-        });
-      }
-
-      return strippedMsg;
-    });
-    result[id] = { ...conv, messages };
-  }
-  return result;
-}
+// Note: Old localStorage persistence limits (MAX_CONVERSATIONS, MAX_MESSAGES_PER_CONVERSATION,
+// KEEP_FIRST_MESSAGES, stripImageDataForPersist) removed in v4.
+// Messages are now persisted to JSONL files — no localStorage size constraints.
 
 interface ChatState {
+  /** Lightweight metadata index — persisted to localStorage + index.json on disk.
+   *  This is the source of truth for "what conversations exist". */
+  conversationIndex: Record<string, ConversationMeta>;
+  /** Active/loaded conversations with full messages — NOT persisted.
+   *  Only contains the active conversation + LRU cache of recent ones (~5). */
   conversations: Record<string, Conversation>;
   activeConversationId: string | null;
   agentStatus: AgentStatus;
@@ -230,6 +166,10 @@ interface ChatActions {
   // Export/Import
   exportConversation: (convId: string) => string | null;
   importConversation: (json: string) => string | null;
+
+  // Persistence — load conversation from disk on demand
+  loadConversation: (convId: string) => Promise<void>;
+  unloadOldConversations: () => void;
 }
 
 export type ChatStore = ChatState & ChatActions;
@@ -237,6 +177,7 @@ export type ChatStore = ChatState & ChatActions;
 export const useChatStore = create<ChatStore>()(
   persist(
     immer((set, get) => ({
+      conversationIndex: {} as Record<string, ConversationMeta>,
       conversations: {},
       activeConversationId: null,
       agentStatus: 'idle' as AgentStatus,
@@ -249,23 +190,32 @@ export const useChatStore = create<ChatStore>()(
       createConversation: (workspacePath, options) => {
         const id = generateId();
         const now = Date.now();
+        const meta: ConversationMeta = {
+          id,
+          title: DEFAULT_CONV_TITLE,
+          createdAt: now,
+          updatedAt: now,
+          messageCount: 0,
+          workspacePath: workspacePath ?? null,
+          ...(options?.scheduledTaskId ? { scheduledTaskId: options.scheduledTaskId } : {}),
+          ...(options?.triggerId ? { triggerId: options.triggerId } : {}),
+          ...(options?.imChannelId ? { imChannelId: options.imChannelId, imPlatform: options.imPlatform } : {}),
+          ...(options?.projectId ? { projectId: options.projectId } : {}),
+        };
         set((state) => {
           state.conversations[id] = {
-            id,
-            title: DEFAULT_CONV_TITLE,
+            ...meta,
             messages: [],
-            createdAt: now,
-            updatedAt: now,
             status: 'idle',
-            workspacePath: workspacePath ?? null,
-            ...(options?.scheduledTaskId ? { scheduledTaskId: options.scheduledTaskId } : {}),
-            ...(options?.triggerId ? { triggerId: options.triggerId } : {}),
-            ...(options?.imChannelId ? { imChannelId: options.imChannelId, imPlatform: options.imPlatform } : {}),
-            ...(options?.projectId ? { projectId: options.projectId } : {}),
           };
+          state.conversationIndex[id] = meta;
           if (!options?.skipActivate) {
             state.activeConversationId = id;
           }
+        });
+        // Sync index to disk (fire-and-forget)
+        import('../core/session/conversationStorage').then(({ updateIndexEntry }) => {
+          updateIndexEntry(meta).catch(() => {});
         });
         // Sync global workspace to match the new conversation
         if (workspacePath && !options?.skipActivate) {
@@ -301,16 +251,35 @@ export const useChatStore = create<ChatStore>()(
           });
         }
 
-        const conv = get().conversations[id];
         set((state) => {
           state.activeConversationId = id;
         });
-        // Sync global workspace to match the target conversation
-        const ws = useWorkspaceStore.getState();
-        if (conv?.workspacePath) {
-          ws.setWorkspace(conv.workspacePath);
+
+        // Load from disk if not in memory, then sync workspace
+        const conv = get().conversations[id];
+        const meta = get().conversationIndex[id];
+        if (!conv && meta) {
+          // Set workspace from index immediately (avoid delay)
+          const ws = useWorkspaceStore.getState();
+          if (meta.workspacePath) ws.setWorkspace(meta.workspacePath);
+          else ws.clearWorkspace();
+          // Async load messages — guard against race if user switches again before load completes
+          get().loadConversation(id).then(() => {
+            // Only sync workspace if this conversation is still active
+            if (get().activeConversationId !== id) return;
+            const loaded = get().conversations[id];
+            if (loaded?.workspacePath) {
+              ws.setWorkspace(loaded.workspacePath);
+            }
+          });
         } else {
-          ws.clearWorkspace();
+          // Already in memory — sync workspace immediately
+          const ws = useWorkspaceStore.getState();
+          if (conv?.workspacePath) {
+            ws.setWorkspace(conv.workspacePath);
+          } else {
+            ws.clearWorkspace();
+          }
         }
       },
 
@@ -349,7 +318,12 @@ export const useChatStore = create<ChatStore>()(
         for (const subId of runningSubagentIds) {
           cancelSubagent(subId);
         }
-        // Clean up session memory files (tool results offloaded to disk)
+        // Clean up disk files (JSONL messages, tool results, outputs)
+        import('../core/session/conversationStorage').then(({ deleteConversationFiles, removeIndexEntry }) => {
+          deleteConversationFiles(id).catch(() => {});
+          removeIndexEntry(id).catch(() => {});
+        }).catch(() => {});
+        // Legacy cleanup: session memory files (tool results offloaded to disk)
         import('../core/session/sessionMemory').then(({ cleanupConversationResults }) => {
           cleanupConversationResults(id).catch(() => {});
         }).catch(() => {});
@@ -365,6 +339,7 @@ export const useChatStore = create<ChatStore>()(
         const wasActive = get().activeConversationId === id;
         set((state) => {
           delete state.conversations[id];
+          delete state.conversationIndex[id];
           if (state.activeConversationId === id) {
             // Only pick non-automated conversations as the next active one
             const ids = Object.keys(state.conversations)
@@ -390,10 +365,14 @@ export const useChatStore = create<ChatStore>()(
           if (state.conversations[id]) {
             state.conversations[id].title = title;
           }
+          if (state.conversationIndex[id]) {
+            state.conversationIndex[id].title = title;
+          }
         });
       },
 
       addMessage: (convId, message) => {
+        let newTitle: string | undefined;
         set((state) => {
           const conv = state.conversations[convId];
           if (conv) {
@@ -407,10 +386,21 @@ export const useChatStore = create<ChatStore>()(
               // Strip [Attachment: `path`] patterns from title
               content = content.replace(/\[Attachment:\s*`[^`]*`\]\s*/g, '').trim();
               if (content) {
-                conv.title = content.slice(0, 30) + (content.length > 30 ? '...' : '');
+                newTitle = content.slice(0, 30) + (content.length > 30 ? '...' : '');
+                conv.title = newTitle;
               }
             }
+            // Sync index metadata
+            if (state.conversationIndex[convId]) {
+              state.conversationIndex[convId].messageCount = conv.messages.length;
+              state.conversationIndex[convId].updatedAt = conv.updatedAt;
+              if (newTitle) state.conversationIndex[convId].title = newTitle;
+            }
           }
+        });
+        // Async write to disk (non-blocking)
+        import('../core/session/conversationStorage').then(({ appendMessage: diskAppend }) => {
+          diskAppend(convId, message).catch(() => {});
         });
       },
 
@@ -763,10 +753,29 @@ export const useChatStore = create<ChatStore>()(
             }
           }
 
+          const meta: ConversationMeta = {
+            id: newId,
+            title: imported.title,
+            createdAt: imported.createdAt,
+            updatedAt: imported.updatedAt,
+            messageCount: imported.messages.length,
+            workspacePath: imported.workspacePath,
+            imChannelId: imported.imChannelId,
+            imPlatform: imported.imPlatform,
+            scheduledTaskId: imported.scheduledTaskId,
+            triggerId: imported.triggerId,
+            projectId: imported.projectId,
+          };
+
           set((state) => {
             state.conversations[newId] = imported;
+            state.conversationIndex[newId] = meta;
             state.activeConversationId = newId;
           });
+          // Write messages to disk + update index
+          import('../core/session/conversationStorage').then(async ({ migrateConversation }) => {
+            await migrateConversation(imported);
+          }).catch(() => {});
           // Sync workspace to imported conversation
           const ws = useWorkspaceStore.getState();
           if (imported.workspacePath) {
@@ -780,71 +789,149 @@ export const useChatStore = create<ChatStore>()(
           return null;
         }
       },
+
+      // ── Persistence: load conversation from disk on demand ──
+
+      loadConversation: async (convId: string) => {
+        // Already loaded
+        if (get().conversations[convId]) return;
+        // Not in index
+        if (!get().conversationIndex[convId]) return;
+
+        try {
+          const { loadMessages } = await import('../core/session/conversationStorage');
+          const messages = await loadMessages(convId);
+          const meta = get().conversationIndex[convId];
+          if (!meta) return;
+
+          set((state) => {
+            state.conversations[convId] = {
+              id: meta.id,
+              title: meta.title,
+              createdAt: meta.createdAt,
+              updatedAt: meta.updatedAt,
+              messages,
+              status: 'idle',
+              workspacePath: meta.workspacePath,
+              imChannelId: meta.imChannelId,
+              imPlatform: meta.imPlatform,
+              scheduledTaskId: meta.scheduledTaskId,
+              triggerId: meta.triggerId,
+              projectId: meta.projectId,
+            };
+          });
+        } catch {
+          // Load failed — conversation will appear empty
+        }
+
+        // Unload old conversations to limit memory usage
+        get().unloadOldConversations();
+      },
+
+      unloadOldConversations: () => {
+        const MAX_LOADED = 5;
+        const { conversations, activeConversationId } = get();
+        const ids = Object.keys(conversations);
+        if (ids.length <= MAX_LOADED) return;
+
+        // Sort by updatedAt, keep newest + active
+        const sorted = ids
+          .filter((id) => id !== activeConversationId)
+          .sort((a, b) =>
+            (conversations[b]?.updatedAt ?? 0) - (conversations[a]?.updatedAt ?? 0)
+          );
+
+        // Keep (MAX_LOADED - 1) non-active + 1 active
+        const toUnload = sorted.slice(MAX_LOADED - 1);
+        if (toUnload.length === 0) return;
+
+        set((state) => {
+          for (const id of toUnload) {
+            // Don't unload conversations with running status
+            if (state.conversations[id]?.status === 'running') continue;
+            delete state.conversations[id];
+          }
+        });
+      },
     })),
     {
       name: 'abu-chat',
-      version: 3,
+      version: 4,
       migrate: (persisted, version) => {
         const state = persisted as Record<string, unknown>;
         // v1 → v2: added executionSteps on Message (optional field, no-op migration)
         if (version < 2) { /* no transform needed */ }
         // v2 → v3: added projectId on Conversation (optional field, no-op migration)
         if (version < 3) { /* no transform needed */ }
+        // v3 → v4: migrate conversations from localStorage to file system
+        if (version < 4) {
+          // Mark for async migration in onRehydrateStorage
+          state._v3Conversations = state.conversations;
+          // Build conversationIndex from old conversations
+          const oldConvs = state.conversations as Record<string, Conversation> | undefined;
+          if (oldConvs) {
+            const index: Record<string, ConversationMeta> = {};
+            for (const conv of Object.values(oldConvs)) {
+              index[conv.id] = {
+                id: conv.id,
+                title: conv.title,
+                createdAt: conv.createdAt,
+                updatedAt: conv.updatedAt,
+                messageCount: conv.messages.length,
+                workspacePath: conv.workspacePath,
+                imChannelId: conv.imChannelId,
+                imPlatform: conv.imPlatform,
+                scheduledTaskId: conv.scheduledTaskId,
+                triggerId: conv.triggerId,
+                projectId: conv.projectId,
+              };
+            }
+            state.conversationIndex = index;
+          }
+          // Clear conversations from persisted state — they'll be on disk
+          state.conversations = {};
+        }
         return state;
       },
       partialize: (state) => ({
-        // Strip large base64 image data from resultContent before persisting to localStorage.
-        // Images are saved to disk separately; keeping them in localStorage would exceed quota.
-        conversations: stripImageDataForPersist(state.conversations),
-        // activeConversationId not persisted — app always starts on welcome screen
+        // Only persist lightweight index to localStorage (~100KB max)
+        conversationIndex: state.conversationIndex,
+        // conversations NOT persisted — loaded from JSONL on demand
+        // activeConversationId NOT persisted — app always starts on welcome screen
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
 
-        // Reset running states and ephemeral fields
-        for (const conv of Object.values(state.conversations)) {
-          if (conv.status === 'running') {
-            conv.status = 'idle';
-          }
-          conv.completedAt = undefined;
-          conv.contextCache = undefined;  // Ephemeral — never restore from disk
-          conv.contextWarningLevel = undefined;  // Ephemeral — never restore from disk
-
-          // Clean up streaming flags
-          for (const msg of conv.messages) {
-            msg.isStreaming = false;
-            if (msg.toolCalls) {
-              for (const tc of msg.toolCalls) {
-                tc.isExecuting = false;
+        // v3 → v4 async migration: write old conversations to JSONL files
+        const stateAny = state as unknown as Record<string, unknown>;
+        const v3Convs = stateAny._v3Conversations as Record<string, Conversation> | undefined;
+        if (v3Convs) {
+          delete stateAny._v3Conversations;
+          // Fire-and-forget migration — if it fails, we still have the index
+          import('../core/session/conversationStorage').then(async ({ migrateConversation }) => {
+            for (const conv of Object.values(v3Convs)) {
+              try {
+                await migrateConversation(conv);
+              } catch {
+                // Individual conversation migration failure is non-critical
               }
             }
-          }
-
-          // Trim messages per conversation
-          if (conv.messages.length > MAX_MESSAGES_PER_CONVERSATION) {
-            const first = conv.messages.slice(0, KEEP_FIRST_MESSAGES);
-            const last = conv.messages.slice(-(MAX_MESSAGES_PER_CONVERSATION - KEEP_FIRST_MESSAGES));
-            conv.messages = [...first, ...last];
-          }
+          }).catch(() => {});
         }
 
-        // Limit total conversations (keep newest by updatedAt)
-        const convEntries = Object.entries(state.conversations);
-        if (convEntries.length > MAX_CONVERSATIONS) {
-          convEntries.sort(([, a], [, b]) => b.updatedAt - a.updatedAt);
-          const toRemove = convEntries.slice(MAX_CONVERSATIONS);
-          for (const [id, conv] of toRemove) {
-            // Protect IM-linked conversations — they have active sessions
-            if (conv.imChannelId) continue;
-            delete state.conversations[id];
-          }
-          // Fix activeConversationId if deleted (pick last = most recent, consistent with deleteConversation)
-          if (state.activeConversationId && !state.conversations[state.activeConversationId]) {
-            const ids = Object.keys(state.conversations)
-              .filter((cid) => !state.conversations[cid]?.scheduledTaskId && !state.conversations[cid]?.triggerId);
-            state.activeConversationId = ids.length > 0 ? ids[ids.length - 1] : null;
-          }
-        }
+        // Sync conversationIndex from disk (file system is authoritative after migration)
+        import('../core/session/conversationStorage').then(async ({ loadIndex }) => {
+          const diskIndex = await loadIndex();
+          const diskEntries = diskIndex.entries;
+          // Merge: disk is authoritative, but keep localStorage entries that aren't on disk yet
+          const merged = { ...state.conversationIndex, ...diskEntries };
+          useChatStore.setState({ conversationIndex: merged });
+        }).catch(() => {});
+
+        // Reset running conversations to idle (no longer have messages in memory)
+        // Messages will be loaded on demand when user switches to them
+        state.conversations = {};
+        state.activeConversationId = null;
       },
     }
   )

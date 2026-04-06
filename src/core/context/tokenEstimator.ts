@@ -15,11 +15,20 @@ const CJK_REGEX = /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\uff00-\uffef]/g;
 
 /**
  * Calibration: ratio of actual API tokens to estimated tokens.
- * Updated after each LLM call to improve accuracy for subsequent estimates.
+ * Per-model storage — different models have different tokenizers (~15% variance).
  * Uses exponential moving average to smooth out variance.
  */
-let calibrationRatio = 1.0;
+const calibrationRatios = new Map<string, number>();
 const CALIBRATION_ALPHA = 0.3; // Weight for new observation (0.3 = 30% new, 70% history)
+let activeModelId = '';
+
+/**
+ * Set the active model for calibration.
+ * Call before estimating tokens for a specific LLM call.
+ */
+export function setActiveModel(modelId: string): void {
+  activeModelId = modelId;
+}
 
 /**
  * Update calibration ratio based on actual API usage.
@@ -27,24 +36,29 @@ const CALIBRATION_ALPHA = 0.3; // Weight for new observation (0.3 = 30% new, 70%
  */
 export function calibrateFromUsage(estimatedTokens: number, actualTokens: number): void {
   if (estimatedTokens <= 0 || actualTokens <= 0) return;
+  const key = activeModelId || '_default';
+  const oldRatio = calibrationRatios.get(key) ?? 1.0;
   const newRatio = actualTokens / estimatedTokens;
-  // Exponential moving average
-  calibrationRatio = CALIBRATION_ALPHA * newRatio + (1 - CALIBRATION_ALPHA) * calibrationRatio;
+  calibrationRatios.set(key, CALIBRATION_ALPHA * newRatio + (1 - CALIBRATION_ALPHA) * oldRatio);
 }
 
 /**
- * Get the current calibration ratio.
+ * Get the current calibration ratio for the active model.
  * Values > 1 mean estimates are too low, < 1 mean estimates are too high.
  */
 export function getCalibrationRatio(): number {
-  return calibrationRatio;
+  return calibrationRatios.get(activeModelId || '_default') ?? 1.0;
 }
 
 /**
- * Reset calibration (e.g., when switching providers).
+ * Reset calibration for a specific model, or all models if no ID given.
  */
-export function resetCalibration(): void {
-  calibrationRatio = 1.0;
+export function resetCalibration(modelId?: string): void {
+  if (modelId) {
+    calibrationRatios.delete(modelId);
+  } else {
+    calibrationRatios.clear();
+  }
 }
 
 /**
@@ -61,7 +75,7 @@ export function estimateTokens(text: string): number {
   const cjkTokens = cjkCount / 1.5;
   const nonCjkTokens = nonCjkCount / 4;
 
-  return Math.ceil((cjkTokens + nonCjkTokens) * calibrationRatio);
+  return Math.ceil((cjkTokens + nonCjkTokens) * getCalibrationRatio());
 }
 
 // Approximate tokens per image (Anthropic vision: ~1600 tokens per image)

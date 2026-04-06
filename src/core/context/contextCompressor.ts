@@ -179,8 +179,15 @@ ${middleText}
 
     const compressedTokens = estimateMessageTokens(compressedMessages);
     const savedTokens = messageTokens - compressedTokens;
+    const savingsRatio = messageTokens > 0 ? savedTokens / messageTokens : 0;
 
-    logger.info('Context compressed', { savedTokens: Math.max(0, savedTokens), originalCount: middleMessages.length, compressedCount: compressedMessages.length });
+    // Reject low-efficiency compression — not worth the LLM call cost
+    if (savingsRatio < 0.10) {
+      logger.warn('Compression rejected: too few savings', { savingsRatio: `${(savingsRatio * 100).toFixed(1)}%`, savedTokens });
+      return { messages, compressed: false, savedTokens: 0 };
+    }
+
+    logger.info('Context compressed', { savedTokens: Math.max(0, savedTokens), savingsRatio: `${(savingsRatio * 100).toFixed(1)}%`, originalCount: middleMessages.length, compressedCount: compressedMessages.length });
 
     return {
       messages: compressedMessages,

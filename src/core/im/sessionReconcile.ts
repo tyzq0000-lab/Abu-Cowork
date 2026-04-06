@@ -10,18 +10,18 @@ import { useChatStore } from '../../stores/chatStore';
 
 export function reconcileIMSessions(): void {
   const imStore = useIMChannelStore.getState();
-  const conversations = useChatStore.getState().conversations;
+  const conversationIndex = useChatStore.getState().conversationIndex;
 
   // Clean up active sessions pointing to non-existent conversations
   for (const [key, session] of Object.entries(imStore.sessions)) {
-    if (!conversations[session.conversationId]) {
+    if (!conversationIndex[session.conversationId]) {
       imStore.removeSession(key);
     }
   }
 
   // Clean up archived sessions pointing to non-existent conversations
   for (const [key, session] of Object.entries(imStore.archivedSessions)) {
-    if (!conversations[session.conversationId]) {
+    if (!conversationIndex[session.conversationId]) {
       imStore.removeArchivedSession(key);
     }
   }

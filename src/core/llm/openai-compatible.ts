@@ -1,7 +1,16 @@
 import type { LLMAdapter, ChatOptions } from './adapter';
 import { classifyError } from './adapter';
-import type { Message, StreamEvent, ToolDefinition, MessageContent } from '../../types';
+import type { Message, StreamEvent, ToolDefinition } from '../../types';
 import { getTauriFetch } from './tauriFetch';
+import { normalizeMessages } from './messageNormalizer';
+import type { PreparedTurn, PreparedContentBlock } from './messageNormalizer';
+import { createHeartbeat } from './heartbeat';
+
+// Counter-based tool call ID generator — prevents collisions on rapid parallel calls
+let toolCallCounter = 0;
+function generateToolCallId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${(++toolCallCounter).toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
 
 // OpenAI multimodal content part
 type OpenAIContentPart =
@@ -17,13 +26,6 @@ interface OpenAIMessage {
   reasoning_content?: string | null;
 }
 
-// Helper to get text content from Message
-function getTextContent(content: string | MessageContent[]): string {
-  if (typeof content === 'string') return content;
-  const textBlock = content.find((c) => c.type === 'text');
-  return textBlock?.type === 'text' ? textBlock.text : '';
-}
-
 function convertTools(tools: ToolDefinition[]) {
   return tools.map((t) => ({
     type: 'function' as const,
@@ -35,117 +37,87 @@ function convertTools(tools: ToolDefinition[]) {
   }));
 }
 
-function convertMessages(messages: Message[], systemPrompt?: string, supportsVision?: boolean): OpenAIMessage[] {
+/** Convert PreparedContentBlock[] to OpenAI content parts */
+function toOpenAIContentParts(blocks: PreparedContentBlock[]): OpenAIContentPart[] {
+  const parts: OpenAIContentPart[] = [];
+  for (const b of blocks) {
+    if (b.type === 'text') {
+      parts.push({ type: 'text', text: b.text });
+    } else if (b.type === 'image') {
+      parts.push({
+        type: 'image_url',
+        image_url: { url: `data:${b.mediaType};base64,${b.data}` },
+      });
+    }
+    // Documents are not supported in OpenAI format — skip silently
+  }
+  return parts;
+}
+
+/**
+ * Serialize PreparedTurn[] into OpenAI-compatible messages.
+ *
+ * Thin serializer — all logic (orphan fix, ID gen, image extraction) is in normalizeMessages.
+ */
+function serializeForOpenAI(turns: PreparedTurn[], systemPrompt?: string): OpenAIMessage[] {
   const result: OpenAIMessage[] = [];
 
   if (systemPrompt) {
     result.push({ role: 'system', content: systemPrompt });
   }
 
-  for (const msg of messages) {
-    if (msg.role === 'system') continue;
-
-    if (msg.role === 'user') {
-      // Support multimodal user messages (images)
-      if (typeof msg.content === 'string') {
-        result.push({ role: 'user', content: msg.content });
-      } else {
-        const hasImages = msg.content.some((c) => c.type === 'image');
-        if (hasImages && supportsVision !== false) {
-          // Convert to OpenAI multimodal format (vision-capable models)
-          const parts: OpenAIContentPart[] = [];
-          let hasText = false;
-          for (const block of msg.content) {
-            if (block.type === 'text') {
-              parts.push({ type: 'text', text: block.text });
-              hasText = true;
-            } else if (block.type === 'image') {
-              parts.push({
-                type: 'image_url',
-                image_url: { url: `data:${block.source.media_type};base64,${block.source.data}` },
-              });
-            }
-          }
-          // Some providers require at least one text part alongside images
-          if (!hasText) {
-            parts.unshift({ type: 'text', text: ' ' });
-          }
-          result.push({ role: 'user', content: parts });
-        } else {
-          // Non-vision models: strip images, keep text only
-          const text = getTextContent(msg.content);
-          const imageCount = msg.content.filter((c) => c.type === 'image').length;
-          const hint = imageCount > 0
-            ? `${text}\n\n[用户上传了${imageCount}张图片，当前模型不支持图片理解]`
-            : text;
-          result.push({ role: 'user', content: hint });
+  for (const turn of turns) {
+    if (turn.kind === 'user') {
+      const hasImages = turn.content.some((b) => b.type === 'image');
+      if (hasImages) {
+        const parts = toOpenAIContentParts(turn.content);
+        // Some providers require at least one text part alongside images
+        if (!parts.some((p) => p.type === 'text')) {
+          parts.unshift({ type: 'text', text: ' ' });
         }
+        result.push({ role: 'user', content: parts });
+      } else {
+        const text = turn.content.map((b) => b.type === 'text' ? b.text : '').join('');
+        result.push({ role: 'user', content: text });
       }
-    } else if (msg.role === 'assistant') {
-      const textContent = getTextContent(msg.content);
-
-      // Prefer toolCallsForContext over toolCalls for LLM history
-      const toolCallsSource = msg.toolCallsForContext || msg.toolCalls;
-
-      if (toolCallsSource && toolCallsSource.length > 0) {
-        // Build tool calls array
-        const toolCalls = toolCallsSource.map((tc, index) => {
-          // Generate ID if using toolCallsForContext (which doesn't have id)
-          const toolId = 'id' in tc ? tc.id : `call_${Date.now()}_${index}`;
-          return {
-            id: toolId,
-            type: 'function' as const,
-            function: {
-              name: tc.name,
-              arguments: JSON.stringify(tc.input),
-            },
-          };
-        });
+    } else {
+      // Assistant turn
+      if (turn.toolCalls.length > 0) {
+        // Build OpenAI tool_calls array
+        const toolCalls = turn.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function' as const,
+          function: {
+            name: tc.name,
+            arguments: JSON.stringify(tc.input),
+          },
+        }));
 
         const assistantMsg: OpenAIMessage = {
           role: 'assistant',
-          content: textContent || null,
+          content: turn.text || null,
           tool_calls: toolCalls,
         };
-        // Preserve reasoning_content for reasoning models (DeepSeek R1 etc.)
-        if (msg.thinking) {
-          assistantMsg.reasoning_content = msg.thinking;
+        if (turn.thinking) {
+          assistantMsg.reasoning_content = turn.thinking;
         }
         result.push(assistantMsg);
 
-        // Add tool results — inject images as user messages for OpenAI APIs
-        // OpenAI Chat Completions spec only supports images in role:"user" messages,
-        // NOT in role:"tool" messages. Images in tool messages are silently dropped.
+        // Add tool results — normalizeMessages guarantees every tool_use has a result
+        // OpenAI only supports images in role:"user", not in role:"tool"
         const pendingImages: OpenAIContentPart[] = [];
-        for (let i = 0; i < toolCallsSource.length; i++) {
-          const tc = toolCallsSource[i];
-          const resultText = 'result' in tc ? tc.result : undefined;
-          const resultContent = 'resultContent' in tc ? tc.resultContent : undefined;
-          if (resultText !== undefined) {
-            if (resultContent && Array.isArray(resultContent) && resultContent.some(b => b.type === 'image') && supportsVision !== false) {
-              // Extract text-only parts for the tool message
-              const textParts = resultContent.filter(b => b.type === 'text').map(b => b.type === 'text' ? b.text : '').join('\n');
-              result.push({
-                role: 'tool',
-                tool_call_id: toolCalls[i].id,
-                content: textParts || resultText,
-              });
-              // Collect images for a follow-up user message
-              for (const block of resultContent) {
-                if (block.type === 'image') {
-                  pendingImages.push({
-                    type: 'image_url' as const,
-                    image_url: { url: `data:${block.source.media_type};base64,${block.source.data}` },
-                  });
-                }
-              }
-            } else {
-              result.push({
-                role: 'tool',
-                tool_call_id: toolCalls[i].id,
-                content: resultText,
-              });
-            }
+        for (const tc of turn.toolCalls) {
+          result.push({
+            role: 'tool',
+            tool_call_id: tc.id,
+            content: tc.result,
+          });
+          // Collect images for a follow-up user message
+          for (const img of tc.resultImages) {
+            pendingImages.push({
+              type: 'image_url',
+              image_url: { url: `data:${img.mediaType};base64,${img.data}` },
+            });
           }
         }
         // Inject collected images as a user message so the model can actually see them
@@ -159,9 +131,9 @@ function convertMessages(messages: Message[], systemPrompt?: string, supportsVis
           });
         }
       } else {
-        const assistantMsg: OpenAIMessage = { role: 'assistant', content: textContent };
-        if (msg.thinking) {
-          assistantMsg.reasoning_content = msg.thinking;
+        const assistantMsg: OpenAIMessage = { role: 'assistant', content: turn.text };
+        if (turn.thinking) {
+          assistantMsg.reasoning_content = turn.thinking;
         }
         result.push(assistantMsg);
       }
@@ -169,6 +141,12 @@ function convertMessages(messages: Message[], systemPrompt?: string, supportsVis
   }
 
   return result;
+}
+
+/** Convert messages through normalize → serialize pipeline */
+function convertMessages(messages: Message[], systemPrompt?: string, supportsVision?: boolean): OpenAIMessage[] {
+  const turns = normalizeMessages(messages, { supportsVision: supportsVision !== false });
+  return serializeForOpenAI(turns, systemPrompt);
 }
 
 export class OpenAICompatibleAdapter implements LLMAdapter {
@@ -243,7 +221,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
           const fn = tc.function as Record<string, unknown>;
           let input: Record<string, unknown> = {};
           try { input = JSON.parse(fn.arguments as string); } catch { /* empty */ }
-          onEvent({ type: 'tool_use', id: (tc.id as string) || `ollama-${Date.now()}`, name: fn.name as string, input });
+          onEvent({ type: 'tool_use', id: (tc.id as string) || generateToolCallId('ollama'), name: fn.name as string, input });
         }
         onEvent({ type: 'done', stopReason: 'tool_use' });
       } else {
@@ -258,7 +236,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
               const name = parsed.name as string;
               const args = parsed.arguments ?? parsed.parameters ?? {};
               const parsedInput = typeof args === 'string' ? JSON.parse(args) : args;
-              const id = `text-tc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+              const id = generateToolCallId('text-tc');
               onEvent({ type: 'tool_use', id, name, input: parsedInput });
             } catch { /* skip */ }
           }
@@ -278,6 +256,12 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
 
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No response body');
+
+    // Idle timeout: if no data received for 90s, treat as network hang.
+    const heartbeat = createHeartbeat(90_000, () => {
+      onEvent({ type: 'error', error: 'Stream idle timeout: no data received for 90s' });
+      onEvent({ type: 'done', stopReason: 'end_turn' });
+    });
 
     const decoder = new TextDecoder();
     let buffer = '';
@@ -339,7 +323,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
               const name = parsed.name as string;
               const args = parsed.arguments ?? parsed.parameters ?? {};
               const input = typeof args === 'string' ? JSON.parse(args) : args;
-              const id = `text-tc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+              const id = generateToolCallId('text-tc');
               textToolCalls.push({ id, name, input });
             } catch {
               // Unparseable — emit as text fallback
@@ -416,9 +400,11 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     }
 
     try {
+      heartbeat.reset();
       while (true) {
         const { done: streamDone, value } = await reader.read();
         if (streamDone) break;
+        heartbeat.reset();
 
         buffer += decoder.decode(value, { stream: true });
 
@@ -518,6 +504,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
       }
       onEvent({ type: 'done', stopReason: toolCallBuffers.size > 0 ? 'tool_use' : 'end_turn' });
     } finally {
+      heartbeat.clear();
       reader.releaseLock();
     }
   }

@@ -1,10 +1,11 @@
 import { useSettingsStore, type SystemSettingsTab } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
-import { Settings2, Info, Shield, Check, SlidersHorizontal, MessageCircle, Radio, Brain } from 'lucide-react';
+import { Settings2, Info, Shield, Check, SlidersHorizontal, MessageCircle, Radio, Brain, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIServicesSection, AboutSection, SandboxSection, GeneralSection, IMChannelSection } from './sections';
 import FeedbackSection from './sections/FeedbackSection';
 import PersonalMemorySection from './sections/PersonalMemorySection';
+import SoulSection from './sections/SoulSection';
 
 export default function SystemSettingsView() {
   const {
@@ -17,6 +18,7 @@ export default function SystemSettingsView() {
     { id: 'ai-services', label: t.settings.aiServices, icon: Settings2 },
     { id: 'im-channels', label: t.imChannel.title, icon: Radio },
     { id: 'personal-memory', label: t.sidebar.personalMemory, icon: Brain },
+    { id: 'soul', label: t.soul.title, icon: Heart },
     { id: 'sandbox', label: t.settings.sandbox, icon: Shield },
     { id: 'general', label: t.settings.general, icon: SlidersHorizontal },
     { id: 'feedback', label: t.about.feedback, icon: MessageCircle },
@@ -35,6 +37,8 @@ export default function SystemSettingsView() {
         return <IMChannelSection />;
       case 'personal-memory':
         return <PersonalMemorySection />;
+      case 'soul':
+        return <SoulSection />;
       case 'about':
         return <AboutSection />;
       case 'feedback':

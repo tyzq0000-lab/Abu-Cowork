@@ -258,9 +258,9 @@ export function ModelSelector({ open, onClose, anchorRef }: ModelSelectorProps) 
       ref={panelRef}
       className={cn(
         'absolute bottom-full left-0 mb-1.5 z-50',
-        'w-72 rounded-lg shadow-lg',
+        'w-72 max-h-96 rounded-lg shadow-lg',
         'bg-[var(--abu-bg-base)] border border-[var(--abu-border)]',
-        'flex flex-col'
+        'flex flex-col overflow-hidden'
       )}
     >
       {/* Search */}

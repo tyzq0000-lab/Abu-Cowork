@@ -8,7 +8,8 @@ export type MemoryCategory =
   | 'conversation_fact'    // key facts from conversations
   | 'decision'             // important decisions and rationale
   | 'action_item'          // follow-ups, pending tasks
-  | 'conversation_index';  // lightweight conversation metadata (auto-generated)
+  | 'conversation_index'   // lightweight conversation metadata (auto-generated)
+  | 'feedback';            // user corrections or confirmations of AI behavior
 
 export type MemorySourceType = 'agent_explicit' | 'auto_flush' | 'user_manual';
 

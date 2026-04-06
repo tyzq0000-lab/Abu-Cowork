@@ -132,6 +132,36 @@ function App() {
       imChannelRouter.start();
       reconcileIMSessions();
       import('@/core/memory/migrator').then(m => m.migrateIfNeeded()).catch(() => {});
+      // Initialize conversation file storage and check for crash recovery
+      import('@/core/session/conversationStorage').then(m => m.initConversationStorage()).catch(() => {});
+      import('@/core/session/checkpoint').then(async ({ findOrphanedCheckpoints, clearCheckpoint }) => {
+        const orphans = await findOrphanedCheckpoints();
+        if (orphans.length === 0) return;
+        const { useChatStore } = await import('@/stores/chatStore');
+        let navigateToId: string | null = null;
+        for (const cp of orphans) {
+          const meta = useChatStore.getState().conversationIndex[cp.conversationId];
+          if (!meta) { await clearCheckpoint(cp.conversationId); continue; }
+          // Load conversation from disk so messages are available
+          await useChatStore.getState().loadConversation(cp.conversationId);
+          // Add a system message indicating the interruption
+          const statusText = cp.status === 'tool_executing'
+            ? `执行工具时中断` : `等待模型响应时中断`;
+          useChatStore.getState().addMessage(cp.conversationId, {
+            id: `recovery-${Date.now().toString(36)}`,
+            role: 'assistant',
+            content: `⚠️ 上次对话在第 ${cp.turnCount} 轮${statusText}。你可以继续发送消息恢复工作。`,
+            timestamp: Date.now(),
+            isSystem: true,
+          });
+          await clearCheckpoint(cp.conversationId);
+          if (!navigateToId) navigateToId = cp.conversationId;
+        }
+        // Navigate to the most recent interrupted conversation
+        if (navigateToId) {
+          useChatStore.getState().switchConversation(navigateToId);
+        }
+      }).catch(() => {});
       startInboundDispatcher();
       startTraySync();
       startFeishuWsManager();
@@ -145,6 +175,7 @@ function App() {
       stopTraySync();
       stopFeishuWsManager();
       stopAllHeartbeats();
+      import('@/core/session/conversationStorage').then(m => m.shutdownConversationStorage()).catch(() => {});
     };
   }, []);
 

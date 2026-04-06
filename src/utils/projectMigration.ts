@@ -21,10 +21,10 @@ export interface MigrationGroup {
  * Returns only groups with 2+ conversations (single conversation is not worth a project).
  */
 export function suggestProjectGroupings(): MigrationGroup[] {
-  const conversations = useChatStore.getState().conversations;
+  const conversationIndex = useChatStore.getState().conversationIndex;
   const groups = new Map<string, string[]>();
 
-  for (const conv of Object.values(conversations)) {
+  for (const conv of Object.values(conversationIndex)) {
     if (conv.workspacePath && !conv.projectId && !conv.scheduledTaskId && !conv.triggerId) {
       const path = conv.workspacePath;
       if (!groups.has(path)) groups.set(path, []);

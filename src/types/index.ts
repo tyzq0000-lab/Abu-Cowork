@@ -97,6 +97,7 @@ export interface Message {
 
 // Simplified tool call info for LLM context building
 export interface ToolCallForContext {
+  id?: string;  // Tool call ID for API tool_use/tool_result pairing (optional for backward compat)
   name: string;
   input: Record<string, unknown>;
   result: string;

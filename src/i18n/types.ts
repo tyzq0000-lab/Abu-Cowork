@@ -46,6 +46,7 @@ export interface TranslationDict {
     categoryDecision: string;
     categoryAction: string;
     categoryConversationIndex: string;
+    categoryFeedback: string;
     entryCount: string;
     sourceAutoFlush: string;
     sourceAgentExplicit: string;
@@ -54,6 +55,19 @@ export interface TranslationDict {
     deleteTitle: string;
     legacyHint: string;
     emptyHint: string;
+  };
+
+  // Soul (personality)
+  soul: {
+    title: string;
+    subtitle: string;
+    defaultLabel: string;
+    customize: string;
+    placeholder: string;
+    save: string;
+    saved: string;
+    restore: string;
+    filePath: string;
   };
 
   // Sidebar

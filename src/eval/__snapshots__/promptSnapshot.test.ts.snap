@@ -1,0 +1,14 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`System prompt section structure > general mode section names match snapshot 1`] = `
+[
+  "persona",
+  "soul",
+  "planning",
+  "current-time",
+  "workspace",
+  "memory-mgmt",
+  "agent-role",
+  "safety-anchor",
+]
+`;

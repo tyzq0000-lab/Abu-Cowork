@@ -35,7 +35,7 @@ export default function ProjectsSection() {
       .sort((a, b) => b.updatedAt - a.updatedAt),
     [projectsMap]
   );
-  const conversations = useChatStore((s) => s.conversations);
+  const conversationIndex = useChatStore((s) => s.conversationIndex);
   const setViewMode = useSettingsStore((s) => s.setViewMode);
 
   // Dialog state
@@ -50,12 +50,12 @@ export default function ProjectsSection() {
     if (migrationDismissed) return [];
     return suggestProjectGroupings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversations, migrationDismissed]);
+  }, [conversationIndex, migrationDismissed]);
 
-  // Group conversations by projectId
+  // Group conversations by projectId using lightweight index
   const projectConversations = useMemo(() => {
-    const map: Record<string, typeof conversations[string][]> = {};
-    for (const conv of Object.values(conversations)) {
+    const map: Record<string, typeof conversationIndex[string][]> = {};
+    for (const conv of Object.values(conversationIndex)) {
       if (conv.projectId) {
         if (!map[conv.projectId]) map[conv.projectId] = [];
         map[conv.projectId].push(conv);
@@ -66,7 +66,7 @@ export default function ProjectsSection() {
       map[key].sort((a, b) => b.createdAt - a.createdAt);
     }
     return map;
-  }, [conversations]);
+  }, [conversationIndex]);
 
   // Create new task within a project
   const handleNewTask = useCallback((projectId: string) => {
@@ -189,7 +189,7 @@ export default function ProjectsSection() {
                     <button
                       onClick={() => {
                         // Unlink conversations then delete
-                        const convs = Object.values(conversations).filter(c => c.projectId === p.id);
+                        const convs = Object.values(conversationIndex).filter(c => c.projectId === p.id);
                         const setProj = useChatStore.getState().setConversationProject;
                         for (const c of convs) setProj(c.id, undefined);
                         deleteProject(p.id);

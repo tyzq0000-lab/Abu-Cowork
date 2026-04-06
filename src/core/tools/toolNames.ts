@@ -33,6 +33,7 @@ export const TOOL_NAMES = {
 
   // Memory & planning
   UPDATE_MEMORY: 'update_memory',
+  UPDATE_SOUL: 'update_soul',
   RECALL: 'recall',
   TODO_WRITE: 'todo_write',
 
