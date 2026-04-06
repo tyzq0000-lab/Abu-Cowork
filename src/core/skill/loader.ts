@@ -1,8 +1,38 @@
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
 import { homeDir, resolve, resolveResource } from '@tauri-apps/api/path';
-import type { Skill, SkillMetadata, SkillHookEntry } from '../../types';
+import type { Skill, SkillMetadata, SkillHookEntry, SkillSource } from '../../types';
 import { joinPath, getParentDir } from '../../utils/pathUtils';
+
+/**
+ * Normalize tool list: accept both YAML array (Abu format) and
+ * space-delimited string (Agent Skills open standard format).
+ *   "Bash(git:*) Read" → ["Bash(git:*)", "Read"]
+ *   ["read_file", "write_file"] → ["read_file", "write_file"]
+ */
+function normalizeToolList(raw: unknown): string[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (Array.isArray(raw)) return raw.filter((s): s is string => typeof s === 'string');
+  if (typeof raw === 'string') {
+    // Split on whitespace, but preserve parenthesized constraints:
+    // "Bash(git:*) Read" → ["Bash(git:*)", "Read"]
+    const tokens: string[] = [];
+    let current = '';
+    let parenDepth = 0;
+    for (const ch of raw) {
+      if (ch === '(') { parenDepth++; current += ch; }
+      else if (ch === ')') { parenDepth = Math.max(0, parenDepth - 1); current += ch; }
+      else if (/\s/.test(ch) && parenDepth === 0) {
+        if (current) { tokens.push(current); current = ''; }
+      } else {
+        current += ch;
+      }
+    }
+    if (current) tokens.push(current);
+    return tokens.length > 0 ? tokens : undefined;
+  }
+  return undefined;
+}
 
 /**
  * Parse a SKILL.md file: YAML frontmatter (between ---) + Markdown body
@@ -31,9 +61,9 @@ function parseSkillFile(raw: string, filePath: string): Skill | null {
       userInvocable: meta['user-invocable'] !== false,
       disableAutoInvoke: meta['disable-auto-invoke'] === true,
       argumentHint: meta['argument-hint'] as string | undefined,
-      allowedTools: meta['allowed-tools'] as string[] | undefined,
-      blockedTools: meta['blocked-tools'] as string[] | undefined,
-      requiredTools: meta['required-tools'] as string[] | undefined,
+      allowedTools: normalizeToolList(meta['allowed-tools']),
+      blockedTools: normalizeToolList(meta['blocked-tools']),
+      requiredTools: normalizeToolList(meta['required-tools']),
       model: meta.model as string | undefined,
       maxTurns: typeof meta['max-turns'] === 'number' ? meta['max-turns'] : undefined,
       context: (meta.context as 'inline' | 'fork') ?? 'inline',
@@ -95,7 +125,8 @@ export class SkillLoader {
     this.skills.clear();
 
     const home = await homeDir();
-    const projectDir = await resolve('.abu/skills');
+    const projectAbuDir = await resolve('.abu/skills');
+    const projectStandardDir = await resolve('.agents/skills');
 
     // Bundled resources: resolveResource points to the app bundle's resource dir
     let builtinDir: string | null = null;
@@ -124,20 +155,25 @@ export class SkillLoader {
       }
     }
 
-    const dirs = [
-      joinPath(home, '.abu/skills'),   // user-level
-      projectDir,                      // project-level
-      ...(builtinDir ? [builtinDir] : []),  // bundled builtin-skills
+    // Scan order: earlier entries take priority on name conflicts.
+    // Abu-specific dirs first, then cross-client standard dirs (.agents/),
+    // then builtin. This ensures Abu-specific overrides always win.
+    const dirs: Array<{ path: string; source: SkillSource }> = [
+      { path: joinPath(home, '.abu/skills'), source: 'user' },
+      { path: joinPath(home, '.agents/skills'), source: 'standard' },
+      { path: projectAbuDir, source: 'project' },
+      { path: projectStandardDir, source: 'project-standard' },
+      ...(builtinDir ? [{ path: builtinDir, source: 'builtin' as SkillSource }] : []),
     ];
 
-    for (const dir of dirs) {
-      await this.scanDirectory(dir);
+    for (const { path, source } of dirs) {
+      await this.scanDirectory(path, source);
     }
 
     return this.getAvailableSkills();
   }
 
-  private async scanDirectory(dir: string): Promise<void> {
+  private async scanDirectory(dir: string, source: SkillSource): Promise<void> {
     try {
       if (!(await exists(dir))) return;
 
@@ -145,15 +181,23 @@ export class SkillLoader {
       for (const entry of entries) {
         if (!entry.isDirectory) continue;
 
-        const skillPath = joinPath(dir, entry.name, 'SKILL.md');
-        try {
-          const raw = await readTextFile(skillPath);
-          const skill = parseSkillFile(raw, skillPath);
-          if (skill) {
-            this.skills.set(skill.name, skill);
+        // Try both SKILL.md and skill.md (spec accepts both)
+        for (const filename of ['SKILL.md', 'skill.md']) {
+          const skillPath = joinPath(dir, entry.name, filename);
+          try {
+            const raw = await readTextFile(skillPath);
+            const skill = parseSkillFile(raw, skillPath);
+            if (skill) {
+              // Earlier directories take priority — don't overwrite
+              if (!this.skills.has(skill.name)) {
+                skill.source = source;
+                this.skills.set(skill.name, skill);
+              }
+              break; // Found a skill file, skip trying the other filename
+            }
+          } catch {
+            // File doesn't exist or unreadable, try next filename
           }
-        } catch {
-          // Skip unreadable files
         }
       }
     } catch {

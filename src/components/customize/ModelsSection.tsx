@@ -1,4 +1,4 @@
-import { useSettingsStore, AVAILABLE_MODELS, getEffectiveModel } from '@/stores/settingsStore';
+import { useSettingsStore, getEffectiveModel, getActiveProvider, getActiveApiKey } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
 import { modelPresets } from '@/data/marketplace/mcp';
 import type { ModelPreset } from '@/types/marketplace';
@@ -25,55 +25,37 @@ const PRESET_GROUP_KEYS = [
 
 export default function ModelsSection() {
   const {
-    provider,
-    apiFormat,
-    model,
-    customModel,
-    baseUrl,
-    setProvider,
-    setApiFormat,
-    setModel,
-    setCustomModel,
-    setBaseUrl,
+    activeModel,
+    providers,
+    selectModel,
     openSystemSettings,
   } = useSettingsStore();
   const { t } = useI18n();
 
   const effectiveModel = getEffectiveModel(useSettingsStore.getState());
+  const activeProvider = getActiveProvider(useSettingsStore.getState());
+  const hasApiKey = !!getActiveApiKey(useSettingsStore.getState());
 
   // Check if a preset matches current config
   const isPresetActive = (preset: ModelPreset) => {
-    const currentModel = model === '__custom__' ? customModel : model;
     return (
-      preset.provider === provider &&
-      preset.apiFormat === apiFormat &&
-      preset.model === currentModel &&
-      (preset.baseUrl ?? '') === (baseUrl ?? '')
+      preset.provider === activeModel.providerId &&
+      preset.model === activeModel.modelId
     );
   };
 
-  // Apply preset
+  // Apply preset: find the matching provider and select the model
   const handleApplyPreset = (preset: ModelPreset) => {
-    setProvider(preset.provider);
-    setApiFormat(preset.apiFormat);
-
-    // Check if model exists in available models
-    const availableForProvider = AVAILABLE_MODELS[preset.provider] ?? [];
-    const modelExists = availableForProvider.some((m) => m.id === preset.model);
-
-    if (modelExists) {
-      setModel(preset.model);
-    } else {
-      setModel('__custom__');
-      setCustomModel(preset.model);
-    }
-
-    if (preset.baseUrl) {
-      setBaseUrl(preset.baseUrl);
+    // Find a matching enabled provider
+    const matchingProvider = providers.find(p => p.id === preset.provider && p.enabled);
+    if (matchingProvider) {
+      // Check if the model exists in the provider
+      const modelExists = matchingProvider.models.some(m => m.id === preset.model);
+      if (modelExists) {
+        selectModel(matchingProvider.id, preset.model);
+      }
     }
   };
-
-  const hasApiKey = !!useSettingsStore((s) => s.apiKeys[s.provider]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -94,8 +76,12 @@ export default function ModelsSection() {
                 </span>
               </div>
               <div className="flex items-center justify-between">
+                <span className="text-xs text-[var(--abu-text-tertiary)]">{t.settings.provider}</span>
+                <span className="text-sm text-[var(--abu-text-secondary)]">{activeProvider?.name ?? '-'}</span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--abu-text-tertiary)]">{t.settings.apiFormat}</span>
-                <span className="text-sm text-[var(--abu-text-secondary)]">{apiFormat}</span>
+                <span className="text-sm text-[var(--abu-text-secondary)]">{activeProvider?.apiFormat ?? '-'}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-[var(--abu-text-tertiary)]">{t.settings.apiKey}</span>
@@ -110,11 +96,11 @@ export default function ModelsSection() {
                   )}
                 </span>
               </div>
-              {baseUrl && (
+              {activeProvider?.baseUrl && (
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-[var(--abu-text-tertiary)]">Base URL</span>
                   <span className="text-sm text-[var(--abu-text-secondary)] font-mono text-right max-w-[200px] truncate">
-                    {baseUrl}
+                    {activeProvider.baseUrl}
                   </span>
                 </div>
               )}

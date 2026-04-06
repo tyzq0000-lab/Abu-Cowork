@@ -1,53 +1,102 @@
 import { useState } from 'react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
-import { providerSupportsWebSearch, providerSupportsImageGen } from '@/core/capabilities';
-import { CircleCheck, CircleAlert, ChevronDown, Globe, ImageIcon } from 'lucide-react';
+import { Plus, CircleCheck, CircleAlert, ChevronDown, Globe, ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Toggle } from '@/components/ui/toggle';
-import ModelConfigSection from './ModelConfigSection';
+import { Button } from '@/components/ui/button';
+import ProviderCard from './ai-services/ProviderCard';
+import AddProviderModal from './ai-services/AddProviderModal';
 import { WebSearchForm } from './WebSearchSection';
 import { ImageGenForm } from './ImageGenSection';
 
 export default function AIServicesSection() {
-  const {
-    provider,
-    useBuiltinWebSearch,
-    setUseBuiltinWebSearch,
-  } = useSettingsStore();
   const { t } = useI18n();
+  const providers = useSettingsStore((s) => s.providers);
+  const activeModel = useSettingsStore((s) => s.activeModel);
+  const [showAddModal, setShowAddModal] = useState(false);
 
-  const hasBuiltinSearch = providerSupportsWebSearch(provider);
-  const hasBuiltinImageGen = providerSupportsImageGen(provider);
+  // Check if any enabled provider has builtin capabilities
+  const enabledProviders = providers.filter(p => p.enabled);
+  const hasBuiltinSearch = enabledProviders.some(p => !!p.capabilities?.webSearch);
+  const hasBuiltinImageGen = enabledProviders.some(p => !!p.capabilities?.imageGen);
+  const searchProviderName = enabledProviders.find(p => !!p.capabilities?.webSearch)?.name;
+  const imageGenProviderName = enabledProviders.find(p => !!p.capabilities?.imageGen)?.name;
 
-  // Show custom search config when: provider doesn't support builtin OR user turned off builtin
-  const showCustomSearch = !hasBuiltinSearch || !useBuiltinWebSearch;
-  // Show custom image gen config when: provider doesn't support builtin
-  const showCustomImageGen = !hasBuiltinImageGen;
+  const enabledCount = enabledProviders.length;
+
+  // Only show providers the user has configured (enabled OR has API key)
+  // Hide untouched builtin providers — user adds them via AddProviderModal
+  const visibleProviders = providers
+    .filter(p => p.enabled || p.apiKey.trim().length > 0)
+    .sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+      return a.sortOrder - b.sortOrder;
+    });
 
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [imageGenExpanded, setImageGenExpanded] = useState(false);
 
   return (
     <div className="space-y-6">
-      {/* Model Configuration */}
-      <ModelConfigSection />
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-[var(--abu-text-primary)]">
+            {t.settings.aiServices}
+          </h3>
+          {enabledCount > 0 && (
+            <p className="text-xs text-[var(--abu-text-muted)] mt-0.5">
+              {t.settings.enabledCount.replace('{count}', String(enabledCount))}
+            </p>
+          )}
+        </div>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => setShowAddModal(true)}
+          className="gap-1.5"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t.settings.addService}
+        </Button>
+      </div>
 
-      {/* Capabilities Section */}
+      {/* Provider List */}
+      {visibleProviders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <p className="text-sm text-[var(--abu-text-muted)]">{t.settings.noProviders}</p>
+          <p className="text-xs text-[var(--abu-text-muted)] mt-1">{t.settings.noProvidersHint}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowAddModal(true)}
+            className="mt-4 gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t.settings.addService}
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {visibleProviders.map((provider) => (
+            <ProviderCard
+              key={provider.id}
+              provider={provider}
+              isActive={activeModel.providerId === provider.id}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Auxiliary Capabilities */}
       <div className="border border-[var(--abu-border)] rounded-xl">
         <div className="px-4 py-3 bg-[var(--abu-bg-muted)] rounded-t-xl">
           <h4 className="text-xs font-medium text-[var(--abu-text-tertiary)] uppercase tracking-wider">
-            {t.settings.capabilities}
+            {t.settings.auxiliary}
           </h4>
         </div>
 
         <div className="divide-y divide-[var(--abu-border)]">
-          {/* Chat - always supported */}
-          <div className="px-4 py-3 flex items-center gap-3">
-            <CircleCheck className="h-4 w-4 text-green-600 shrink-0" />
-            <span className="text-sm text-[var(--abu-text-primary)]">{t.settings.capabilityChat}</span>
-          </div>
-
           {/* Web Search */}
           <div className="px-4 py-3">
             <div className="flex items-center justify-between">
@@ -59,9 +108,13 @@ export default function AIServicesSection() {
                 )}
                 <div className="flex items-center gap-2">
                   <Globe className="h-3.5 w-3.5 text-[var(--abu-text-muted)]" />
-                  <span className="text-sm text-[var(--abu-text-primary)]">{t.settings.capabilityWebSearch}</span>
+                  <span className="text-sm text-[var(--abu-text-primary)]">{t.settings.auxiliarySearch}</span>
                 </div>
-                {showCustomSearch ? (
+                {hasBuiltinSearch ? (
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-700">
+                    {t.settings.builtinVia.replace('{name}', searchProviderName ?? '')}
+                  </span>
+                ) : (
                   <button
                     type="button"
                     onClick={() => setSearchExpanded(!searchExpanded)}
@@ -75,28 +128,11 @@ export default function AIServicesSection() {
                       <ChevronDown className={cn('h-3 w-3 transition-transform', searchExpanded && 'rotate-180')} />
                     </span>
                   </button>
-                ) : (
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-700">
-                    {t.settings.builtinSupported}
-                  </span>
                 )}
               </div>
-
-              {/* Builtin search toggle (only when provider supports it) */}
-              {hasBuiltinSearch && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-[var(--abu-text-muted)]">{t.settings.useBuiltinSearch}</span>
-                  <Toggle
-                    checked={useBuiltinWebSearch}
-                    onChange={() => setUseBuiltinWebSearch(!useBuiltinWebSearch)}
-                    size="md"
-                  />
-                </div>
-              )}
             </div>
 
-            {/* Custom search config (nested card) */}
-            {showCustomSearch && searchExpanded && (
+            {!hasBuiltinSearch && searchExpanded && (
               <div className="ml-7 mt-2 rounded-lg border border-[var(--abu-border)] bg-[var(--abu-bg-muted)]">
                 <div className="p-3">
                   <WebSearchForm />
@@ -115,9 +151,13 @@ export default function AIServicesSection() {
               )}
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-3.5 w-3.5 text-[var(--abu-text-muted)]" />
-                <span className="text-sm text-[var(--abu-text-primary)]">{t.settings.capabilityImageGen}</span>
+                <span className="text-sm text-[var(--abu-text-primary)]">{t.settings.auxiliaryImageGen}</span>
               </div>
-              {showCustomImageGen ? (
+              {hasBuiltinImageGen ? (
+                <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-700">
+                  {t.settings.builtinVia.replace('{name}', imageGenProviderName ?? '')}
+                </span>
+              ) : (
                 <button
                   type="button"
                   onClick={() => setImageGenExpanded(!imageGenExpanded)}
@@ -131,15 +171,10 @@ export default function AIServicesSection() {
                     <ChevronDown className={cn('h-3 w-3 transition-transform', imageGenExpanded && 'rotate-180')} />
                   </span>
                 </button>
-              ) : (
-                <span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-700">
-                  {t.settings.builtinSupported}
-                </span>
               )}
             </div>
 
-            {/* Custom image gen config (nested card) */}
-            {showCustomImageGen && imageGenExpanded && (
+            {!hasBuiltinImageGen && imageGenExpanded && (
               <div className="ml-7 mt-2 rounded-lg border border-[var(--abu-border)] bg-[var(--abu-bg-muted)]">
                 <div className="p-3">
                   <ImageGenForm />
@@ -149,6 +184,12 @@ export default function AIServicesSection() {
           </div>
         </div>
       </div>
+
+      {/* Add Provider Modal */}
+      <AddProviderModal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+      />
     </div>
   );
 }

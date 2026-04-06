@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { SkillMetadata, SubagentMetadata } from '../types';
 import { skillLoader } from '../core/skill/loader';
 import { agentRegistry } from '../core/agent/registry';
+import { useSettingsStore } from './settingsStore';
 
 interface DiscoveryState {
   skills: SkillMetadata[];
@@ -27,6 +28,16 @@ export const useDiscoveryStore = create<DiscoveryStore>()((set) => ({
         skillLoader.discoverSkills(),
         agentRegistry.discoverAgents(),
       ]);
+
+      // Auto-disable project-level skills on first discovery (opt-in model).
+      // Users must explicitly enable them in the Skills panel.
+      const projectSkillNames = skills
+        .filter((s) => s.source === 'project' || s.source === 'project-standard')
+        .map((s) => s.name);
+      if (projectSkillNames.length > 0) {
+        useSettingsStore.getState().autoDisableProjectSkills(projectSkillNames);
+      }
+
       set({ skills, agents, isLoading: false });
     } catch (err) {
       console.warn('Discovery refresh failed:', err);

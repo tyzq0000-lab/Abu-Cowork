@@ -394,6 +394,58 @@ export interface TranslationDict {
     ollamaUrlLabel: string;
     ollamaUrlHint: string;
     ollamaModelSize: string;
+
+    // Provider Management V2
+    addService: string;
+    serviceName: string;
+    serviceNameAuto: string;
+    selectProviderType: string;
+    searchProvider: string;
+    alreadyAdded: string;
+    cloudProviders: string;
+    localProviders: string;
+    customProviders: string;
+    guide: string;
+    guideGoTo: string;
+    apiKeyRequired: string;
+    apiKeyOptional: string;
+    apiUrlNoChange: string;
+    fetchModels: string;
+    fetchingModels: string;
+    fetchModelsError: string;
+    fetchModelsSuccess: string;
+    addModelManually: string;
+    addModelPlaceholder: string;
+    save: string;
+    saveAnyway: string;
+    goBackEdit: string;
+    validating: string;
+    validationSuccess: string;
+    validationFailed: string;
+    revalidate: string;
+    validateConnection: string;
+    statusConnected: string;
+    statusFailed: string;
+    statusUnchecked: string;
+    enabledCount: string;
+    editProvider: string;
+    deleteProvider: string;
+    deleteProviderConfirm: string;
+    noProviders: string;
+    noProvidersHint: string;
+    auxiliary: string;
+    auxiliarySearch: string;
+    auxiliaryImageGen: string;
+    builtinVia: string;
+    providerEnabled: string;
+    providerDisabled: string;
+    cancelEdit: string;
+    saveChanges: string;
+    customApiOpenai: string;
+    customApiAnthropic: string;
+    models: string;
+    modelsCount: string;
+    capabilitiesLabel: string;
   };
 
   // Sandbox recovery
@@ -569,6 +621,18 @@ export interface TranslationDict {
     skillAddedBy: string;
     mySkills: string;
     exampleSkills: string;
+    globalSkills: string;
+    projectSkills: string;
+    projectSkillsBadge: string;
+    skillSourceBuiltin: string;
+    skillSourceUser: string;
+    skillSourceStandard: string;
+    skillSourceProject: string;
+    installAgentSkills: string;
+    installAgentSkillsPlaceholder: string;
+    installAgentSkillsHint: string;
+    installAgentSkillsButton: string;
+    recommendedSkills: string;
     activeSkills: string;
     activeSkillsRemove: string;
     // Category filter

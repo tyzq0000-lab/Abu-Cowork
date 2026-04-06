@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { calculateWarningLevel, getUsagePercent, AutoCompactTracker } from './autoCompact';
 
 describe('autoCompact', () => {
@@ -69,15 +69,70 @@ describe('autoCompact', () => {
       expect(tracker.isDisabled()).toBe(false);
     });
 
-    it('trips circuit breaker after 3 consecutive failures', () => {
+    it('trips circuit breaker after 3 consecutive failures with cooldown', () => {
       const tracker = new AutoCompactTracker();
       tracker.recordFailure();
       tracker.recordFailure();
       expect(tracker.isDisabled()).toBe(false);
       tracker.recordFailure();
       expect(tracker.isDisabled()).toBe(true);
-      // Should not compact when disabled
+      // Should not compact when in cooldown
       expect(tracker.shouldCompact(3)).toBe(false);
+    });
+
+    it('recovers after cooldown period', () => {
+      vi.useFakeTimers();
+      try {
+        const tracker = new AutoCompactTracker();
+        tracker.recordFailure();
+        tracker.recordFailure();
+        tracker.recordFailure();
+        expect(tracker.isDisabled()).toBe(true);
+        // Advance past 5 minute cooldown
+        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+        expect(tracker.isDisabled()).toBe(false);
+        expect(tracker.shouldCompact(2)).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('still in cooldown before 5 minutes', () => {
+      vi.useFakeTimers();
+      try {
+        const tracker = new AutoCompactTracker();
+        tracker.recordFailure();
+        tracker.recordFailure();
+        tracker.recordFailure();
+        // 4 minutes — still in cooldown
+        vi.advanceTimersByTime(4 * 60 * 1000);
+        expect(tracker.isDisabled()).toBe(true);
+        expect(tracker.shouldCompact(3)).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('can trip again after recovery', () => {
+      vi.useFakeTimers();
+      try {
+        const tracker = new AutoCompactTracker();
+        // First trip
+        tracker.recordFailure();
+        tracker.recordFailure();
+        tracker.recordFailure();
+        expect(tracker.isDisabled()).toBe(true);
+        // Recover
+        vi.advanceTimersByTime(5 * 60 * 1000 + 1);
+        expect(tracker.isDisabled()).toBe(false);
+        // Trip again
+        tracker.recordFailure();
+        tracker.recordFailure();
+        tracker.recordFailure();
+        expect(tracker.isDisabled()).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('tracks warning level', () => {

@@ -6,14 +6,16 @@ import {
   removeBackgroundAgent,
 } from '@/core/agent/backgroundAgentRegistry';
 import { cancelSubagent } from '@/core/agent/subagentAbort';
+import { useChatStore } from '@/stores/chatStore';
 import { useI18n } from '@/i18n';
 import { Bot, X, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function BackgroundAgents() {
   const { t } = useI18n();
+  const activeConversationId = useChatStore(s => s.activeConversationId);
   useSyncExternalStore(subscribeToBackgroundAgents, getBackgroundAgentsSnapshot);
-  const agents = getBackgroundAgents();
+  const agents = getBackgroundAgents().filter(a => a.conversationId === activeConversationId);
 
   if (agents.length === 0) return null;
 

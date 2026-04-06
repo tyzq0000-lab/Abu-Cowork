@@ -7,11 +7,19 @@ import { useWorkspaceStore } from './workspaceStore';
 import { useTaskExecutionStore } from './taskExecutionStore';
 import { clearTodos } from '../core/agent/todoManager';
 import { clearInputQueue } from '../core/agent/userInputQueue';
-import { clearAllSkillHooks } from '../core/tools/builtins';
+import { clearSkillHooksByConversation } from '../core/tools/builtins';
+import { removeAgentsByConversation, setConversationLookup } from '../core/agent/backgroundAgentRegistry';
+import { cancelSubagent } from '../core/agent/subagentAbort';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
 }
+
+// Wire up conversation lookup for backgroundAgentRegistry (avoids circular import)
+// This runs once when chatStore module is loaded, before any agent completion.
+setTimeout(() => {
+  setConversationLookup(() => useChatStore.getState().conversations);
+}, 0);
 
 /** Default title for new conversations — used for auto-title detection */
 export const DEFAULT_CONV_TITLE = '新任务';
@@ -334,8 +342,13 @@ export const useChatStore = create<ChatStore>()(
         // Clean up per-conversation state in external modules
         clearTodos(id);
         clearInputQueue(id);
-        clearAllSkillHooks();
+        clearSkillHooksByConversation(id);
         useTaskExecutionStore.getState().clearConversation(id);
+        // Cancel and remove all background agents for this conversation
+        const runningSubagentIds = removeAgentsByConversation(id);
+        for (const subId of runningSubagentIds) {
+          cancelSubagent(subId);
+        }
         // Clean up session memory files (tool results offloaded to disk)
         import('../core/session/sessionMemory').then(({ cleanupConversationResults }) => {
           cleanupConversationResults(id).catch(() => {});

@@ -9,7 +9,7 @@ import { runCommandTool } from './definitions/commandTools';
 
 // --- Agent tools ---
 import { useSkillTool, delegateToAgentTool, readSkillFileTool, saveSkillTool, saveAgentTool, requestWorkspaceTool } from './definitions/agentTools';
-export { clearAllSkillHooks } from './definitions/agentTools';
+export { clearAllSkillHooks, clearSkillHooksByConversation } from './definitions/agentTools';
 
 // --- Automation tools ---
 import { manageScheduledTaskTool, manageTriggerTool, manageFileWatchTool } from './definitions/automationTools';

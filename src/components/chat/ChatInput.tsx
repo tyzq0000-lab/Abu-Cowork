@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Plus, ArrowUp, ArrowRight, Square, X, ChevronDown, Check, FileText } from 'lucide-react';
+import { Plus, ArrowUp, ArrowRight, Square, X, ChevronDown, FileText } from 'lucide-react';
+import { ModelSelector } from '@/components/chat/ModelSelector';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { useFileDragDrop } from '@/hooks/useFileDragDrop';
@@ -10,7 +11,7 @@ import { enqueueUserInput } from '@/core/agent/userInputQueue';
 import { getCurrentLoopContext } from '@/core/agent/permissionBridge';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
-import { useSettingsStore, getEffectiveModel, AVAILABLE_MODELS } from '@/stores/settingsStore';
+import { useSettingsStore, getEffectiveModel, getActiveProvider } from '@/stores/settingsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { usePermissionStore } from '@/stores/permissionStore';
 import type { PermissionDuration } from '@/stores/permissionStore';
@@ -119,8 +120,6 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
   const disabledSkills = useSettingsStore((s) => s.disabledSkills);
   const disabledAgents = useSettingsStore((s) => s.disabledAgents);
   const currentModel = useSettingsStore((s) => getEffectiveModel(s));
-  const provider = useSettingsStore((s) => s.provider);
-  const setModel = useSettingsStore((s) => s.setModel);
   const recentPaths = useWorkspaceStore((s) => s.recentPaths);
   const grantPermission = usePermissionStore((s) => s.grantPermission);
   const hasPermission = usePermissionStore((s) => s.hasPermission);
@@ -129,7 +128,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
   // Chat-only derived state
   const isRunning = activeConv?.status === 'running';
   const isStreaming = !isWelcome && isRunning;
-  const availableModels = AVAILABLE_MODELS[provider] ?? [];
+  const availableModels = useSettingsStore((s) => getActiveProvider(s)?.models ?? []);
   const modelDisplay = availableModels.find((m) => m.id === currentModel)?.label
     ?? (currentModel ? currentModel.split('/').pop()?.split('-').slice(0, 2).join(' ') : 'Claude');
   const [showModelPicker, setShowModelPicker] = useState(false);
@@ -669,8 +668,23 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
 
           {/* Bottom Toolbar */}
           {isWelcome ? (
-            /* Welcome variant: FolderSelector + [+] + --- + Start button */
+            /* Welcome variant: Model picker + FolderSelector + [+] + --- + Start button */
             <div className="flex items-center gap-2 px-5 pb-3.5">
+              {/* Model picker (same as chat variant) */}
+              <div className="relative" ref={modelPickerRef}>
+                <button
+                  onClick={() => setShowModelPicker(!showModelPicker)}
+                  className="btn-ghost flex items-center gap-1 px-2 py-1 text-[12px] text-[var(--abu-text-tertiary)] font-medium hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-md transition-colors"
+                >
+                  {modelDisplay}
+                  <ChevronDown className={cn('h-3 w-3 transition-transform', showModelPicker && 'rotate-180')} />
+                </button>
+                <ModelSelector
+                  open={showModelPicker}
+                  onClose={() => setShowModelPicker(false)}
+                  anchorRef={modelPickerRef as React.RefObject<HTMLElement>}
+                />
+              </div>
               <FolderSelector
                 currentPath={localWorkspace}
                 recentPaths={recentPaths}
@@ -707,7 +721,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
             <div className="flex items-center justify-between px-4 pb-2.5 pt-0.5">
               {/* Left Actions */}
               <div className="flex items-center gap-0.5">
-                {/* Model picker dropdown */}
+                {/* Model picker */}
                 <div className="relative" ref={modelPickerRef}>
                   <button
                     onClick={() => setShowModelPicker(!showModelPicker)}
@@ -716,28 +730,11 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
                     {modelDisplay}
                     <ChevronDown className={cn('h-3 w-3 transition-transform', showModelPicker && 'rotate-180')} />
                   </button>
-                  {showModelPicker && availableModels.length > 0 && (
-                    <div className="absolute bottom-full left-0 mb-1.5 w-56 bg-white rounded-lg border border-[var(--abu-border)] shadow-lg py-1 z-50">
-                      {availableModels.map((m) => (
-                        <button
-                          key={m.id}
-                          onClick={() => {
-                            setModel(m.id);
-                            setShowModelPicker(false);
-                          }}
-                          className={cn(
-                            'w-full flex items-center justify-between px-3 py-1.5 text-[12px] transition-colors text-left',
-                            m.id === currentModel
-                              ? 'text-[var(--abu-clay)] font-medium bg-[var(--abu-clay-5)]'
-                              : 'text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-muted)]'
-                          )}
-                        >
-                          <span>{m.label}</span>
-                          {m.id === currentModel && <Check className="h-3.5 w-3.5 text-[var(--abu-clay)]" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <ModelSelector
+                    open={showModelPicker}
+                    onClose={() => setShowModelPicker(false)}
+                    anchorRef={modelPickerRef as React.RefObject<HTMLElement>}
+                  />
                 </div>
 
                 <Button

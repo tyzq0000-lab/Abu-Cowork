@@ -207,7 +207,7 @@ export interface ProviderCapabilities {
 
 export type ApiFormat = 'anthropic' | 'openai-compatible';
 
-/** User-saved custom AI service configuration */
+/** User-saved custom AI service configuration (legacy — kept for migration) */
 export interface CustomService {
   id: string;
   name: string;
@@ -216,6 +216,9 @@ export interface CustomService {
   model: string;
   apiKey: string;
 }
+
+// Re-export V2 provider types
+export type { ProviderSource, ProviderStatus, ModelCapability, ModelInfo, ProviderInstance, ActiveModel, AuxiliaryServices, ProviderGuide } from './provider';
 
 export interface LLMConfig {
   provider: LLMProvider;
@@ -252,9 +255,13 @@ export interface SkillHookEntry {
   }>;
 }
 
+// Skill source — where the skill was loaded from
+export type SkillSource = 'builtin' | 'user' | 'standard' | 'project' | 'project-standard';
+
 export interface SkillMetadata {
   name: string;
   description: string;
+  source?: SkillSource;       // Where this skill was discovered (set by loader)
   trigger?: string;           // When to auto-invoke, e.g. "用户要求深度调研某个主题"
   doNotTrigger?: string;      // When NOT to auto-invoke, e.g. "用户只是随口问个简单问题"
   userInvocable?: boolean;

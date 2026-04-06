@@ -16,15 +16,26 @@ import { getSystemInfoData } from '../helpers/toolHelpers';
 import { TOOL_NAMES } from '../toolNames';
 
 // Module-level map to track skill hook cleanup functions.
-// Exported for cleanup on conversation delete/switch.
+// Key format: "conversationId:skillName" for per-conversation scoping.
 const skillHookCleanups = new Map<string, () => void>();
 
-/** Clear all active skill hooks (called on conversation delete/switch) */
+/** Clear all active skill hooks (called on agent loop end) */
 export function clearAllSkillHooks(): void {
   for (const cleanup of skillHookCleanups.values()) {
     cleanup();
   }
   skillHookCleanups.clear();
+}
+
+/** Clear skill hooks for a specific conversation only */
+export function clearSkillHooksByConversation(conversationId: string): void {
+  const prefix = `${conversationId}:`;
+  for (const [key, cleanup] of skillHookCleanups) {
+    if (key.startsWith(prefix)) {
+      cleanup();
+      skillHookCleanups.delete(key);
+    }
+  }
 }
 
 /**
@@ -90,8 +101,9 @@ export const useSkillTool: ToolDefinition = {
     if (skill.hooks) {
       const { activateSkillHooks } = await import('../../skill/skillHooks');
       const cleanup = activateSkillHooks(skill);
-      // Store cleanup on the module-level map for deactivation
-      skillHookCleanups.set(skillName, cleanup);
+      // Store cleanup keyed by conversation:skill for per-conversation scoping
+      const hookKey = activeId ? `${activeId}:${skillName}` : skillName;
+      skillHookCleanups.set(hookKey, cleanup);
     }
 
     // Also load chain skills if defined
@@ -280,13 +292,17 @@ export const delegateToAgentTool: ToolDefinition = {
 
     // 8a. Async mode: fire-and-forget, return immediately with taskId
     if (isAsync) {
-      if (!canSpawnAgent()) {
+      const convId = loopCtx?.conversationId;
+      if (!convId) {
+        subagentCleanup();
+        return 'Error: 无法确定当前对话 ID，无法启动后台代理。';
+      }
+      if (!canSpawnAgent(convId)) {
         subagentCleanup();
         return 'Error: 已达到后台代理并发上限 (5)，请等待现有代理完成后再试。';
       }
 
       const taskId = `bg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-      const convId = loopCtx?.conversationId ?? '';
 
       registerBackgroundAgent({
         taskId,

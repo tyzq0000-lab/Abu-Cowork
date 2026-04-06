@@ -15,16 +15,25 @@ const SEARCH_PROVIDERS: { id: WebSearchProviderType; labelKey: 'webSearchProvide
 
 /** Inline mode: renders only the form fields without section header */
 export function WebSearchForm() {
-  const {
-    webSearchProvider,
-    webSearchApiKey,
-    webSearchBaseUrl,
-    setWebSearchProvider,
-    setWebSearchApiKey,
-    setWebSearchBaseUrl,
-  } = useSettingsStore();
+  const auxiliaryServices = useSettingsStore((s) => s.auxiliaryServices);
+  const setAuxiliaryWebSearch = useSettingsStore((s) => s.setAuxiliaryWebSearch);
   const { t } = useI18n();
   const [showKey, setShowKey] = useState(false);
+
+  const webSearch = auxiliaryServices.webSearch ?? { provider: 'tavily' as WebSearchProviderType, apiKey: '', baseUrl: '' };
+  const webSearchProvider = webSearch.provider;
+  const webSearchApiKey = webSearch.apiKey;
+  const webSearchBaseUrl = webSearch.baseUrl;
+
+  const setWebSearchProvider = (provider: WebSearchProviderType) => {
+    setAuxiliaryWebSearch({ ...webSearch, provider });
+  };
+  const setWebSearchApiKey = (apiKey: string) => {
+    setAuxiliaryWebSearch({ ...webSearch, apiKey });
+  };
+  const setWebSearchBaseUrl = (baseUrl: string) => {
+    setAuxiliaryWebSearch({ ...webSearch, baseUrl });
+  };
 
   const isSearXNG = webSearchProvider === 'searxng';
   const currentProvider = SEARCH_PROVIDERS.find((p) => p.id === webSearchProvider);

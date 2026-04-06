@@ -7,8 +7,9 @@ import { skillTemplates } from '@/data/marketplace/skills';
 import { skillLoader } from '@/core/skill/loader';
 import SkillEditor from './SkillEditor';
 import { Toggle } from '@/components/ui/toggle';
-import { Trash2, FileText, Folder, ChevronDown, ChevronRight, Pencil, MoreHorizontal, Eye, Code, Info, MessageCircle, Search, Plus, X, Wand2, PenLine, Upload, Download, Package, Loader2, Check, AlertCircle } from 'lucide-react';
+import { Trash2, FileText, Folder, ChevronDown, ChevronRight, Pencil, MoreHorizontal, Eye, Code, Info, MessageCircle, Search, Plus, X, Wand2, PenLine, Upload, Download, Package, Loader2, Check, AlertCircle, Globe } from 'lucide-react';
 import { remove } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import { packSkill } from '@/core/skill/packager';
@@ -157,6 +158,12 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
   const [npmError, setNpmError] = useState('');
   const [npmSuccess, setNpmSuccess] = useState('');
   const skillRegistryDefault = useSettingsStore((s) => s.skillRegistry);
+  // Agent Skills install dialog state (npx skills add)
+  const [showAgentSkillsInstall, setShowAgentSkillsInstall] = useState(false);
+  const [agentSkillsRepo, setAgentSkillsRepo] = useState('');
+  const [agentSkillsInstalling, setAgentSkillsInstalling] = useState(false);
+  const [agentSkillsError, setAgentSkillsError] = useState('');
+  const [agentSkillsSuccess, setAgentSkillsSuccess] = useState('');
 
   // Open blank editor when manual create is triggered from parent
   useEffect(() => {
@@ -197,18 +204,25 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
     });
   }, [installedSkills, searchLower]);
 
-  // Group into "My skills" (user-created) and "Examples" (system builtin)
-  const { userSkills, exampleSkills } = useMemo(() => {
-    const user: Skill[] = [];
-    const examples: Skill[] = [];
+  // Group skills by source for display
+  const skillGroups = useMemo(() => {
+    const groups: {
+      user: Skill[];       // ~/.abu/skills/ (user-created)
+      standard: Skill[];   // ~/.agents/skills/ (npx skills add -g)
+      project: Skill[];    // .abu/skills/ or .agents/skills/ (from repo)
+      builtin: Skill[];    // builtin-skills/
+    } = { user: [], standard: [], project: [], builtin: [] };
+
     for (const s of filteredSkills) {
-      if (isSystemSkill(s)) {
-        examples.push(s);
-      } else {
-        user.push(s);
+      switch (s.source) {
+        case 'user': groups.user.push(s); break;
+        case 'standard': groups.standard.push(s); break;
+        case 'project':
+        case 'project-standard': groups.project.push(s); break;
+        default: groups.builtin.push(s); break;
       }
     }
-    return { userSkills: user, exampleSkills: examples };
+    return groups;
   }, [filteredSkills]);
 
   const toggleCategory = (cat: string) => {
@@ -336,6 +350,47 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
     setNpmSuccess('');
     setNpmStep(null);
     setNpmInstalling(false);
+  };
+
+  // Agent Skills install handler (npx skills add <repo> -g)
+  const handleAgentSkillsInstall = async () => {
+    const repo = agentSkillsRepo.trim();
+    if (!repo) return;
+    setAgentSkillsInstalling(true);
+    setAgentSkillsError('');
+    setAgentSkillsSuccess('');
+    const addToast = useToastStore.getState().addToast;
+
+    try {
+      const result = await invoke<{ stdout: string; stderr: string; exitCode: number }>('run_shell_command', {
+        command: `npx -y skills add ${repo} -y -g`,
+        cwd: null,
+        background: false,
+        timeout: 60,
+      });
+
+      if (result.exitCode !== 0) {
+        throw new Error(result.stderr || `Exit code ${result.exitCode}`);
+      }
+
+      await refresh();
+      setAgentSkillsSuccess(repo);
+      addToast({ type: 'success', title: format(t.toolbox.npmInstallSuccess, { name: repo }) });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setAgentSkillsError(msg);
+      addToast({ type: 'error', title: t.toolbox.npmInstallFailed, message: msg });
+    } finally {
+      setAgentSkillsInstalling(false);
+    }
+  };
+
+  const resetAgentSkillsDialog = () => {
+    setShowAgentSkillsInstall(false);
+    setAgentSkillsRepo('');
+    setAgentSkillsError('');
+    setAgentSkillsSuccess('');
+    setAgentSkillsInstalling(false);
   };
 
   // Close menus when clicking outside
@@ -493,6 +548,13 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                         <Package className="h-3.5 w-3.5 text-[var(--abu-text-muted)]" />
                         <span>{t.toolbox.installFromNpm}</span>
                       </button>
+                      <button
+                        onClick={() => { setShowCreateMenu(false); setShowAgentSkillsInstall(true); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-active)] transition-colors"
+                      >
+                        <Globe className="h-3.5 w-3.5 text-[var(--abu-text-muted)]" />
+                        <span>{t.toolbox.installAgentSkills}</span>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -505,8 +567,8 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
             <div className="text-xs text-[var(--abu-text-muted)] py-8 text-center">{t.toolbox.noSkillsFound}</div>
           ) : (
             <>
-              {/* My skills */}
-              {userSkills.length > 0 && (
+              {/* My skills (user-created in ~/.abu/skills/) */}
+              {skillGroups.user.length > 0 && (
                 <div>
                   <div
                     className="flex items-center gap-1.5 px-5 py-2.5 cursor-pointer text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)]"
@@ -518,11 +580,45 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                     }
                     <span className="text-[13px] font-medium">{t.toolbox.mySkills}</span>
                   </div>
-                  {!collapsedCategories.has('my') && userSkills.map((skill) => renderSkillRow(skill))}
+                  {!collapsedCategories.has('my') && skillGroups.user.map((skill) => renderSkillRow(skill))}
                 </div>
               )}
-              {/* Examples (system builtin) */}
-              {exampleSkills.length > 0 && (
+              {/* Global installed (npx skills add -g → ~/.agents/skills/) */}
+              {skillGroups.standard.length > 0 && (
+                <div>
+                  <div
+                    className="flex items-center gap-1.5 px-5 py-2.5 cursor-pointer text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)]"
+                    onClick={() => toggleCategory('standard')}
+                  >
+                    {collapsedCategories.has('standard')
+                      ? <ChevronRight className="h-3 w-3" />
+                      : <ChevronDown className="h-3 w-3" />
+                    }
+                    <span className="text-[13px] font-medium">{t.toolbox.globalSkills}</span>
+                    <span className="text-[11px] text-[var(--abu-text-placeholder)] ml-1">{skillGroups.standard.length}</span>
+                  </div>
+                  {!collapsedCategories.has('standard') && skillGroups.standard.map((skill) => renderSkillRow(skill))}
+                </div>
+              )}
+              {/* Project-level skills (.agents/skills/ or .abu/skills/ from repo) */}
+              {skillGroups.project.length > 0 && (
+                <div>
+                  <div
+                    className="flex items-center gap-1.5 px-5 py-2.5 cursor-pointer text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)]"
+                    onClick={() => toggleCategory('project')}
+                  >
+                    {collapsedCategories.has('project')
+                      ? <ChevronRight className="h-3 w-3" />
+                      : <ChevronDown className="h-3 w-3" />
+                    }
+                    <span className="text-[13px] font-medium">{t.toolbox.projectSkills}</span>
+                    <span className="ml-1.5 px-1.5 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">{t.toolbox.projectSkillsBadge}</span>
+                  </div>
+                  {!collapsedCategories.has('project') && skillGroups.project.map((skill) => renderSkillRow(skill))}
+                </div>
+              )}
+              {/* Built-in skills (bundled with Abu) */}
+              {skillGroups.builtin.length > 0 && (
                 <div>
                   <div
                     className="flex items-center gap-1.5 px-5 py-2.5 cursor-pointer text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)]"
@@ -534,7 +630,7 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                     }
                     <span className="text-[13px] font-medium">{t.toolbox.exampleSkills}</span>
                   </div>
-                  {!collapsedCategories.has('examples') && exampleSkills.map((skill) => renderSkillRow(skill))}
+                  {!collapsedCategories.has('examples') && skillGroups.builtin.map((skill) => renderSkillRow(skill))}
                 </div>
               )}
             </>
@@ -616,8 +712,8 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                             <Download className="h-3 w-3" />
                             {t.toolbox.exportSkill}
                           </button>
-                          {/* Edit & Delete - only for user skills */}
-                          {!isSystemSkill(selected) && (
+                          {/* Edit & Delete - available for non-builtin skills */}
+                          {selected.source !== 'builtin' && !isSystemSkill(selected) && (
                             <>
                               <button
                                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-muted)] transition-colors"
@@ -641,10 +737,16 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                 </div>
               </div>
 
-              {/* Row 2: Added by */}
+              {/* Row 2: Source */}
               <div className="mb-5">
                 <div className="text-xs text-[var(--abu-text-muted)] mb-0.5">{t.toolbox.skillAddedBy}</div>
-                <div className="text-sm font-medium text-[var(--abu-text-primary)]">{isSystemSkill(selected) ? 'Anthropic' : 'User'}</div>
+                <div className="text-sm font-medium text-[var(--abu-text-primary)]">{
+                  selected.source === 'builtin' ? t.toolbox.skillSourceBuiltin :
+                  selected.source === 'user' ? t.toolbox.skillSourceUser :
+                  selected.source === 'standard' ? t.toolbox.skillSourceStandard :
+                  (selected.source === 'project' || selected.source === 'project-standard') ? t.toolbox.skillSourceProject :
+                  (isSystemSkill(selected) ? t.toolbox.skillSourceBuiltin : t.toolbox.skillSourceUser)
+                }</div>
               </div>
 
               {/* Description */}
@@ -791,6 +893,97 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                 >
                   {npmInstalling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Package className="h-3.5 w-3.5" />}
                   {t.toolbox.npmFindAndInstall}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Agent Skills install dialog (npx skills add) */}
+      {showAgentSkillsInstall && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-[420px] bg-white rounded-xl shadow-xl border border-[var(--abu-border)] overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--abu-border)]">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-[var(--abu-clay)]" />
+                <h2 className="text-sm font-semibold text-[var(--abu-text-primary)]">{t.toolbox.installAgentSkills}</h2>
+              </div>
+              <button onClick={resetAgentSkillsDialog} className="p-1.5 rounded-lg text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-muted)] transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-[var(--abu-text-secondary)] mb-1">GitHub</label>
+                <Input
+                  type="text"
+                  placeholder={t.toolbox.installAgentSkillsPlaceholder}
+                  value={agentSkillsRepo}
+                  onChange={(e) => { setAgentSkillsRepo(e.target.value); setAgentSkillsError(''); setAgentSkillsSuccess(''); }}
+                  disabled={agentSkillsInstalling}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAgentSkillsInstall(); }}
+                />
+                <p className="text-[11px] text-[var(--abu-text-muted)] mt-1">{t.toolbox.installAgentSkillsHint}</p>
+              </div>
+
+              {/* Recommended repos */}
+              <div>
+                <div className="text-[11px] font-medium text-[var(--abu-text-muted)] mb-1.5">{t.toolbox.recommendedSkills}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {['larksuite/cli', 'anthropics/skills', 'vercel-labs/agent-skills'].map((repo) => (
+                    <button
+                      key={repo}
+                      onClick={() => setAgentSkillsRepo(repo)}
+                      className="px-2 py-1 text-[11px] rounded-md bg-[var(--abu-bg-muted)] text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-active)] hover:text-[var(--abu-text-primary)] transition-colors"
+                    >
+                      {repo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Progress */}
+              {agentSkillsInstalling && (
+                <div className="flex items-center gap-2 py-2 px-3 bg-[var(--abu-bg-base)] rounded-lg">
+                  <Loader2 className="h-3.5 w-3.5 text-[var(--abu-clay)] animate-spin shrink-0" />
+                  <span className="text-xs text-[var(--abu-text-tertiary)]">Installing...</span>
+                </div>
+              )}
+
+              {/* Success */}
+              {agentSkillsSuccess && (
+                <div className="flex items-center gap-2 py-2 px-3 bg-green-50 rounded-lg">
+                  <Check className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                  <span className="text-xs text-green-700">{format(t.toolbox.npmInstallSuccess, { name: agentSkillsSuccess })}</span>
+                </div>
+              )}
+
+              {/* Error */}
+              {agentSkillsError && (
+                <div className="flex items-start gap-2 py-2 px-3 bg-red-50 rounded-lg">
+                  <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                  <span className="text-xs text-red-600">{agentSkillsError}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--abu-border)]">
+              <button onClick={resetAgentSkillsDialog} className="px-4 py-1.5 rounded-lg text-sm font-medium text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-muted)] transition-colors">
+                {agentSkillsSuccess ? t.common.close : t.common.cancel}
+              </button>
+              {!agentSkillsSuccess && (
+                <button
+                  onClick={handleAgentSkillsInstall}
+                  disabled={!agentSkillsRepo.trim() || agentSkillsInstalling}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium bg-[var(--abu-clay)] text-white hover:bg-[var(--abu-clay-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {agentSkillsInstalling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Globe className="h-3.5 w-3.5" />}
+                  {t.toolbox.installAgentSkillsButton}
                 </button>
               )}
             </div>

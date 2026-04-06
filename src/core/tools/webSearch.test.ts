@@ -8,11 +8,15 @@ vi.mock('../search/providers', () => ({
   })),
 }));
 
-// Mock settingsStore
+// Mock settingsStore — V2 shape uses auxiliaryServices
 const mockSettingsState = {
-  webSearchProvider: 'brave' as const,
-  webSearchApiKey: 'test-api-key',
-  webSearchBaseUrl: '',
+  auxiliaryServices: {
+    webSearch: {
+      provider: 'brave' as const,
+      apiKey: 'test-api-key',
+      baseUrl: '',
+    },
+  },
 };
 
 vi.mock('../../stores/settingsStore', () => ({
@@ -31,9 +35,11 @@ registerBuiltinTools();
 beforeEach(() => {
   mockSearch.mockReset();
   // Reset settings to defaults
-  mockSettingsState.webSearchProvider = 'brave';
-  mockSettingsState.webSearchApiKey = 'test-api-key';
-  mockSettingsState.webSearchBaseUrl = '';
+  mockSettingsState.auxiliaryServices.webSearch = {
+    provider: 'brave',
+    apiKey: 'test-api-key',
+    baseUrl: '',
+  };
 });
 
 describe('web_search tool', () => {
@@ -45,7 +51,7 @@ describe('web_search tool', () => {
 
   describe('validation', () => {
     it('should return error when API key is missing (default provider)', async () => {
-      mockSettingsState.webSearchApiKey = '';
+      mockSettingsState.auxiliaryServices.webSearch!.apiKey = '';
       const tool = getWebSearchTool();
 
       const result = await tool.execute({ query: 'test' });
@@ -54,8 +60,7 @@ describe('web_search tool', () => {
     });
 
     it('should return error when API key is missing for Bing', async () => {
-      mockSettingsState.webSearchProvider = 'bing';
-      mockSettingsState.webSearchApiKey = '';
+      mockSettingsState.auxiliaryServices.webSearch = { provider: 'bing', apiKey: '', baseUrl: '' };
       const tool = getWebSearchTool();
 
       const result = await tool.execute({ query: 'test' });
@@ -63,9 +68,7 @@ describe('web_search tool', () => {
     });
 
     it('should return error when SearXNG base URL is missing', async () => {
-      mockSettingsState.webSearchProvider = 'searxng';
-      mockSettingsState.webSearchApiKey = '';
-      mockSettingsState.webSearchBaseUrl = '';
+      mockSettingsState.auxiliaryServices.webSearch = { provider: 'searxng', apiKey: '', baseUrl: '' };
       const tool = getWebSearchTool();
 
       const result = await tool.execute({ query: 'test' });
@@ -74,9 +77,7 @@ describe('web_search tool', () => {
     });
 
     it('should NOT require API key for SearXNG when base URL is set', async () => {
-      mockSettingsState.webSearchProvider = 'searxng';
-      mockSettingsState.webSearchApiKey = '';
-      mockSettingsState.webSearchBaseUrl = 'http://localhost:8080';
+      mockSettingsState.auxiliaryServices.webSearch = { provider: 'searxng', apiKey: '', baseUrl: 'http://localhost:8080' };
 
       mockSearch.mockResolvedValue({
         query: 'test',

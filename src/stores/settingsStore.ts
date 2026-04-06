@@ -1,11 +1,16 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { LLMProvider, ApiFormat, ProviderCapabilities, CustomService } from '../types';
+import type { ProviderInstance, ActiveModel, AuxiliaryServices, ModelInfo } from '../types/provider';
 import type { PermissionMode } from '../core/permissions/permissionMode';
 import type { WebSearchProviderType } from '../core/search/providers';
 import { setLanguage, initLanguage, type LanguageSetting } from '@/i18n';
 import type { UpdateInfo } from '@/core/updates/checker';
-// Provider config type
+
+// ============================================================
+// Static Provider Registry (used for defaults, guides, initialization)
+// ============================================================
+
 type ProviderConfig = {
   name: string;
   baseUrl: string;
@@ -14,7 +19,6 @@ type ProviderConfig = {
   capabilities?: ProviderCapabilities;
 };
 
-// Single source of truth for all provider configurations
 export const PROVIDER_CONFIGS = {
   volcengine: {
     name: '火山引擎 (Volcengine)',
@@ -190,267 +194,253 @@ export const PROVIDER_CONFIGS = {
   custom: { name: '自定义 API', baseUrl: '', format: 'openai-compatible', models: [] },
 } as Record<LLMProvider, ProviderConfig>;
 
-/** Returns the list of providers available for the current edition */
+/** Returns the list of builtin provider IDs */
 export function getAvailableProviders(): LLMProvider[] {
   return Object.keys(PROVIDER_CONFIGS) as LLMProvider[];
 }
 
-// Derived from PROVIDER_CONFIGS — keeps existing consumers unchanged
+/** Derive available models for a provider ID (from static config) */
 export const AVAILABLE_MODELS = Object.fromEntries(
   Object.entries(PROVIDER_CONFIGS).map(([k, v]) => [k, v.models])
 ) as Record<LLMProvider, { id: string; label: string }[]>;
 
-// View mode for main area
+// ============================================================
+// Default providers from static config
+// ============================================================
+
+function createDefaultProviders(): ProviderInstance[] {
+  // Exclude 'local' and 'custom' — they are only created via AddProviderModal
+  const builtinIds = Object.keys(PROVIDER_CONFIGS).filter(
+    id => id !== 'local' && id !== 'custom'
+  ) as LLMProvider[];
+
+  return builtinIds.map((id, index) => ({
+    id,
+    source: 'builtin' as const,
+    name: PROVIDER_CONFIGS[id].name,
+    enabled: id === 'qiniu', // default: only qiniu enabled
+    apiFormat: PROVIDER_CONFIGS[id].format,
+    baseUrl: PROVIDER_CONFIGS[id].baseUrl,
+    apiKey: '',
+    models: PROVIDER_CONFIGS[id].models.map(m => ({ id: m.id, label: m.label })),
+    capabilities: PROVIDER_CONFIGS[id].capabilities,
+    status: 'unchecked' as const,
+    sortOrder: index,
+  }));
+}
+
+// ============================================================
+// View mode types
+// ============================================================
+
 export type ViewMode = 'chat' | 'automation' | 'toolbox' | 'settings';
-
-// Automation sub-tabs (Schedule, Trigger)
 export type AutomationTab = 'schedule' | 'trigger';
-
-// System settings tabs
 export type SystemSettingsTab = 'general' | 'ai-services' | 'sandbox' | 'im-channels' | 'personal-memory' | 'about' | 'feedback' | 'sponsor';
-
-// Toolbox tabs (Skills, Agents, MCP)
 export type ToolboxTab = 'skills' | 'agents' | 'mcp';
 
+// ============================================================
+// State & Actions interfaces
+// ============================================================
+
 interface SettingsState {
-  provider: LLMProvider;
-  apiFormat: ApiFormat;
-  model: string;
-  customModel: string;
-  apiKeys: Partial<Record<LLMProvider, string>>;
-  baseUrl: string;
+  // ── Provider & Model (V2) ──
+  providers: ProviderInstance[];
+  activeModel: ActiveModel;
+  recentModels: ActiveModel[];
+  favoriteModels: ActiveModel[];
+  auxiliaryServices: AuxiliaryServices;
+
+  // ── General settings (unchanged) ──
   theme: 'dark' | 'light';
   showSettings: boolean;
   sidebarCollapsed: boolean;
   rightPanelCollapsed: boolean;
-  // New: Advanced LLM parameters
   temperature: number;
   enableThinking: boolean;
   thinkingBudget: number;
-  // Context window settings
   maxOutputTokens: number;
   contextWindowSize: number;
-  // Image generation settings
-  imageGenApiKey: string;
-  imageGenBaseUrl: string;
-  imageGenModel: string;
-  // Web search settings
-  useBuiltinWebSearch: boolean;
-  webSearchProvider: WebSearchProviderType;
-  webSearchApiKey: string;
-  webSearchBaseUrl: string;
-  // New: Language setting
   language: LanguageSetting;
-  // System settings tab
   activeSystemTab: SystemSettingsTab;
-  // Automation tab
   activeAutomationTab: AutomationTab;
-  // Toolbox tab
   activeToolboxTab: ToolboxTab;
   toolboxSearchQuery: string;
   installingItem: string | null;
-  // View mode
   viewMode: ViewMode;
-  // Disabled skills (persisted)
   disabledSkills: string[];
-  // Disabled agents (persisted)
   disabledAgents: string[];
-  // Sandbox
   sandboxEnabled: boolean;
-  // Network isolation
   networkIsolationEnabled: boolean;
   networkWhitelist: string[];
   allowPrivateNetworks: boolean;
-  // Window close behavior
   closeAction: 'ask' | 'minimize' | 'quit';
-  // Update checker state
   updateInfo: UpdateInfo | null;
   updateChecking: boolean;
   lastUpdateCheck: number;
-  // User profile
   userNickname: string;
-  userAvatar: string; // data URI or empty
-  // Guide
-  guideShown: boolean; // true after user has dismissed the guide
-  // Behavior sensor
+  userAvatar: string;
+  guideShown: boolean;
   behaviorSensorEnabled: boolean;
-  // Computer Use (screenshot + keyboard/mouse simulation)
   computerUseEnabled: boolean;
-  // Skill inline command execution (!`command` syntax)
   allowSkillCommands: boolean;
-  // npm skill registry
   skillRegistry: string;
-  // Custom AI services
-  customServices: CustomService[];
-  activeCustomServiceId: string | null;
-  // Permission mode for tool execution confirmation
   permissionMode: PermissionMode;
 }
 
 interface SettingsActions {
-  setProvider: (provider: LLMProvider) => void;
-  setApiFormat: (format: ApiFormat) => void;
-  setModel: (model: string) => void;
-  setCustomModel: (model: string) => void;
-  setApiKey: (key: string) => void;
-  setBaseUrl: (url: string) => void;
+  // ── Provider management (V2) ──
+  addProvider: (config: Omit<ProviderInstance, 'id' | 'status' | 'sortOrder'>) => string;
+  updateProvider: (id: string, patch: Partial<ProviderInstance>) => void;
+  removeProvider: (id: string) => void;
+  toggleProvider: (id: string) => void;
+  reorderProviders: (ids: string[]) => void;
+  setProviderStatus: (id: string, status: ProviderInstance['status'], message?: string, latency?: number) => void;
+
+  // ── Model selection (V2) ──
+  selectModel: (providerId: string, modelId: string) => void;
+  toggleFavorite: (providerId: string, modelId: string) => void;
+
+  // ── Provider model management ──
+  addModelToProvider: (providerId: string, model: ModelInfo) => void;
+  removeModelFromProvider: (providerId: string, modelId: string) => void;
+  setProviderModels: (providerId: string, models: ModelInfo[]) => void;
+
+  // ── Auxiliary services ──
+  setAuxiliaryWebSearch: (config: AuxiliaryServices['webSearch']) => void;
+  setAuxiliaryImageGen: (config: AuxiliaryServices['imageGen']) => void;
+
+  // ── General settings actions (unchanged) ──
   setTheme: (theme: 'dark' | 'light') => void;
   toggleSettings: () => void;
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
   setRightPanelCollapsed: (collapsed: boolean) => void;
-  // New actions
   setTemperature: (temp: number) => void;
   setEnableThinking: (enabled: boolean) => void;
   setThinkingBudget: (budget: number) => void;
   setMaxOutputTokens: (tokens: number) => void;
   setContextWindowSize: (size: number) => void;
-  // Image generation actions
-  setImageGenApiKey: (key: string) => void;
-  setImageGenBaseUrl: (url: string) => void;
-  setImageGenModel: (model: string) => void;
-  // Web search actions
-  setUseBuiltinWebSearch: (enabled: boolean) => void;
-  setWebSearchProvider: (provider: WebSearchProviderType) => void;
-  setWebSearchApiKey: (key: string) => void;
-  setWebSearchBaseUrl: (url: string) => void;
-  // Language action
   setLanguage: (lang: LanguageSetting) => void;
-  // System settings modal actions
   openSystemSettings: (tab?: SystemSettingsTab) => void;
   closeSystemSettings: () => void;
   setActiveSystemTab: (tab: SystemSettingsTab) => void;
-  // Automation actions
   openAutomation: (tab?: AutomationTab) => void;
   closeAutomation: () => void;
   setActiveAutomationTab: (tab: AutomationTab) => void;
-  // Toolbox modal actions
   openToolbox: (tab?: ToolboxTab) => void;
   closeToolbox: () => void;
   setActiveToolboxTab: (tab: ToolboxTab) => void;
   setToolboxSearchQuery: (query: string) => void;
   setInstallingItem: (itemId: string | null) => void;
-  // View mode action
   setViewMode: (mode: ViewMode) => void;
-  // Skill enable/disable
   toggleSkillEnabled: (skillName: string) => void;
-  // Agent enable/disable
+  autoDisableProjectSkills: (skillNames: string[]) => void;
   toggleAgentEnabled: (agentName: string) => void;
-  // Unified provider switch (sets provider + format + baseUrl + model atomically)
-  switchProvider: (provider: LLMProvider) => void;
-  // Sandbox
   setSandboxEnabled: (enabled: boolean) => void;
-  // Network isolation
   setNetworkIsolationEnabled: (enabled: boolean) => void;
   setNetworkWhitelist: (whitelist: string[]) => void;
   setAllowPrivateNetworks: (allow: boolean) => void;
-  // Window close behavior
   setCloseAction: (action: 'ask' | 'minimize' | 'quit') => void;
-  // Update checker actions
   setUpdateInfo: (info: UpdateInfo | null) => void;
   setUpdateChecking: (checking: boolean) => void;
   setLastUpdateCheck: (time: number) => void;
-  // User profile actions
   setUserNickname: (nickname: string) => void;
   setUserAvatar: (avatar: string) => void;
   setGuideShown: (shown: boolean) => void;
   setBehaviorSensorEnabled: (enabled: boolean) => void;
   setComputerUseEnabled: (enabled: boolean) => void;
-  // Custom AI services
-  saveCustomService: (name: string) => void;
-  updateCustomService: (id: string) => void;
-  deleteCustomService: (id: string) => void;
-  switchToCustomService: (id: string) => void;
-  // Permission mode
   setPermissionMode: (mode: PermissionMode) => void;
 }
 
-/** Returns the active API key for the current provider */
+// ============================================================
+// Helper functions (backward-compatible signatures, V2 internals)
+// ============================================================
+
+/** Get the active provider instance */
+export function getActiveProvider(state: SettingsState): ProviderInstance | undefined {
+  return state.providers.find(p => p.id === state.activeModel.providerId);
+}
+
+/** Get the active provider + model in one call */
+export function getActiveProviderAndModel(state: SettingsState): {
+  provider: ProviderInstance;
+  modelId: string;
+} | null {
+  const p = state.providers.find(p => p.id === state.activeModel.providerId && p.enabled);
+  if (!p) return null;
+  return { provider: p, modelId: state.activeModel.modelId };
+}
+
+/** Returns the active API key for the current provider (backward-compatible) */
 export function getActiveApiKey(state: SettingsState): string {
-  return state.apiKeys[state.provider] ?? '';
+  const p = state.providers.find(p => p.id === state.activeModel.providerId);
+  return p?.apiKey ?? '';
 }
 
-/** Whether the current provider requires an API key (Ollama does not) */
+/** Whether the current provider requires an API key (backward-compatible) */
 export function providerRequiresApiKey(state: SettingsState): boolean {
-  return state.provider !== 'ollama';
+  return state.activeModel.providerId !== 'ollama';
 }
 
-/** Returns the effective model ID to use for API calls */
+/** Returns the effective model ID (backward-compatible) */
 export function getEffectiveModel(state: SettingsState): string {
-  // Ollama: always use customModel (models are dynamic, not in static config)
-  if (state.provider === 'ollama') {
-    return state.customModel || '';
-  }
-  if (state.model === '__custom__') {
-    if (state.customModel) return state.customModel;
-    // Fallback: use current provider's first model
-    return AVAILABLE_MODELS[state.provider]?.[0]?.id || AVAILABLE_MODELS.anthropic[0].id;
-  }
-  return state.model;
+  return state.activeModel.modelId;
 }
 
-/** Check if a model ID belongs to the current provider */
-export function isModelCompatible(modelId: string, provider: LLMProvider): boolean {
-  if (provider === 'custom') return true; // custom provider accepts any model
-  const models = AVAILABLE_MODELS[provider];
-  if (!models) return false;
-  return models.some((m) => m.id === modelId);
-}
-
-/**
- * Resolve an agent's model field into the actual model ID to use.
- * - 'inherit' / empty / undefined → use global effective model
- * - model belongs to current provider → use as-is
- * - model does NOT belong to current provider → fall back to global effective model
- */
+/** Resolve an agent's model field into the actual model ID */
 export function resolveAgentModel(agentModel: string | undefined, state: SettingsState): string {
-  const globalModel = getEffectiveModel(state);
+  const globalModel = state.activeModel.modelId;
   if (!agentModel || agentModel === 'inherit') return globalModel;
-  // If using custom provider, trust the agent's model as-is
-  if (state.provider === 'custom') return agentModel;
-  // Check compatibility with current provider
-  if (isModelCompatible(agentModel, state.provider)) return agentModel;
+  // Search across enabled providers
+  for (const p of state.providers) {
+    if (p.enabled && p.models.some(m => m.id === agentModel)) return agentModel;
+  }
   // Incompatible → fall back to global
   return globalModel;
 }
 
+/** Get all models from all enabled providers (for model selector) */
+export function getAllEnabledModels(state: SettingsState): Array<{
+  provider: ProviderInstance;
+  model: ModelInfo;
+}> {
+  return state.providers
+    .filter(p => p.enabled)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .flatMap(p => p.models.map(m => ({ provider: p, model: m })));
+}
+
+// ============================================================
+// Store
+// ============================================================
+
 export type SettingsStore = SettingsState & SettingsActions;
+
+const defaultProviders = createDefaultProviders();
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
     (set) => ({
-      provider: 'qiniu' as LLMProvider,
-      apiFormat: 'openai-compatible' as ApiFormat,
-      model: 'deepseek/deepseek-v3.2-251201',
-      customModel: '',
-      apiKeys: {},
-      baseUrl: 'https://api.qnaigc.com/v1',
+      // ── Provider & Model defaults ──
+      providers: defaultProviders,
+      activeModel: { providerId: 'qiniu', modelId: 'deepseek/deepseek-v3.2-251201' },
+      recentModels: [],
+      favoriteModels: [],
+      auxiliaryServices: {},
+
+      // ── General settings defaults ──
       theme: 'dark',
       showSettings: false,
       sidebarCollapsed: false,
       rightPanelCollapsed: false,
-      // New defaults
       temperature: 0.7,
       enableThinking: false,
       thinkingBudget: 10000,
       maxOutputTokens: 32768,
       contextWindowSize: 200000,
-      // Image generation defaults
-      imageGenApiKey: '',
-      imageGenBaseUrl: '',
-      imageGenModel: 'dall-e-3',
-      // Web search defaults
-      useBuiltinWebSearch: true,
-      webSearchProvider: 'brave' as WebSearchProviderType,
-      webSearchApiKey: '',
-      webSearchBaseUrl: '',
-      // Language default
       language: 'system' as LanguageSetting,
-      // System settings defaults
       activeSystemTab: 'ai-services' as SystemSettingsTab,
-      // Automation defaults
       activeAutomationTab: 'schedule' as AutomationTab,
-      // Toolbox defaults
       activeToolboxTab: 'skills' as ToolboxTab,
       toolboxSearchQuery: '',
       installingItem: null,
@@ -468,11 +458,9 @@ export const useSettingsStore = create<SettingsStore>()(
       networkWhitelist: [],
       allowPrivateNetworks: true,
       closeAction: 'ask' as 'ask' | 'minimize' | 'quit',
-      // Update checker defaults (updateInfo and updateChecking are ephemeral)
       updateInfo: null,
       updateChecking: false,
       lastUpdateCheck: 0,
-      // User profile defaults
       userNickname: '',
       userAvatar: '',
       guideShown: false,
@@ -480,42 +468,157 @@ export const useSettingsStore = create<SettingsStore>()(
       computerUseEnabled: false,
       allowSkillCommands: true,
       skillRegistry: '',
-      customServices: [],
-      activeCustomServiceId: null,
       permissionMode: 'default' as PermissionMode,
 
-      setProvider: (provider) => set({ provider }),
-      setApiFormat: (apiFormat) => set({ apiFormat }),
-      setModel: (model) => set({ model }),
-      setCustomModel: (model) => set({ customModel: model }),
-      setApiKey: (key) => set((s) => ({ apiKeys: { ...s.apiKeys, [s.provider]: key } })),
-      setBaseUrl: (url) => set({ baseUrl: url }),
+      // ════════════════════════════════════════════════
+      // Provider management actions (V2)
+      // ════════════════════════════════════════════════
+
+      addProvider: (config) => {
+        const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+        let returnId = id;
+        set((s) => {
+          const newProvider: ProviderInstance = {
+            ...config,
+            id,
+            status: 'unchecked',
+            sortOrder: s.providers.length,
+          };
+          const providers = [...s.providers, newProvider];
+          // If this is the first enabled provider, auto-select its first model
+          const hasEnabledBefore = s.providers.some(p => p.enabled);
+          const update: Partial<SettingsState> = { providers };
+          if (!hasEnabledBefore && config.enabled && config.models.length > 0) {
+            update.activeModel = { providerId: id, modelId: config.models[0].id };
+          }
+          return update;
+        });
+        returnId = id;
+        return returnId;
+      },
+
+      updateProvider: (id, patch) => set((s) => ({
+        providers: s.providers.map(p => p.id === id ? { ...p, ...patch } : p),
+      })),
+
+      removeProvider: (id) => set((s) => {
+        const providers = s.providers.filter(p => p.id !== id);
+        const update: Partial<SettingsState> = { providers };
+        // If we removed the active provider, switch to first enabled
+        if (s.activeModel.providerId === id) {
+          const fallback = providers.find(p => p.enabled);
+          if (fallback) {
+            update.activeModel = {
+              providerId: fallback.id,
+              modelId: fallback.models[0]?.id ?? '',
+            };
+          }
+        }
+        return update;
+      }),
+
+      toggleProvider: (id) => set((s) => ({
+        providers: s.providers.map(p =>
+          p.id === id ? { ...p, enabled: !p.enabled } : p
+        ),
+      })),
+
+      reorderProviders: (ids) => set((s) => ({
+        providers: s.providers.map(p => ({
+          ...p,
+          sortOrder: ids.indexOf(p.id),
+        })),
+      })),
+
+      setProviderStatus: (id, status, message, latency) => set((s) => ({
+        providers: s.providers.map(p =>
+          p.id === id ? {
+            ...p,
+            status,
+            statusMessage: message,
+            statusLatency: latency,
+            lastChecked: Date.now(),
+          } : p
+        ),
+      })),
+
+      // ── Model selection ──
+
+      selectModel: (providerId, modelId) => set((s) => {
+        const newActive = { providerId, modelId };
+        // Update recent models
+        const recent = [
+          newActive,
+          ...s.recentModels.filter(
+            r => !(r.providerId === providerId && r.modelId === modelId)
+          ),
+        ].slice(0, 5);
+        return { activeModel: newActive, recentModels: recent };
+      }),
+
+      toggleFavorite: (providerId, modelId) => set((s) => {
+        const exists = s.favoriteModels.some(
+          f => f.providerId === providerId && f.modelId === modelId
+        );
+        return {
+          favoriteModels: exists
+            ? s.favoriteModels.filter(f => !(f.providerId === providerId && f.modelId === modelId))
+            : [...s.favoriteModels, { providerId, modelId }],
+        };
+      }),
+
+      // ── Provider model management ──
+
+      addModelToProvider: (providerId, model) => set((s) => ({
+        providers: s.providers.map(p =>
+          p.id === providerId
+            ? { ...p, models: [...p.models, model] }
+            : p
+        ),
+      })),
+
+      removeModelFromProvider: (providerId, modelId) => set((s) => ({
+        providers: s.providers.map(p =>
+          p.id === providerId
+            ? { ...p, models: p.models.filter(m => m.id !== modelId) }
+            : p
+        ),
+      })),
+
+      setProviderModels: (providerId, models) => set((s) => ({
+        providers: s.providers.map(p =>
+          p.id === providerId ? { ...p, models } : p
+        ),
+      })),
+
+      // ── Auxiliary services ──
+
+      setAuxiliaryWebSearch: (config) => set((s) => ({
+        auxiliaryServices: { ...s.auxiliaryServices, webSearch: config },
+      })),
+
+      setAuxiliaryImageGen: (config) => set((s) => ({
+        auxiliaryServices: { ...s.auxiliaryServices, imageGen: config },
+      })),
+
+      // ════════════════════════════════════════════════
+      // General settings actions (unchanged)
+      // ════════════════════════════════════════════════
+
       setTheme: (theme) => set({ theme }),
       toggleSettings: () => set((s) => ({ showSettings: !s.showSettings })),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       toggleRightPanel: () => set((s) => ({ rightPanelCollapsed: !s.rightPanelCollapsed })),
       setRightPanelCollapsed: (collapsed) => set({ rightPanelCollapsed: collapsed }),
-      // New actions
       setTemperature: (temperature) => set({ temperature }),
       setEnableThinking: (enableThinking) => set({ enableThinking }),
       setThinkingBudget: (thinkingBudget) => set({ thinkingBudget }),
       setMaxOutputTokens: (maxOutputTokens) => set({ maxOutputTokens }),
       setContextWindowSize: (contextWindowSize) => set({ contextWindowSize }),
-      // Image generation actions
-      setImageGenApiKey: (imageGenApiKey) => set({ imageGenApiKey }),
-      setImageGenBaseUrl: (imageGenBaseUrl) => set({ imageGenBaseUrl }),
-      setImageGenModel: (imageGenModel) => set({ imageGenModel }),
-      // Web search actions
-      setUseBuiltinWebSearch: (useBuiltinWebSearch) => set({ useBuiltinWebSearch }),
-      setWebSearchProvider: (webSearchProvider) => set({ webSearchProvider }),
-      setWebSearchApiKey: (webSearchApiKey) => set({ webSearchApiKey }),
-      setWebSearchBaseUrl: (webSearchBaseUrl) => set({ webSearchBaseUrl }),
-      // Language action - updates both store and i18n module
       setLanguage: (lang) => {
         setLanguage(lang);
         set({ language: lang });
       },
-      // System settings actions
       openSystemSettings: (tab) =>
         set((s) => ({
           viewMode: 'settings' as ViewMode,
@@ -524,7 +627,6 @@ export const useSettingsStore = create<SettingsStore>()(
       closeSystemSettings: () =>
         set({ viewMode: 'chat' as ViewMode }),
       setActiveSystemTab: (tab) => set({ activeSystemTab: tab }),
-      // Automation actions
       openAutomation: (tab) =>
         set({
           viewMode: 'automation' as ViewMode,
@@ -533,7 +635,6 @@ export const useSettingsStore = create<SettingsStore>()(
       closeAutomation: () =>
         set({ viewMode: 'chat' as ViewMode }),
       setActiveAutomationTab: (tab) => set({ activeAutomationTab: tab }),
-      // Toolbox actions
       openToolbox: (tab) =>
         set(() => ({
           viewMode: 'toolbox' as ViewMode,
@@ -555,6 +656,11 @@ export const useSettingsStore = create<SettingsStore>()(
           ? s.disabledSkills.filter((n) => n !== skillName)
           : [...s.disabledSkills, skillName],
       })),
+      autoDisableProjectSkills: (skillNames) => set((s) => {
+        const newNames = skillNames.filter((n) => !s.disabledSkills.includes(n));
+        if (newNames.length === 0) return s;
+        return { disabledSkills: [...s.disabledSkills, ...newNames] };
+      }),
       toggleAgentEnabled: (agentName) => set((s) => ({
         disabledAgents: s.disabledAgents.includes(agentName)
           ? s.disabledAgents.filter((n) => n !== agentName)
@@ -565,81 +671,175 @@ export const useSettingsStore = create<SettingsStore>()(
       setNetworkWhitelist: (networkWhitelist) => set({ networkWhitelist }),
       setAllowPrivateNetworks: (allowPrivateNetworks) => set({ allowPrivateNetworks }),
       setCloseAction: (closeAction) => set({ closeAction }),
-      // Update checker actions
       setUpdateInfo: (updateInfo) => set({ updateInfo }),
       setUpdateChecking: (updateChecking) => set({ updateChecking }),
       setLastUpdateCheck: (lastUpdateCheck) => set({ lastUpdateCheck }),
-      // User profile actions
       setUserNickname: (userNickname) => set({ userNickname }),
       setUserAvatar: (userAvatar) => set({ userAvatar }),
       setGuideShown: (guideShown) => set({ guideShown }),
       setBehaviorSensorEnabled: (behaviorSensorEnabled) => set({ behaviorSensorEnabled }),
       setComputerUseEnabled: (computerUseEnabled) => set({ computerUseEnabled }),
-      switchProvider: (p) => {
-        const config = PROVIDER_CONFIGS[p];
-        if (p === 'custom') {
-          set({ provider: p, apiFormat: config.format, baseUrl: '', model: '__custom__', activeCustomServiceId: null });
-        } else if (p === 'ollama') {
-          // Ollama: models fetched dynamically, keep existing customModel if set
-          set({ provider: p, apiFormat: config.format, baseUrl: config.baseUrl, model: '__custom__', activeCustomServiceId: null });
-        } else {
-          set({
-            provider: p,
-            apiFormat: config.format,
-            baseUrl: config.baseUrl,
-            model: config.models[0]?.id ?? '__custom__',
-            activeCustomServiceId: null,
-          });
-        }
-      },
-      saveCustomService: (name) => set((s) => {
-        const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-        const service: CustomService = {
-          id,
-          name,
-          baseUrl: s.baseUrl,
-          apiFormat: s.apiFormat,
-          model: s.customModel || getEffectiveModel(s),
-          apiKey: s.apiKeys[s.provider] ?? '',
-        };
-        return {
-          customServices: [...s.customServices, service],
-          activeCustomServiceId: id,
-        };
-      }),
-      updateCustomService: (id) => set((s) => ({
-        customServices: s.customServices.map((svc) =>
-          svc.id === id
-            ? { ...svc, baseUrl: s.baseUrl, apiFormat: s.apiFormat, model: s.customModel || getEffectiveModel(s), apiKey: s.apiKeys[s.provider] ?? '' }
-            : svc
-        ),
-      })),
-      deleteCustomService: (id) => set((s) => ({
-        customServices: s.customServices.filter((svc) => svc.id !== id),
-        activeCustomServiceId: s.activeCustomServiceId === id ? null : s.activeCustomServiceId,
-      })),
-      switchToCustomService: (id) => set((s) => {
-        const svc = s.customServices.find((cs) => cs.id === id);
-        if (!svc) return {};
-        return {
-          provider: 'custom' as LLMProvider,
-          baseUrl: svc.baseUrl,
-          apiFormat: svc.apiFormat,
-          customModel: svc.model,
-          model: '__custom__',
-          apiKeys: { ...s.apiKeys, custom: svc.apiKey },
-          activeCustomServiceId: id,
-        };
-      }),
       setPermissionMode: (mode) => set({ permissionMode: mode }),
     }),
     {
       name: 'abu-settings',
-      version: 13,
+      version: 14,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>;
+
+        // ════════════════════════════════════════════════
+        // V14: Provider V2 migration
+        // ════════════════════════════════════════════════
+        if (version < 14) {
+          const oldApiKeys = (state.apiKeys as Record<string, string>) ?? {};
+          const oldCustomServices = (state.customServices as CustomService[]) ?? [];
+          const oldProvider = (state.provider as string) ?? 'qiniu';
+          const oldModel = (state.model as string) ?? '';
+          const oldCustomModel = (state.customModel as string) ?? '';
+          const oldBaseUrl = (state.baseUrl as string) ?? '';
+          const oldApiFormat = (state.apiFormat as string) ?? 'openai-compatible';
+
+          // Build providers[] from PROVIDER_CONFIGS + old state
+          const builtinIds = Object.keys(PROVIDER_CONFIGS).filter(
+            id => id !== 'local' && id !== 'custom'
+          ) as LLMProvider[];
+
+          const providers: ProviderInstance[] = builtinIds.map((id, index) => {
+            const config = PROVIDER_CONFIGS[id];
+            const hasKey = !!oldApiKeys[id];
+            const isActive = id === oldProvider;
+            return {
+              id,
+              source: 'builtin' as const,
+              name: config.name,
+              // Enable if: has API key, or is the currently active provider
+              enabled: hasKey || isActive,
+              apiFormat: config.format,
+              // If this is the active provider and user had a custom baseUrl, use it
+              baseUrl: (isActive && oldBaseUrl) ? oldBaseUrl : config.baseUrl,
+              apiKey: oldApiKeys[id] ?? '',
+              models: config.models.map(m => ({ id: m.id, label: m.label })),
+              capabilities: config.capabilities,
+              status: 'unchecked' as const,
+              sortOrder: index,
+            };
+          });
+
+          // Migrate custom services to custom providers
+          for (const svc of oldCustomServices) {
+            providers.push({
+              id: svc.id,
+              source: 'custom' as const,
+              name: svc.name,
+              enabled: state.activeCustomServiceId === svc.id,
+              apiFormat: svc.apiFormat,
+              baseUrl: svc.baseUrl,
+              apiKey: svc.apiKey,
+              models: [{ id: svc.model, label: svc.model }],
+              status: 'unchecked' as const,
+              sortOrder: providers.length,
+            });
+          }
+
+          // If old provider was 'custom' but not a saved custom service, create one
+          if (oldProvider === 'custom' && !state.activeCustomServiceId && oldBaseUrl) {
+            const customId = 'migrated_custom';
+            providers.push({
+              id: customId,
+              source: 'custom' as const,
+              name: '自定义 API (迁移)',
+              enabled: true,
+              apiFormat: oldApiFormat as ApiFormat,
+              baseUrl: oldBaseUrl,
+              apiKey: oldApiKeys.custom ?? '',
+              models: oldCustomModel ? [{ id: oldCustomModel, label: oldCustomModel }] : [],
+              status: 'unchecked' as const,
+              sortOrder: providers.length,
+            });
+          }
+
+          // If old provider was 'local', create a custom provider for it
+          if (oldProvider === 'local' && oldBaseUrl) {
+            const localId = 'migrated_local';
+            providers.push({
+              id: localId,
+              source: 'custom' as const,
+              name: '本地模型 (迁移)',
+              enabled: true,
+              apiFormat: oldApiFormat as ApiFormat,
+              baseUrl: oldBaseUrl,
+              apiKey: oldApiKeys.local ?? '',
+              models: oldCustomModel ? [{ id: oldCustomModel, label: oldCustomModel }] : [],
+              status: 'unchecked' as const,
+              sortOrder: providers.length,
+            });
+          }
+
+          state.providers = providers;
+
+          // Build activeModel
+          let activeProviderId = oldProvider;
+          let activeModelId = oldModel;
+
+          // Handle custom service activation
+          if (state.activeCustomServiceId) {
+            activeProviderId = state.activeCustomServiceId as string;
+            const svc = oldCustomServices.find(cs => cs.id === activeProviderId);
+            activeModelId = svc?.model ?? oldCustomModel ?? oldModel;
+          } else if (oldProvider === 'custom' && !state.activeCustomServiceId && oldBaseUrl) {
+            activeProviderId = 'migrated_custom';
+            activeModelId = oldCustomModel || oldModel;
+          } else if (oldProvider === 'local') {
+            activeProviderId = 'migrated_local';
+            activeModelId = oldCustomModel || oldModel;
+          } else if (oldModel === '__custom__' || oldProvider === 'ollama') {
+            activeModelId = oldCustomModel || '';
+          }
+
+          state.activeModel = { providerId: activeProviderId, modelId: activeModelId };
+          state.recentModels = [];
+          state.favoriteModels = [];
+
+          // Build auxiliaryServices
+          const auxWebSearch = state.webSearchApiKey ? {
+            provider: (state.webSearchProvider ?? 'brave') as WebSearchProviderType,
+            apiKey: (state.webSearchApiKey ?? '') as string,
+            baseUrl: (state.webSearchBaseUrl ?? '') as string,
+          } : undefined;
+
+          const auxImageGen = state.imageGenApiKey ? {
+            baseUrl: (state.imageGenBaseUrl ?? '') as string,
+            apiKey: (state.imageGenApiKey ?? '') as string,
+            model: (state.imageGenModel ?? 'dall-e-3') as string,
+          } : undefined;
+
+          state.auxiliaryServices = {
+            ...(auxWebSearch ? { webSearch: auxWebSearch } : {}),
+            ...(auxImageGen ? { imageGen: auxImageGen } : {}),
+          };
+
+          // Clean up old fields
+          delete state.provider;
+          delete state.apiFormat;
+          delete state.model;
+          delete state.customModel;
+          delete state.apiKeys;
+          delete state.baseUrl;
+          delete state.customServices;
+          delete state.activeCustomServiceId;
+          delete state.imageGenApiKey;
+          delete state.imageGenBaseUrl;
+          delete state.imageGenModel;
+          delete state.useBuiltinWebSearch;
+          delete state.webSearchProvider;
+          delete state.webSearchApiKey;
+          delete state.webSearchBaseUrl;
+        }
+
+        // ════════════════════════════════════════════════
+        // Pre-V14 migrations (keep for upgrade chains)
+        // ════════════════════════════════════════════════
         if (version < 13) {
-          // Ollama provider: ensure model is '__custom__' so getEffectiveModel reads customModel
           if (state.provider === 'ollama' && state.model !== '__custom__') {
             state.model = '__custom__';
           }
@@ -648,13 +848,11 @@ export const useSettingsStore = create<SettingsStore>()(
           if (state.permissionMode === undefined) state.permissionMode = 'default';
         }
         if (version < 11) {
-          // Bump default maxOutputTokens from 8192 to 32768 for users who never changed it
           if (state.maxOutputTokens === 8192) {
             state.maxOutputTokens = 32768;
           }
         }
         if (version < 10) {
-          // Migrate single apiKey → per-provider apiKeys map
           const oldKey = state.apiKey as string | undefined;
           const currentProvider = (state.provider as string) || 'qiniu';
           if (oldKey) {
@@ -701,8 +899,6 @@ export const useSettingsStore = create<SettingsStore>()(
         }
         if (version === 0) {
           // Cross-store migration: mcpServers → abu-mcp-store
-          // Must happen in migrate because Zustand writes back to localStorage
-          // after migrate completes — onRehydrateStorage would read stale data
           const mcpServers = state.mcpServers as
             | { name: string; command?: string; args?: string[]; url?: string;
                 enabled?: boolean; transport?: string; env?: Record<string, string>;
@@ -728,12 +924,10 @@ export const useSettingsStore = create<SettingsStore>()(
           }
           delete state.mcpServers;
 
-          // Fix zhipu baseUrl (was /api/paas, now /api/paas/v4)
           if (state.provider === 'zhipu' && state.baseUrl === 'https://open.bigmodel.cn/api/paas') {
             state.baseUrl = 'https://open.bigmodel.cn/api/paas/v4';
           }
 
-          // Ensure new fields have defaults (defensive — shallow merge handles this too)
           if (state.disabledSkills === undefined) state.disabledSkills = [];
           if (state.disabledAgents === undefined) state.disabledAgents = [];
           if (state.sandboxEnabled === undefined) state.sandboxEnabled = true;
@@ -742,16 +936,14 @@ export const useSettingsStore = create<SettingsStore>()(
         }
         return state;
       },
-      // TODO: [SECURITY] API keys are persisted in plaintext via localStorage.
-      // Migrate to Tauri secure storage (macOS Keychain / Windows Credential Store)
-      // for production-grade security. See: https://github.com/nicholasgasior/tauri-plugin-keyring
       partialize: (state) => ({
-        provider: state.provider,
-        apiFormat: state.apiFormat,
-        model: state.model,
-        customModel: state.customModel,
-        apiKeys: state.apiKeys,
-        baseUrl: state.baseUrl,
+        // V2 provider fields
+        providers: state.providers,
+        activeModel: state.activeModel,
+        recentModels: state.recentModels,
+        favoriteModels: state.favoriteModels,
+        auxiliaryServices: state.auxiliaryServices,
+        // General settings
         theme: state.theme,
         language: state.language,
         temperature: state.temperature,
@@ -759,13 +951,6 @@ export const useSettingsStore = create<SettingsStore>()(
         thinkingBudget: state.thinkingBudget,
         maxOutputTokens: state.maxOutputTokens,
         contextWindowSize: state.contextWindowSize,
-        imageGenApiKey: state.imageGenApiKey,
-        imageGenBaseUrl: state.imageGenBaseUrl,
-        imageGenModel: state.imageGenModel,
-        useBuiltinWebSearch: state.useBuiltinWebSearch,
-        webSearchProvider: state.webSearchProvider,
-        webSearchApiKey: state.webSearchApiKey,
-        webSearchBaseUrl: state.webSearchBaseUrl,
         sidebarCollapsed: state.sidebarCollapsed,
         rightPanelCollapsed: state.rightPanelCollapsed,
         disabledSkills: state.disabledSkills,
@@ -783,8 +968,6 @@ export const useSettingsStore = create<SettingsStore>()(
         computerUseEnabled: state.computerUseEnabled,
         allowSkillCommands: state.allowSkillCommands,
         skillRegistry: state.skillRegistry,
-        customServices: state.customServices,
-        activeCustomServiceId: state.activeCustomServiceId,
         permissionMode: state.permissionMode,
       }),
       onRehydrateStorage: () => (state) => {
@@ -793,37 +976,24 @@ export const useSettingsStore = create<SettingsStore>()(
         if (state.language) {
           initLanguage(state.language);
         }
-        // Runtime fix: reset provider unavailable in current edition
-        const availableProviders = getAvailableProviders();
-        if (!availableProviders.includes(state.provider)) {
-          state.provider = 'anthropic' as LLMProvider;
-          state.apiFormat = 'anthropic' as ApiFormat;
-          state.model = 'claude-sonnet-4-6';
-          state.baseUrl = PROVIDER_CONFIGS.anthropic.baseUrl;
-        }
-        const cfg = PROVIDER_CONFIGS[state.provider];
-        // Runtime fix: stale baseUrl from provider-switch bug
-        if (state.provider !== 'custom' && !state.baseUrl && cfg?.baseUrl) {
-          state.baseUrl = cfg.baseUrl;
-        }
-        // Runtime fix: lock apiFormat to provider config for built-in providers
-        if (state.provider !== 'custom' && state.provider !== 'local' && cfg) {
-          state.apiFormat = cfg.format;
-        } else if (state.apiFormat !== 'anthropic' && state.apiFormat !== 'openai-compatible') {
-          state.apiFormat = 'openai-compatible';
-        }
-        // Runtime fix: stale model='__custom__' from provider-switch bug
-        if (state.provider !== 'custom' && state.model === '__custom__') {
-          state.model = cfg?.models[0]?.id ?? 'claude-sonnet-4-6';
-        }
-        // Runtime fix: validate persisted model ID still exists for this provider
-        if (state.provider !== 'custom' && state.model !== '__custom__' && cfg?.models.length) {
-          const modelExists = cfg.models.some(m => m.id === state.model);
-          if (!modelExists) {
-            state.model = cfg.models[0].id;
+        // Validate active model points to an enabled provider
+        const activeProvider = state.providers.find(
+          p => p.id === state.activeModel.providerId
+        );
+        if (!activeProvider) {
+          // Fallback: find first enabled provider
+          const fallback = state.providers.find(p => p.enabled);
+          if (fallback) {
+            state.activeModel = {
+              providerId: fallback.id,
+              modelId: fallback.models[0]?.id ?? '',
+            };
           }
+        } else if (!activeProvider.enabled) {
+          // Provider exists but disabled — enable it
+          activeProvider.enabled = true;
         }
-        // Force reset UI state
+        // Force reset ephemeral UI state
         state.showSettings = false;
         state.activeSystemTab = 'ai-services';
         state.activeAutomationTab = 'schedule';

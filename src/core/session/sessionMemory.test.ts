@@ -53,9 +53,17 @@ describe('sessionMemory', () => {
       expect(ref.length).toBeLessThan(result.length);
     });
 
-    it('includes full content when short', () => {
-      const ref = createDiskRef('tc_002', 'short');
-      expect(ref).toContain('short');
+    it('includes full output size in reference', () => {
+      const result = 'a'.repeat(10000);
+      const ref = createDiskRef('tc_size', result);
+      expect(ref).toContain('Full output: 10000 chars');
+      expect(ref).toContain('showing first 500 chars');
+    });
+
+    it('shows actual length when content is shorter than preview limit', () => {
+      const ref = createDiskRef('tc_short', 'short');
+      expect(ref).toContain('Full output: 5 chars');
+      expect(ref).toContain('showing first 5 chars');
       expect(ref).not.toContain('...');
     });
 
@@ -63,6 +71,7 @@ describe('sessionMemory', () => {
       const longContent = 'x'.repeat(600);
       const ref = createDiskRef('tc_003', longContent);
       expect(ref).toContain('...');
+      expect(ref).toContain('Full output: 600 chars');
     });
   });
 });

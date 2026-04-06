@@ -178,8 +178,8 @@ export default function ChatView() {
 
 
   // Welcome screen - new conversation state (activeConversationId is null)
-  const apiKey = useSettingsStore((s) => s.apiKeys[s.provider] ?? '');
-  const isOllamaProvider = useSettingsStore((s) => s.provider === 'ollama');
+  const apiKey = useSettingsStore((s) => getActiveApiKey(s));
+  const isOllamaProvider = useSettingsStore((s) => s.activeModel.providerId === 'ollama');
   const needsSetup = !isOllamaProvider && !apiKey?.trim();
 
   // Scenario guide state — lifted here so ChatInput can receive the custom placeholder

@@ -284,13 +284,14 @@ export class ClaudeAdapter implements LLMAdapter {
     let currentThinking = '';
     let isInThinkingBlock = false;
 
-    // Heartbeat timeout: if no data received for 30s, treat as network hang
+    // Idle timeout: if no data received for 90s, treat as network hang.
+    // 90s is the CC-validated threshold — long enough for thinking models, short enough to detect hangs.
     let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
-    const HEARTBEAT_TIMEOUT_MS = 30000;
+    const HEARTBEAT_TIMEOUT_MS = 90000;
     const resetHeartbeat = () => {
       if (heartbeatTimer) clearTimeout(heartbeatTimer);
       heartbeatTimer = setTimeout(() => {
-        onEvent({ type: 'error', error: 'Stream heartbeat timeout: no data received for 30s' });
+        onEvent({ type: 'error', error: 'Stream idle timeout: no data received for 90s' });
         onEvent({ type: 'done', stopReason: 'end_turn' });
       }, HEARTBEAT_TIMEOUT_MS);
     };

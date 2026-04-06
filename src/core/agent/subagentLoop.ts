@@ -13,7 +13,7 @@ import { ClaudeAdapter } from '../llm/claude';
 import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
 import { getAllTools, executeAnyTool, toolResultToString, type ConfirmationInfo, type FilePermissionCallback } from '../tools/registry';
 import { TOOL_NAMES } from '../tools/toolNames';
-import { useSettingsStore, getActiveApiKey, resolveAgentModel } from '../../stores/settingsStore';
+import { useSettingsStore, getActiveApiKey, getActiveProvider, resolveAgentModel } from '../../stores/settingsStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { prepareContextMessages } from '../context/contextManager';
 import { compressContextIfNeeded } from '../context/contextCompressor';
@@ -188,7 +188,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     tools = tools.filter((t) => t.name !== TOOL_NAMES.DELEGATE_TO_AGENT);
 
     // 4. Create LLM adapter
-    const adapter: LLMAdapter = settings.apiFormat === 'openai-compatible'
+    const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
       ? new OpenAICompatibleAdapter()
       : new ClaudeAdapter();
 
@@ -239,7 +239,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
             systemPrompt,
             contextWindowSize,
             maxOutputTokens,
-            { adapter, model: effectiveModelId, apiKey: getActiveApiKey(settings), baseUrl: settings.baseUrl || undefined, signal }
+            { adapter, model: effectiveModelId, apiKey: getActiveApiKey(settings), baseUrl: getActiveProvider(settings)?.baseUrl || undefined, signal }
           );
           if (compressionResult.compressed) {
             messagesForContext = compressionResult.messages;
@@ -260,7 +260,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
       const chatOptions = {
         model: effectiveModelId,
         apiKey: getActiveApiKey(settings),
-        baseUrl: settings.baseUrl || undefined,
+        baseUrl: getActiveProvider(settings)?.baseUrl || undefined,
         systemPrompt,
         tools: tools.length > 0 ? tools : undefined,
         maxTokens: maxOutputTokens,

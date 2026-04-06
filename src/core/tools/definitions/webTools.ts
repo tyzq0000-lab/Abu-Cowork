@@ -109,9 +109,9 @@ export const webSearchTool: ToolDefinition = {
 
       const state = useSettingsStore.getState();
 
-      const providerType = state.webSearchProvider || 'bing';
-      const apiKey = state.webSearchApiKey;
-      const baseUrl = state.webSearchBaseUrl;
+      const providerType = state.auxiliaryServices.webSearch?.provider ?? 'brave';
+      const apiKey = state.auxiliaryServices.webSearch?.apiKey ?? '';
+      const baseUrl = state.auxiliaryServices.webSearch?.baseUrl ?? '';
 
       // SearXNG doesn't need API key
       if (providerType !== 'searxng' && !apiKey) {

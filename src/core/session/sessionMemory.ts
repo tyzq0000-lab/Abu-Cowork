@@ -66,11 +66,12 @@ export function extractRefId(result: string): string | null {
 
 /**
  * Create a disk reference string with a preview of the content.
+ * Includes the full output size so the LLM knows how much was omitted.
  */
 export function createDiskRef(toolCallId: string, fullResult: string): string {
   const preview = fullResult.slice(0, PREVIEW_LENGTH);
   const truncated = fullResult.length > PREVIEW_LENGTH ? '...' : '';
-  return `${DISK_REF_PREFIX}${toolCallId}${DISK_REF_SUFFIX}\n${preview}${truncated}`;
+  return `${DISK_REF_PREFIX}${toolCallId}${DISK_REF_SUFFIX}\n[Full output: ${fullResult.length} chars, showing first ${Math.min(PREVIEW_LENGTH, fullResult.length)} chars]\n${preview}${truncated}`;
 }
 
 /**

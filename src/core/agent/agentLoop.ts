@@ -1,4 +1,4 @@
-import type { StreamEvent, ToolCall, TokenUsage, ImageAttachment, MessageContent, ToolExecutionContext } from '../../types';
+import type { StreamEvent, ToolCall, TokenUsage, ImageAttachment, MessageContent, ToolExecutionContext, LLMProvider } from '../../types';
 import type { LLMAdapter } from '../llm/adapter';
 import { LLMError } from '../llm/adapter';
 import { ClaudeAdapter } from '../llm/claude';
@@ -6,7 +6,7 @@ import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
 import { getAllTools, type ConfirmationInfo, type FilePermissionCallback } from '../tools/registry';
 import type { ToolDefinition } from '../../types';
 import { useChatStore, flushTokenBuffer } from '../../stores/chatStore';
-import { useSettingsStore, getEffectiveModel, getActiveApiKey, resolveAgentModel } from '../../stores/settingsStore';
+import { useSettingsStore, getEffectiveModel, getActiveApiKey, getActiveProvider, resolveAgentModel, providerRequiresApiKey } from '../../stores/settingsStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useTaskExecutionStore } from '../../stores/taskExecutionStore';
 import { createEventRouter } from './eventRouter';
@@ -404,6 +404,27 @@ export interface AgentLoopOptions {
   imContext?: IMContext;
 }
 
+/**
+ * Calculate escalated maxOutputTokens after a max_tokens hit.
+ * Doubles the limit (capped by context window) on first recovery attempt.
+ * Pure function, exported for testing.
+ */
+export function escalateMaxOutputTokens(
+  currentMax: number,
+  contextWindowSize: number,
+  recoveryCount: number,
+  alreadyEscalated: boolean,
+): { maxOutputTokens: number; changed: boolean } {
+  if (recoveryCount <= 0 || alreadyEscalated) {
+    return { maxOutputTokens: currentMax, changed: false };
+  }
+  const escalated = Math.min(currentMax * 2, contextWindowSize - 1000);
+  if (escalated > currentMax) {
+    return { maxOutputTokens: escalated, changed: true };
+  }
+  return { maxOutputTokens: currentMax, changed: false };
+}
+
 export async function runAgentLoop(conversationId: string, userMessage: string, options?: AgentLoopOptions): Promise<void> {
   const chatStore = useChatStore.getState();
   const settings = useSettingsStore.getState();
@@ -420,7 +441,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     },
   });
 
-  if (settings.provider !== 'ollama' && !getActiveApiKey(settings)) {
+  if (providerRequiresApiKey(settings) && !getActiveApiKey(settings)) {
     chatStore.addMessage(conversationId, {
       id: generateId(),
       role: 'assistant',
@@ -512,7 +533,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     } : undefined,
   });
 
-  const adapter: LLMAdapter = settings.apiFormat === 'openai-compatible'
+  const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
     ? new OpenAICompatibleAdapter()
     : new ClaudeAdapter();
 
@@ -668,6 +689,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   const autoCompactTracker = new AutoCompactTracker();
   let maxOutputTokensRecoveryCount = 0;
   const MAX_OUTPUT_TOKENS_RECOVERY_LIMIT = 3;
+  let maxOutputTokensEscalated = false;
 
   while (continueLoop) {
     // Check if cancelled before starting new turn
@@ -751,7 +773,10 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     try {
       // ── Per-turn: refresh tools and dynamic prompt sections ──
       const freshSettings = useSettingsStore.getState();
-      const builtinWebSearch = getBuiltinSearchConfig(freshSettings.provider, freshSettings.useBuiltinWebSearch);
+      const activeProvider = getActiveProvider(freshSettings);
+      const builtinWebSearch = activeProvider
+        ? getBuiltinSearchConfig(activeProvider.id as LLMProvider, true)
+        : undefined;
       // Build prefetch context for conditional tool loading
       const conv = useChatStore.getState().conversations[conversationId];
       const activeSkillObjects = (conv?.activeSkills ?? [])
@@ -782,10 +807,18 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       const modelCaps = resolveCapabilities(effectiveModelId);
 
       // Determine dynamic maxTokens — use model caps as default, user settings as override
-      const maxOutputTokens = freshSettings.enableThinking && modelCaps.thinking
+      let maxOutputTokens = freshSettings.enableThinking && modelCaps.thinking
         ? Math.max(freshSettings.maxOutputTokens ?? modelCaps.maxOutputTokens, 16384)
         : (freshSettings.maxOutputTokens ?? modelCaps.maxOutputTokens);
       const contextWindowSize = freshSettings.contextWindowSize ?? modelCaps.contextWindow;
+
+      // Escalate maxOutputTokens on first max_tokens recovery (CC pattern: 8k→64k)
+      const escalation = escalateMaxOutputTokens(maxOutputTokens, contextWindowSize, maxOutputTokensRecoveryCount, maxOutputTokensEscalated);
+      if (escalation.changed) {
+        logger.info('Escalating maxOutputTokens', { from: maxOutputTokens, to: escalation.maxOutputTokens });
+        maxOutputTokens = escalation.maxOutputTokens;
+        maxOutputTokensEscalated = true;
+      }
 
       // Build effective system prompt: static cached sections + dynamic per-turn sections
       const todoState = formatTodosForPrompt(conversationId);
@@ -839,7 +872,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
                 adapter,
                 model: effectiveModelId,
                 apiKey: getActiveApiKey(freshSettings),
-                baseUrl: freshSettings.baseUrl || undefined,
+                baseUrl: getActiveProvider(freshSettings)?.baseUrl || undefined,
                 signal: abortController.signal,
               },
               toolTokens
@@ -889,7 +922,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       const chatOptions = {
         model: effectiveModelId,
         apiKey: getActiveApiKey(freshSettings),
-        baseUrl: freshSettings.baseUrl || undefined,
+        baseUrl: getActiveProvider(freshSettings)?.baseUrl || undefined,
         systemPrompt: effectiveSystemPrompt,
         systemPromptSections: allSections,
         tools: tools.length > 0 ? tools : undefined,
@@ -1069,7 +1102,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
                   adapter,
                   model: effectiveModelId,
                   apiKey: getActiveApiKey(freshSettings),
-                  baseUrl: freshSettings.baseUrl || undefined,
+                  baseUrl: getActiveProvider(freshSettings)?.baseUrl || undefined,
                   signal: abortController.signal,
                 },
                 toolTokens

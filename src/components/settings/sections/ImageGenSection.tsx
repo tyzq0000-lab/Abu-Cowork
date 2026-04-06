@@ -12,16 +12,26 @@ const IMAGE_MODELS = [
 
 /** Inline mode: renders only the form fields without section header */
 export function ImageGenForm() {
-  const {
-    imageGenApiKey,
-    imageGenBaseUrl,
-    imageGenModel,
-    setImageGenApiKey,
-    setImageGenBaseUrl,
-    setImageGenModel,
-  } = useSettingsStore();
+  const auxiliaryServices = useSettingsStore((s) => s.auxiliaryServices);
+  const setAuxiliaryImageGen = useSettingsStore((s) => s.setAuxiliaryImageGen);
   const { t } = useI18n();
   const [showKey, setShowKey] = useState(false);
+
+  const imageGen = auxiliaryServices.imageGen ?? { apiKey: '', baseUrl: '', model: 'dall-e-3' };
+  const imageGenApiKey = imageGen.apiKey;
+  const imageGenBaseUrl = imageGen.baseUrl;
+  const imageGenModel = imageGen.model;
+
+  const setImageGenApiKey = (apiKey: string) => {
+    setAuxiliaryImageGen({ ...imageGen, apiKey });
+  };
+  const setImageGenBaseUrl = (baseUrl: string) => {
+    setAuxiliaryImageGen({ ...imageGen, baseUrl });
+  };
+  const setImageGenModel = (model: string) => {
+    setAuxiliaryImageGen({ ...imageGen, model });
+  };
+
   const [customModel, setCustomModel] = useState(
     IMAGE_MODELS.some((m) => m.id === imageGenModel) ? '' : imageGenModel
   );

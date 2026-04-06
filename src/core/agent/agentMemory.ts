@@ -62,20 +62,24 @@ async function readRawMemory(agentName: string): Promise<string> {
 export async function loadAgentMemory(agentName: string): Promise<string> {
   const content = await readRawMemory(agentName);
   if (!content) return '';
-  return truncateAtParagraph(content, MAX_MEMORY_CHARS, '...(记忆已截断)');
+  return truncateAtParagraph(content, MAX_MEMORY_CHARS,
+    `\n> WARNING: Memory truncated (${content.length} chars, limit ${MAX_MEMORY_CHARS}). Only partial content was loaded.`);
 }
 
 /**
  * Save agent memory to disk. Overwrites existing memory.
+ * Returns whether content was truncated so callers can inform the agent.
  */
-export async function saveAgentMemory(agentName: string, content: string): Promise<void> {
+export async function saveAgentMemory(agentName: string, content: string): Promise<{ wasTruncated: boolean }> {
   const memoryPath = await getMemoryPath(agentName);
   await ensureParentDir(memoryPath);
-  // Truncate if too large
-  const truncated = content.length > MAX_MEMORY_CHARS
-    ? content.slice(0, MAX_MEMORY_CHARS)
+  const wasTruncated = content.length > MAX_MEMORY_CHARS;
+  const toWrite = wasTruncated
+    ? truncateAtParagraph(content, MAX_MEMORY_CHARS,
+        `\n> WARNING: Memory truncated (${content.length} chars, limit ${MAX_MEMORY_CHARS}).`)
     : content;
-  await writeTextFile(memoryPath, truncated);
+  await writeTextFile(memoryPath, toWrite);
+  return { wasTruncated };
 }
 
 /**
@@ -128,19 +132,24 @@ async function readRawProjectMemory(workspacePath: string): Promise<string> {
 export async function loadProjectMemory(workspacePath: string): Promise<string> {
   const content = await readRawProjectMemory(workspacePath);
   if (!content) return '';
-  return truncateAtParagraph(content, MAX_PROJECT_MEMORY_CHARS, '...(项目记忆已截断)');
+  return truncateAtParagraph(content, MAX_PROJECT_MEMORY_CHARS,
+    `\n> WARNING: Project memory truncated (${content.length} chars, limit ${MAX_PROJECT_MEMORY_CHARS}). Only partial content was loaded.`);
 }
 
 /**
  * Save project memory (overwrite).
+ * Returns whether content was truncated so callers can inform the agent.
  */
-export async function saveProjectMemory(workspacePath: string, content: string): Promise<void> {
+export async function saveProjectMemory(workspacePath: string, content: string): Promise<{ wasTruncated: boolean }> {
   const memoryPath = getProjectMemoryPath(workspacePath);
   await ensureParentDir(memoryPath);
-  const truncated = content.length > MAX_PROJECT_MEMORY_CHARS
-    ? content.slice(0, MAX_PROJECT_MEMORY_CHARS)
+  const wasTruncated = content.length > MAX_PROJECT_MEMORY_CHARS;
+  const toWrite = wasTruncated
+    ? truncateAtParagraph(content, MAX_PROJECT_MEMORY_CHARS,
+        `\n> WARNING: Project memory truncated (${content.length} chars, limit ${MAX_PROJECT_MEMORY_CHARS}).`)
     : content;
-  await writeTextFile(memoryPath, truncated);
+  await writeTextFile(memoryPath, toWrite);
+  return { wasTruncated };
 }
 
 /**

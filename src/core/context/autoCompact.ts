@@ -52,17 +52,20 @@ export function getUsagePercent(currentTokens: number, maxInputTokens: number): 
  * Tracks auto-compact state within an agent loop session.
  * Created once per `runAgentLoop` call, reset on each new invocation.
  */
+/** Cooldown period after circuit breaker trips (5 minutes) */
+const COOLDOWN_MS = 5 * 60 * 1000;
+
 export class AutoCompactTracker {
   private consecutiveFailures = 0;
-  private disabled = false;
+  private disabledUntil = 0;
   private lastLevel: ContextWarningLevel = 0;
 
   /**
    * Check if auto-compact should be attempted at the given warning level.
-   * Returns false if circuit breaker has tripped.
+   * Returns false if circuit breaker is in cooldown.
    */
   shouldCompact(level: ContextWarningLevel): boolean {
-    if (this.disabled) return false;
+    if (Date.now() < this.disabledUntil) return false;
     return level >= 2;
   }
 
@@ -78,23 +81,25 @@ export class AutoCompactTracker {
    */
   recordSuccess(): void {
     this.consecutiveFailures = 0;
+    this.disabledUntil = 0;
   }
 
   /**
-   * Record a failed compression — may trip the circuit breaker.
+   * Record a failed compression — may trip the circuit breaker with cooldown.
    */
   recordFailure(): void {
     this.consecutiveFailures++;
     if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-      this.disabled = true;
+      this.disabledUntil = Date.now() + COOLDOWN_MS;
+      this.consecutiveFailures = 0; // Reset for next round after cooldown
     }
   }
 
   /**
-   * Whether auto-compact has been disabled by the circuit breaker.
+   * Whether auto-compact is currently in cooldown.
    */
   isDisabled(): boolean {
-    return this.disabled;
+    return Date.now() < this.disabledUntil;
   }
 
   /**

@@ -5,7 +5,7 @@ import { serializeAgentMd } from '@/core/agent/registry';
 import { Toggle } from '@/components/ui/toggle';
 import { Select } from '@/components/ui/select';
 import type { SubagentDefinition, SubagentMetadata } from '@/types';
-import { useSettingsStore, AVAILABLE_MODELS } from '@/stores/settingsStore';
+import { useSettingsStore, getActiveProvider } from '@/stores/settingsStore';
 import { navigateToChatWithInput } from '@/utils/navigation';
 import { useItemName } from '@/hooks/useItemName';
 import { saveItemToAbuDir } from '@/utils/itemStorage';
@@ -30,7 +30,7 @@ export default function AgentEditor({ agent, onClose, onSave }: AgentEditorProps
   const [model, setModel] = useState(() => {
     if (!agent?.model || agent.model === 'inherit') return '';
     // If the agent has a specific model, check if it's available in current provider
-    const providerModels = AVAILABLE_MODELS[useSettingsStore.getState().provider] ?? [];
+    const providerModels = getActiveProvider(useSettingsStore.getState())?.models ?? [];
     if (providerModels.some((m) => m.id === agent.model)) return agent.model;
     // Model not available in current provider → show as inherit (will fallback at runtime anyway)
     return '';
@@ -178,7 +178,7 @@ export default function AgentEditor({ agent, onClose, onSave }: AgentEditorProps
                 onChange={setModel}
                 options={[
                   { value: '', label: t.toolbox.agentModelInherit },
-                  ...(AVAILABLE_MODELS[useSettingsStore.getState().provider] ?? []).map((m) => ({
+                  ...(getActiveProvider(useSettingsStore.getState())?.models ?? []).map((m) => ({
                     value: m.id,
                     label: m.label,
                   })),

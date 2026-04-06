@@ -10,7 +10,7 @@
  */
 
 import { useChatStore } from '../../stores/chatStore';
-import { useSettingsStore, getActiveApiKey } from '../../stores/settingsStore';
+import { useSettingsStore, getActiveApiKey, getActiveProvider, getEffectiveModel } from '../../stores/settingsStore';
 import { ClaudeAdapter } from '../llm/claude';
 import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
 import type { LLMAdapter } from '../llm/adapter';
@@ -77,7 +77,7 @@ export async function extractMemoriesFromConversation(
       return;
     }
 
-    const adapter: LLMAdapter = settings.apiFormat === 'openai-compatible'
+    const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
       ? new OpenAICompatibleAdapter()
       : new ClaudeAdapter();
 
@@ -93,9 +93,9 @@ export async function extractMemoriesFromConversation(
     await adapter.chat(
       [extractionMessage],
       {
-        model: settings.model,
+        model: getEffectiveModel(settings),
         apiKey: activeApiKey,
-        baseUrl: settings.baseUrl || undefined,
+        baseUrl: getActiveProvider(settings)?.baseUrl || undefined,
         systemPrompt: EXTRACTION_SYSTEM_PROMPT,
         maxTokens: 1024,
       },

@@ -54,7 +54,8 @@ describe('loadAgentMemory', () => {
     mockReadTextFile.mockResolvedValue(content);
 
     const result = await loadAgentMemory('abu');
-    expect(result).toContain('记忆已截断');
+    expect(result).toContain('WARNING: Memory truncated');
+    expect(result).toContain('limit 4000');
     // Should cut at paragraph boundary, preserving para1 intact
     expect(result).toContain(para1);
     expect(result).not.toContain(para2);
@@ -65,7 +66,7 @@ describe('loadAgentMemory', () => {
     mockReadTextFile.mockResolvedValue(content);
 
     const result = await loadAgentMemory('abu');
-    expect(result).toContain('记忆已截断');
+    expect(result).toContain('WARNING: Memory truncated');
     expect(result.length).toBeLessThan(5000);
   });
 
@@ -74,7 +75,7 @@ describe('loadAgentMemory', () => {
     mockReadTextFile.mockResolvedValue(content);
     const result = await loadAgentMemory('abu');
     expect(result).toBe('short memory');
-    expect(result).not.toContain('截断');
+    expect(result).not.toContain('WARNING');
   });
 });
 
@@ -88,12 +89,19 @@ describe('saveAgentMemory', () => {
     );
   });
 
-  it('truncates content exceeding limit on save', async () => {
+  it('truncates content exceeding limit on save and returns wasTruncated', async () => {
     mockWriteTextFile.mockResolvedValue(undefined);
     const longContent = 'x'.repeat(5000);
-    await saveAgentMemory('abu', longContent);
+    const result = await saveAgentMemory('abu', longContent);
+    expect(result.wasTruncated).toBe(true);
     const savedContent = mockWriteTextFile.mock.calls[0][1] as string;
-    expect(savedContent.length).toBeLessThanOrEqual(4000);
+    expect(savedContent).toContain('WARNING: Memory truncated');
+  });
+
+  it('returns wasTruncated false when within limit', async () => {
+    mockWriteTextFile.mockResolvedValue(undefined);
+    const result = await saveAgentMemory('abu', 'short');
+    expect(result.wasTruncated).toBe(false);
   });
 });
 
@@ -138,7 +146,8 @@ describe('loadProjectMemory', () => {
     mockReadTextFile.mockResolvedValue(content);
 
     const result = await loadProjectMemory('/workspace');
-    expect(result).toContain('项目记忆已截断');
+    expect(result).toContain('WARNING: Project memory truncated');
+    expect(result).toContain('limit 8000');
     expect(result).toContain(para1);
     expect(result).not.toContain(para2);
   });

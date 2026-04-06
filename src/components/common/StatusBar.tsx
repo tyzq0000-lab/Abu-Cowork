@@ -1,5 +1,5 @@
 import { useChatStore } from '../../stores/chatStore';
-import { useSettingsStore, AVAILABLE_MODELS, getEffectiveModel } from '../../stores/settingsStore';
+import { useSettingsStore, getEffectiveModel, getActiveProvider } from '../../stores/settingsStore';
 import { useI18n } from '@/i18n';
 import { Loader2, Wrench, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -35,10 +35,9 @@ export default function StatusBar() {
   const currentTool = useChatStore((s) => s.currentTool);
   const thinkingStartTime = useChatStore((s) => s.thinkingStartTime);
   const currentUsage = useChatStore((s) => s.currentUsage);
-  const provider = useSettingsStore((s) => s.provider);
-  const model = useSettingsStore((s) => s.model);
   const effectiveModel = getEffectiveModel(useSettingsStore.getState());
-  const modelLabel = AVAILABLE_MODELS[provider]?.find((m) => m.id === model)?.label ?? effectiveModel;
+  const activeProvider = getActiveProvider(useSettingsStore.getState());
+  const modelLabel = activeProvider?.models.find((m) => m.id === effectiveModel)?.label ?? effectiveModel;
   const { t } = useI18n();
 
   // Track thinking time

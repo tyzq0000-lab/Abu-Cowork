@@ -8,6 +8,22 @@
 
 import { enqueueUserInput } from './userInputQueue';
 
+/**
+ * Check if a conversation still exists in chatStore.
+ * Uses lazy dynamic import to avoid circular dependency.
+ */
+let _getConversations: (() => Record<string, unknown>) | null = null;
+
+/** Allow external code to inject the conversation lookup (avoids circular import) */
+export function setConversationLookup(fn: () => Record<string, unknown>): void {
+  _getConversations = fn;
+}
+
+function conversationExists(conversationId: string): boolean {
+  if (!_getConversations) return true; // not yet wired, assume exists
+  return !!_getConversations()[conversationId];
+}
+
 export interface BackgroundAgent {
   taskId: string;
   agentName: string;
@@ -26,10 +42,13 @@ export interface BackgroundAgent {
   toolCallCount?: number;
 }
 
-const MAX_CONCURRENT_AGENTS = 5;
+const MAX_CONCURRENT_AGENTS_PER_CONVERSATION = 5;
 
 /** Active and recently-completed background agents */
 const agents = new Map<string, BackgroundAgent>();
+
+/** Cleanup timer IDs so they can be cancelled on early removal */
+const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Subscribers for useSyncExternalStore */
 const listeners = new Set<() => void>();
@@ -56,14 +75,25 @@ export function getBackgroundAgents(): BackgroundAgent[] {
   return [...agents.values()];
 }
 
+/** Get background agents for a specific conversation */
+export function getAgentsByConversation(conversationId: string): BackgroundAgent[] {
+  return [...agents.values()].filter(a => a.conversationId === conversationId);
+}
+
 /** Get only running agents */
 export function getRunningAgents(): BackgroundAgent[] {
   return [...agents.values()].filter(a => a.status === 'running');
 }
 
-/** Check if we can spawn another background agent */
-export function canSpawnAgent(): boolean {
-  return getRunningAgents().length < MAX_CONCURRENT_AGENTS;
+/** Check if we can spawn another background agent (per-conversation limit) */
+export function canSpawnAgent(conversationId?: string): boolean {
+  if (conversationId) {
+    const convRunning = [...agents.values()].filter(
+      a => a.conversationId === conversationId && a.status === 'running'
+    );
+    return convRunning.length < MAX_CONCURRENT_AGENTS_PER_CONVERSATION;
+  }
+  return getRunningAgents().length < MAX_CONCURRENT_AGENTS_PER_CONVERSATION;
 }
 
 /** Update progress for a running background agent */
@@ -77,6 +107,10 @@ export function updateAgentProgress(taskId: string, activity: string, toolCallCo
 
 /** Register a new background agent */
 export function registerBackgroundAgent(agent: BackgroundAgent): void {
+  if (!agent.conversationId) {
+    console.error('[BackgroundAgentRegistry] Cannot register agent without conversationId:', agent.taskId);
+    return;
+  }
   agents.set(agent.taskId, agent);
   notify();
 }
@@ -95,6 +129,13 @@ export function completeBackgroundAgent(taskId: string, result: string): void {
   agent.endTime = Date.now();
   notify();
 
+  // Validate conversation still exists before injecting result
+  if (!conversationExists(agent.conversationId)) {
+    console.warn(`[BackgroundAgentRegistry] Conversation ${agent.conversationId} no longer exists, discarding result for agent ${taskId}`);
+    scheduleCleanup(taskId);
+    return;
+  }
+
   // Inject structured result into parent conversation
   const durationSec = Math.round(((agent.endTime ?? Date.now()) - agent.startTime) / 1000);
   const toolCount = agent.toolCallCount ?? 0;
@@ -111,13 +152,7 @@ export function completeBackgroundAgent(taskId: string, result: string): void {
   ].join('\n');
   enqueueUserInput(agent.conversationId, resultMessage, true);
 
-  // Auto-cleanup completed agents after 30s
-  setTimeout(() => {
-    if (agents.get(taskId)?.status !== 'running') {
-      agents.delete(taskId);
-      notify();
-    }
-  }, 30_000);
+  scheduleCleanup(taskId);
 }
 
 /**
@@ -132,21 +167,63 @@ export function failBackgroundAgent(taskId: string, error: string): void {
   agent.endTime = Date.now();
   notify();
 
-  // Inject error into parent conversation
-  const errorMessage = `<agent-result task-id="${taskId}" agent="${agent.agentName}" status="error">\nError: ${error}\n</agent-result>`;
-  enqueueUserInput(agent.conversationId, errorMessage, true);
+  // Validate conversation still exists before injecting error
+  if (conversationExists(agent.conversationId)) {
+    const errorMessage = `<agent-result task-id="${taskId}" agent="${agent.agentName}" status="error">\nError: ${error}\n</agent-result>`;
+    enqueueUserInput(agent.conversationId, errorMessage, true);
+  } else {
+    console.warn(`[BackgroundAgentRegistry] Conversation ${agent.conversationId} no longer exists, discarding error for agent ${taskId}`);
+  }
 
-  // Auto-cleanup after 30s
-  setTimeout(() => {
+  scheduleCleanup(taskId);
+}
+
+/** Remove a background agent (e.g. on cancel), cancelling any pending cleanup timer */
+export function removeBackgroundAgent(taskId: string): void {
+  cancelCleanupTimer(taskId);
+  agents.delete(taskId);
+  notify();
+}
+
+/**
+ * Remove all background agents for a conversation.
+ * Returns subagentIds of running agents (caller should cancel them).
+ */
+export function removeAgentsByConversation(conversationId: string): string[] {
+  const runningSubagentIds: string[] = [];
+  for (const [taskId, agent] of agents) {
+    if (agent.conversationId === conversationId) {
+      if (agent.status === 'running') {
+        runningSubagentIds.push(agent.subagentId);
+      }
+      cancelCleanupTimer(taskId);
+      agents.delete(taskId);
+    }
+  }
+  if (runningSubagentIds.length > 0 || agents.size > 0) {
+    notify();
+  }
+  return runningSubagentIds;
+}
+
+// --- Internal timer helpers ---
+
+function scheduleCleanup(taskId: string): void {
+  cancelCleanupTimer(taskId);
+  const timerId = setTimeout(() => {
+    cleanupTimers.delete(taskId);
     if (agents.get(taskId)?.status !== 'running') {
       agents.delete(taskId);
       notify();
     }
   }, 30_000);
+  cleanupTimers.set(taskId, timerId);
 }
 
-/** Remove a background agent (e.g. on cancel) */
-export function removeBackgroundAgent(taskId: string): void {
-  agents.delete(taskId);
-  notify();
+function cancelCleanupTimer(taskId: string): void {
+  const timerId = cleanupTimers.get(taskId);
+  if (timerId != null) {
+    clearTimeout(timerId);
+    cleanupTimers.delete(taskId);
+  }
 }

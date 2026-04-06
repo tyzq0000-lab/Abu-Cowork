@@ -12,7 +12,7 @@ import type { StreamEvent, Message, ToolDefinition } from '../../types';
 import type { LLMAdapter } from './adapter';
 import { ClaudeAdapter } from './claude';
 import { OpenAICompatibleAdapter } from './openai-compatible';
-import { useSettingsStore, getActiveApiKey, getEffectiveModel } from '../../stores/settingsStore';
+import { useSettingsStore, getActiveApiKey, getActiveProvider, getEffectiveModel } from '../../stores/settingsStore';
 
 export interface LLMCallOptions {
   /** System prompt */
@@ -47,7 +47,7 @@ export interface LLMCallResult {
  */
 export async function llmCall(options: LLMCallOptions): Promise<LLMCallResult> {
   const settings = useSettingsStore.getState();
-  const adapter: LLMAdapter = settings.apiFormat === 'openai-compatible'
+  const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
     ? new OpenAICompatibleAdapter()
     : new ClaudeAdapter();
 
@@ -78,7 +78,7 @@ export async function llmCall(options: LLMCallOptions): Promise<LLMCallResult> {
   await adapter.chat(messages, {
     model: getEffectiveModel(settings),
     apiKey: getActiveApiKey(settings),
-    baseUrl: settings.baseUrl || undefined,
+    baseUrl: getActiveProvider(settings)?.baseUrl || undefined,
     systemPrompt: options.system,
     tools: options.tools,
     maxTokens: options.maxTokens ?? 4096,

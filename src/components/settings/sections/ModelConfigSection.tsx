@@ -1,50 +1,43 @@
-import { useSettingsStore, getEffectiveModel, getActiveApiKey, PROVIDER_CONFIGS, getAvailableProviders } from '@/stores/settingsStore';
-import type { LLMProvider } from '@/types';
-import type { SelectOptionGroup } from '@/components/ui/select';
-import { Eye, EyeOff, CircleCheck, CircleAlert, Thermometer, ChevronDown, Save, Pencil, Trash2, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { useSettingsStore, getEffectiveModel, getActiveApiKey, getActiveProvider } from '@/stores/settingsStore';
+import { Eye, EyeOff, CircleCheck, CircleAlert, Thermometer, ChevronDown, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/i18n';
 import { Select } from '@/components/ui/select';
+import type { SelectOptionGroup } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { checkOllamaHealth, fetchOllamaModels, formatOllamaModelLabel, formatModelSize } from '@/core/llm/ollama';
 import type { OllamaModel, OllamaStatus } from '@/core/llm/ollama';
 
-// Custom service IDs use a prefix to distinguish from built-in provider IDs
-const CUSTOM_SERVICE_PREFIX = 'cs:';
-
 export default function ModelConfigSection() {
   const store = useSettingsStore();
   const {
-    provider, apiFormat, model, customModel, baseUrl,
-    temperature, customServices, activeCustomServiceId,
-    setApiFormat, setModel, setCustomModel, setApiKey, setBaseUrl,
+    providers,
+    activeModel,
+    temperature,
+    selectModel,
+    updateProvider,
     setTemperature,
-    switchProvider, saveCustomService, updateCustomService, deleteCustomService, switchToCustomService,
   } = store;
 
   const { t } = useI18n();
   const [showKey, setShowKey] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [saveName, setSaveName] = useState('');
 
   const effectiveModel = getEffectiveModel(store);
+  const activeProvider = getActiveProvider(store);
   const apiKey = getActiveApiKey(store);
   const hasApiKey = apiKey.trim().length > 0;
 
-  const currentProviderConfig = PROVIDER_CONFIGS[provider] ?? PROVIDER_CONFIGS.anthropic;
-  const isCustomProvider = provider === 'custom';
-  const isOllama = provider === 'ollama';
-  const hasBaseUrl = !isCustomProvider || baseUrl.trim().length > 0;
+  const isOllama = activeModel.providerId === 'ollama';
   const hasModel = !!effectiveModel;
 
   // ── Ollama state ──
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>('unknown');
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
   const [ollamaLoading, setOllamaLoading] = useState(false);
-  const ollamaUrlRef = useRef(baseUrl);
-  ollamaUrlRef.current = baseUrl;
+  const ollamaUrlRef = useRef(activeProvider?.baseUrl ?? '');
+  ollamaUrlRef.current = activeProvider?.baseUrl ?? '';
 
   const refreshOllamaModels = useCallback(async () => {
     const url = ollamaUrlRef.current || 'http://localhost:11434';
@@ -61,12 +54,12 @@ export default function ModelConfigSection() {
       setOllamaStatus('online');
       const models = await fetchOllamaModels(url);
       setOllamaModels(models);
-      // Auto-select first model if current customModel is empty or not in the list
+      // Auto-select first model if current model is empty or not in the list
       if (models.length > 0) {
-        const current = useSettingsStore.getState().customModel;
+        const current = useSettingsStore.getState().activeModel.modelId;
         const isInList = models.some((m) => m.name === current);
         if (!current || !isInList) {
-          setCustomModel(models[0].name);
+          selectModel('ollama', models[0].name);
         }
       }
     } catch {
@@ -75,7 +68,7 @@ export default function ModelConfigSection() {
     } finally {
       setOllamaLoading(false);
     }
-  }, [setCustomModel]);
+  }, [selectModel]);
 
   // Auto-detect when switching to Ollama provider
   useEffect(() => {
@@ -87,80 +80,59 @@ export default function ModelConfigSection() {
     }
   }, [isOllama, refreshOllamaModels]);
 
-  // Build grouped provider options
+  // Build grouped provider options from providers array
   const providerOptions = useMemo(() => {
-    const allProviders = getAvailableProviders();
-    const builtinIds = allProviders.filter((id) => id !== 'custom' && id !== 'local' && id !== 'ollama');
-    const localIds = allProviders.filter((id) => id === 'ollama');
-    const otherIds = allProviders.filter((id) => id === 'custom' || id === 'local');
+    const builtinProviders = providers.filter(p => p.source === 'builtin' && p.id !== 'ollama');
+    const localProviders = providers.filter(p => p.id === 'ollama');
+    const customProviders = providers.filter(p => p.source === 'custom');
 
     const groups: SelectOptionGroup[] = [
       {
         label: t.settings.builtinProviders,
-        options: builtinIds.map((id) => ({ value: id, label: PROVIDER_CONFIGS[id].name })),
+        options: builtinProviders.map(p => ({ value: p.id, label: p.name })),
       },
     ];
 
-    if (localIds.length > 0) {
+    if (localProviders.length > 0) {
       groups.push({
         label: t.settings.localModelsGroup,
-        options: localIds.map((id) => ({ value: id, label: PROVIDER_CONFIGS[id].name })),
+        options: localProviders.map(p => ({ value: p.id, label: p.name })),
       });
     }
 
-    if (customServices.length > 0) {
+    if (customProviders.length > 0) {
       groups.push({
         label: t.settings.myCustomServices,
-        options: customServices.map((svc) => ({
-          value: CUSTOM_SERVICE_PREFIX + svc.id,
-          label: svc.name,
-        })),
+        options: customProviders.map(p => ({ value: p.id, label: p.name })),
       });
     }
 
-    groups.push({
-      label: t.settings.otherProviders,
-      options: otherIds.map((id) => ({ value: id, label: PROVIDER_CONFIGS[id].name })),
-    });
-
     return groups;
-  }, [customServices, t]);
-
-  // Current selected value in the dropdown (may be a custom service ID)
-  const selectedDropdownValue = activeCustomServiceId
-    ? CUSTOM_SERVICE_PREFIX + activeCustomServiceId
-    : provider;
+  }, [providers, t]);
 
   const handleProviderChange = (value: string) => {
-    if (value.startsWith(CUSTOM_SERVICE_PREFIX)) {
-      const serviceId = value.slice(CUSTOM_SERVICE_PREFIX.length);
-      switchToCustomService(serviceId);
-    } else {
-      switchProvider(value as LLMProvider);
+    const provider = providers.find(p => p.id === value);
+    if (provider) {
+      // Select the first model of the new provider
+      const firstModel = provider.models[0]?.id ?? '';
+      selectModel(provider.id, firstModel);
     }
   };
 
-  const handleSave = () => {
-    const name = saveName.trim();
-    if (!name) return;
-    saveCustomService(name);
-    setSaveName('');
-    setShowSaveDialog(false);
+  const handleApiKeyChange = (value: string) => {
+    if (activeProvider) {
+      updateProvider(activeProvider.id, { apiKey: value });
+    }
   };
 
-  const handleDelete = () => {
-    if (!activeCustomServiceId) return;
-    if (!confirm(t.settings.deleteServiceConfirm)) return;
-    deleteCustomService(activeCustomServiceId);
-    // After deletion, stay on custom provider with cleared fields
-    switchProvider('custom');
+  const handleBaseUrlChange = (value: string) => {
+    if (activeProvider) {
+      updateProvider(activeProvider.id, { baseUrl: value });
+    }
   };
 
-  // Available model list (map to SelectOption format)
-  const availableModels = (isCustomProvider
-    ? (customModel ? [{ id: customModel, label: customModel }] : [])
-    : currentProviderConfig.models
-  ).map(m => ({ value: m.id, label: m.label }));
+  // Available model list from the active provider
+  const availableModels = (activeProvider?.models ?? []).map(m => ({ value: m.id, label: m.label }));
 
   return (
     <div className="space-y-5">
@@ -202,17 +174,10 @@ export default function ModelConfigSection() {
             </div>
           )}
           <div className="flex items-center gap-2">
-            {hasBaseUrl ? (
-              <CircleCheck className="h-4 w-4 text-green-600 flex-none" />
-            ) : (
-              <CircleAlert className="h-4 w-4 text-amber-500 flex-none" />
-            )}
+            <CircleCheck className="h-4 w-4 text-green-600 flex-none" />
             <span className="text-[var(--abu-text-tertiary)]">{t.settings.provider}:</span>
-            <span className={cn(hasBaseUrl ? 'text-[var(--abu-text-primary)]' : 'text-amber-600', 'font-medium')}>
-              {activeCustomServiceId
-                ? customServices.find((s) => s.id === activeCustomServiceId)?.name ?? currentProviderConfig.name
-                : currentProviderConfig.name}
-              {!hasBaseUrl && ` (${t.settings.notConfigured})`}
+            <span className="text-[var(--abu-text-primary)] font-medium">
+              {activeProvider?.name ?? '-'}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -233,7 +198,7 @@ export default function ModelConfigSection() {
       <div className="space-y-2">
         <label className="text-xs text-[var(--abu-text-tertiary)] font-medium">{t.settings.provider}</label>
         <Select
-          value={selectedDropdownValue}
+          value={activeModel.providerId}
           options={providerOptions}
           onChange={handleProviderChange}
           placeholder={t.settings.selectProvider}
@@ -249,8 +214,8 @@ export default function ModelConfigSection() {
             <div className="flex gap-2">
               <Input
                 type="text"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
+                value={activeProvider?.baseUrl ?? ''}
+                onChange={(e) => handleBaseUrlChange(e.target.value)}
                 placeholder="http://localhost:11434"
                 className="flex-1"
               />
@@ -281,12 +246,12 @@ export default function ModelConfigSection() {
             </div>
             {ollamaStatus === 'online' && ollamaModels.length > 0 ? (
               <Select
-                value={customModel}
+                value={activeModel.modelId}
                 options={ollamaModels.map((m) => ({
                   value: m.name,
                   label: formatOllamaModelLabel(m),
                 }))}
-                onChange={(v) => setCustomModel(v)}
+                onChange={(v) => selectModel('ollama', v)}
                 placeholder={t.settings.selectModel}
               />
             ) : ollamaStatus === 'online' && ollamaModels.length === 0 ? (
@@ -304,8 +269,8 @@ export default function ModelConfigSection() {
             ) : null}
 
             {/* Show selected model details */}
-            {isOllama && customModel && ollamaModels.length > 0 && (() => {
-              const selected = ollamaModels.find((m) => m.name === customModel);
+            {isOllama && activeModel.modelId && ollamaModels.length > 0 && (() => {
+              const selected = ollamaModels.find((m) => m.name === activeModel.modelId);
               if (!selected) return null;
               return (
                 <div className="flex items-center gap-3 text-xs text-[var(--abu-text-muted)]">
@@ -318,72 +283,14 @@ export default function ModelConfigSection() {
         </>
       )}
 
-      {/* Custom API URL (custom provider only) */}
-      {isCustomProvider && (
-        <div className="space-y-2">
-          <label className="text-xs text-[var(--abu-text-tertiary)] font-medium">{t.settings.apiUrl} <span className="text-red-400">*</span></label>
-          <Input
-            type="text"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://your-api.com"
-          />
-          <p className="text-xs text-[var(--abu-text-muted)]">{t.settings.apiUrlDesc}</p>
-        </div>
-      )}
-
-      {/* Custom model name (custom provider only) */}
-      {isCustomProvider && (
-        <div className="space-y-2">
-          <label className="text-xs text-[var(--abu-text-tertiary)] font-medium">{t.settings.customModelName} <span className="text-red-400">*</span></label>
-          <Input
-            type="text"
-            value={customModel}
-            onChange={(e) => setCustomModel(e.target.value)}
-            placeholder={t.settings.customModelPlaceholder}
-          />
-        </div>
-      )}
-
-      {/* API format selector — only for custom/local where we can't auto-detect */}
-      {(isCustomProvider || provider === 'local') && (
-        <div className="space-y-2">
-          <label className="text-xs text-[var(--abu-text-tertiary)] font-medium">{t.settings.apiFormat}</label>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setApiFormat('openai-compatible')}
-              className={cn(
-                'flex-1 h-9 px-3 rounded-lg text-sm font-medium transition-all',
-                apiFormat === 'openai-compatible'
-                  ? 'bg-[var(--abu-clay)] text-white'
-                  : 'bg-[var(--abu-bg-muted)] text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-hover)]'
-              )}
-            >
-              {t.settings.openaiCompatible}
-            </button>
-            <button
-              onClick={() => setApiFormat('anthropic')}
-              className={cn(
-                'flex-1 h-9 px-3 rounded-lg text-sm font-medium transition-all',
-                apiFormat === 'anthropic'
-                  ? 'bg-[var(--abu-clay)] text-white'
-                  : 'bg-[var(--abu-bg-muted)] text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-hover)]'
-              )}
-            >
-              {t.settings.anthropicCompatible}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Model selector (built-in providers, not Ollama which has its own) */}
-      {!isCustomProvider && !isOllama && availableModels.length > 0 && (
+      {!isOllama && availableModels.length > 0 && (
         <div className="space-y-2">
           <label className="text-xs text-[var(--abu-text-tertiary)] font-medium">{t.settings.model}</label>
           <Select
-            value={model}
+            value={activeModel.modelId}
             options={availableModels}
-            onChange={(v) => setModel(v)}
+            onChange={(v) => selectModel(activeModel.providerId, v)}
             placeholder={t.settings.selectModel}
           />
         </div>
@@ -397,7 +304,7 @@ export default function ModelConfigSection() {
             <Input
               type={showKey ? 'text' : 'password'}
               value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              onChange={(e) => handleApiKeyChange(e.target.value)}
               placeholder="sk-..."
               className="pr-10"
             />
@@ -410,80 +317,6 @@ export default function ModelConfigSection() {
             </button>
           </div>
           <p className="text-xs text-[var(--abu-text-muted)]">{t.settings.apiKeyDesc}</p>
-        </div>
-      )}
-
-      {/* Save / Update / Delete custom service (custom provider only) */}
-      {isCustomProvider && (
-        <div className="space-y-3">
-          {showSaveDialog ? (
-            <div className="p-3 bg-[var(--abu-bg-muted)] rounded-xl space-y-3">
-              <label className="text-xs text-[var(--abu-text-tertiary)] font-medium">{t.settings.saveServiceName}</label>
-              <Input
-                type="text"
-                value={saveName}
-                onChange={(e) => setSaveName(e.target.value)}
-                placeholder={t.settings.saveServicePlaceholder}
-                autoFocus
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setShowSaveDialog(false); }}
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSave}
-                  disabled={!saveName.trim()}
-                  className={cn(
-                    'flex-1 h-8 px-3 rounded-lg text-sm font-medium transition-all',
-                    saveName.trim()
-                      ? 'bg-[var(--abu-clay)] text-white hover:bg-[var(--abu-clay-hover)]'
-                      : 'bg-[var(--abu-border)] text-[var(--abu-text-placeholder)] cursor-not-allowed'
-                  )}
-                >
-                  {t.settings.saveServiceConfirm}
-                </button>
-                <button
-                  onClick={() => { setShowSaveDialog(false); setSaveName(''); }}
-                  className="flex-1 h-8 px-3 rounded-lg text-sm font-medium bg-[var(--abu-bg-muted)] text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-hover)] transition-all"
-                >
-                  {t.settings.saveServiceCancel}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              {activeCustomServiceId ? (
-                <>
-                  <button
-                    onClick={() => updateCustomService(activeCustomServiceId)}
-                    className="flex-1 flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium bg-[var(--abu-bg-muted)] text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-hover)] transition-all"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    {t.settings.updateConfig}
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium bg-[var(--abu-bg-muted)] text-red-500 hover:bg-red-50 transition-all"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    {t.settings.deleteConfig}
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setShowSaveDialog(true)}
-                  disabled={!baseUrl.trim() || !customModel.trim()}
-                  className={cn(
-                    'flex-1 flex items-center justify-center gap-1.5 h-9 px-3 rounded-lg text-sm font-medium transition-all',
-                    baseUrl.trim() && customModel.trim()
-                      ? 'bg-[var(--abu-clay)] text-white hover:bg-[var(--abu-clay-hover)]'
-                      : 'bg-[var(--abu-border)] text-[var(--abu-text-placeholder)] cursor-not-allowed'
-                  )}
-                >
-                  <Save className="h-3.5 w-3.5" />
-                  {t.settings.saveCurrentConfig}
-                </button>
-              )}
-            </div>
-          )}
         </div>
       )}
 

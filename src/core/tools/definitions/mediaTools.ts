@@ -6,7 +6,7 @@ import { isWindows } from '../../../utils/platform';
 import { joinPath, ensureParentDir, getParentDir } from '../../../utils/pathUtils';
 import { getTauriFetch } from '../../llm/tauriFetch';
 import { isSandboxEnabled, isNetworkIsolationEnabled } from '../../sandbox/config';
-import { useSettingsStore, getActiveApiKey } from '../../../stores/settingsStore';
+import { useSettingsStore, getActiveApiKey, getActiveProvider } from '../../../stores/settingsStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import {
   buildMacImageCommand,
@@ -38,19 +38,22 @@ export const generateImageTool: ToolDefinition = {
 
       const state = useSettingsStore.getState();
 
-      // Resolve API key: imageGenApiKey > OpenAI provider key
-      let apiKey = state.imageGenApiKey;
-      if (!apiKey && state.provider === 'openai') {
-        apiKey = getActiveApiKey(state);
+      // Resolve API key: auxiliaryServices.imageGen > active provider key (if OpenAI-compatible)
+      let apiKey = state.auxiliaryServices.imageGen?.apiKey ?? '';
+      if (!apiKey) {
+        const activeProvider = getActiveProvider(state);
+        if (activeProvider?.apiFormat === 'openai-compatible') {
+          apiKey = getActiveApiKey(state);
+        }
       }
       if (!apiKey) {
         return 'Error: No API key configured for image generation. Please set an OpenAI API key in Settings → Image Generation, or configure an OpenAI provider.';
       }
 
-      const model = state.imageGenModel || 'dall-e-3';
+      const model = state.auxiliaryServices.imageGen?.model || 'dall-e-3';
 
-      // Resolve base URL: imageGenBaseUrl > default OpenAI
-      const baseUrl = (state.imageGenBaseUrl || 'https://api.openai.com').replace(/\/+$/, '');
+      // Resolve base URL: auxiliaryServices.imageGen.baseUrl > default OpenAI
+      const baseUrl = (state.auxiliaryServices.imageGen?.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
 
       // Call image generation API via Tauri fetch (bypasses CORS)
       const fetchFn = await getTauriFetch();
