@@ -1,7 +1,7 @@
 {
   "name": "abu",
   "private": false,
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Abu - AI Desktop Office Assistant",
   "type": "module",
   "scripts": {
@@ -10,6 +10,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.conf.dev.json",
+    "tauri:build": "tauri build",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
