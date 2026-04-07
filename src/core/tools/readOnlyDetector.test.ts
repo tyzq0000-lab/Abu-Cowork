@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { isReadOnlyCommand } from './readOnlyDetector';
+import { setPlatformForTest } from '../../test/helpers';
 
 describe('readOnlyDetector', () => {
   describe('read-only commands', () => {
@@ -129,6 +130,85 @@ describe('readOnlyDetector', () => {
 
     it('grep | tee output → NOT read-only', () => {
       expect(isReadOnlyCommand('grep pattern file | tee output.txt')).toBe(false);
+    });
+  });
+
+  // ── Windows-specific commands ──
+  describe('Windows read-only commands', () => {
+    let cleanup: () => void;
+    afterEach(() => cleanup?.());
+
+    const winReadOnlyCases = [
+      // Windows batch commands
+      'dir C:\\Users',
+      'type readme.txt',
+      'where node',
+      'echo hello',
+      'hostname',
+      'ipconfig /all',
+      'whoami',
+      'systeminfo',
+      'findstr /r "pattern" file.txt',
+      'tree /f',
+      'more file.txt',
+      'fc file1.txt file2.txt',
+      'ver',
+      'path',
+      'tasklist',
+      'set',
+      'cls',
+      // PowerShell cmdlets
+      'Get-Content file.txt',
+      'Get-ChildItem -Recurse',
+      'Get-Item ./package.json',
+      'Get-Process',
+      'Get-Service',
+      'Get-Date',
+      'Get-Location',
+      'Get-Command npm',
+      'Get-Help Get-Process',
+      'Get-Module',
+      'Get-Package',
+      'Select-String -Pattern "error" -Path log.txt',
+      'Measure-Object -Line',
+      'Test-Path C:\\Users',
+      'Test-Connection localhost',
+      'Format-List',
+      'Format-Table -AutoSize',
+    ];
+
+    for (const cmd of winReadOnlyCases) {
+      it(`[Windows] "${cmd}" → read-only`, () => {
+        cleanup = setPlatformForTest('windows');
+        expect(isReadOnlyCommand(cmd)).toBe(true);
+      });
+    }
+
+    // Case-insensitive matching
+    it('[Windows] cmdlets are case-insensitive', () => {
+      cleanup = setPlatformForTest('windows');
+      expect(isReadOnlyCommand('get-childitem')).toBe(true);
+      expect(isReadOnlyCommand('GET-CONTENT file.txt')).toBe(true);
+      expect(isReadOnlyCommand('DIR /s')).toBe(true);
+    });
+
+    // Piped Windows commands
+    it('[Windows] dir | findstr → read-only', () => {
+      cleanup = setPlatformForTest('windows');
+      expect(isReadOnlyCommand('dir | findstr .txt')).toBe(true);
+    });
+
+    it('[Windows] Get-Process | Format-Table → read-only', () => {
+      cleanup = setPlatformForTest('windows');
+      expect(isReadOnlyCommand('Get-Process | Format-Table -AutoSize')).toBe(true);
+    });
+
+    // Windows commands that should NOT be read-only
+    it('[Windows] Windows read-only cmds are rejected on macOS', () => {
+      cleanup = setPlatformForTest('macos');
+      // dir is not a standard Unix command — should not be read-only on macOS
+      expect(isReadOnlyCommand('Get-ChildItem')).toBe(false);
+      expect(isReadOnlyCommand('systeminfo')).toBe(false);
     });
   });
 

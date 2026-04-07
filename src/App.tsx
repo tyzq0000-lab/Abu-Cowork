@@ -138,7 +138,6 @@ function App() {
         const orphans = await findOrphanedCheckpoints();
         if (orphans.length === 0) return;
         const { useChatStore } = await import('@/stores/chatStore');
-        let navigateToId: string | null = null;
         for (const cp of orphans) {
           const meta = useChatStore.getState().conversationIndex[cp.conversationId];
           if (!meta) { await clearCheckpoint(cp.conversationId); continue; }
@@ -155,11 +154,8 @@ function App() {
             isSystem: true,
           });
           await clearCheckpoint(cp.conversationId);
-          if (!navigateToId) navigateToId = cp.conversationId;
-        }
-        // Navigate to the most recent interrupted conversation
-        if (navigateToId) {
-          useChatStore.getState().switchConversation(navigateToId);
+          // Do NOT auto-navigate — app always starts on welcome screen.
+          // The recovery message is visible when user clicks the conversation in sidebar.
         }
       }).catch(() => {});
       startInboundDispatcher();

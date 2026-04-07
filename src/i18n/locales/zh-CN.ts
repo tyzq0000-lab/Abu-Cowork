@@ -45,7 +45,7 @@ const zhCN: TranslationDict = {
   },
 
   soul: {
-    title: '阿布的性格',
+    title: '阿布人格',
     subtitle: '阿布出厂自带性格，你可以按自己的喜好调整',
     defaultLabel: '当前使用默认性格',
     customize: '自定义',
@@ -88,8 +88,8 @@ const zhCN: TranslationDict = {
     changeAvatar: '更换头像',
     defaultNickname: '阿布',
     resetProfile: '恢复默认',
-    personalMemory: '个人记忆',
-    personalMemoryTitle: '个人记忆',
+    personalMemory: '记忆',
+    personalMemoryTitle: '记忆',
     personalMemoryDesc: '阿布记住的关于你的偏好和习惯，跨所有项目生效。',
     personalMemoryPlaceholder: '阿布会自动记住你的偏好，比如沟通风格、常用工具等...',
     personalMemoryClearMessage: '确定清空所有个人记忆？此操作无法撤回。',

@@ -298,6 +298,14 @@ export const useChatStore = create<ChatStore>()(
           if (conv) {
             conv.projectId = projectId;
           }
+          if (state.conversationIndex[convId]) {
+            state.conversationIndex[convId].projectId = projectId;
+          }
+        });
+        // Persist to disk index
+        import('../core/session/conversationStorage').then(({ updateIndexEntry }) => {
+          const meta = get().conversationIndex[convId];
+          if (meta) updateIndexEntry(meta).catch(() => {});
         });
       },
 
@@ -369,6 +377,11 @@ export const useChatStore = create<ChatStore>()(
             state.conversationIndex[id].title = title;
           }
         });
+        // Persist to disk index
+        import('../core/session/conversationStorage').then(({ updateIndexEntry }) => {
+          const meta = get().conversationIndex[id];
+          if (meta) updateIndexEntry(meta).catch(() => {});
+        });
       },
 
       addMessage: (convId, message) => {
@@ -399,8 +412,13 @@ export const useChatStore = create<ChatStore>()(
           }
         });
         // Async write to disk (non-blocking)
-        import('../core/session/conversationStorage').then(({ appendMessage: diskAppend }) => {
+        import('../core/session/conversationStorage').then(({ appendMessage: diskAppend, updateIndexEntry }) => {
           diskAppend(convId, message).catch(() => {});
+          // Persist auto-generated title to disk index
+          if (newTitle) {
+            const meta = get().conversationIndex[convId];
+            if (meta) updateIndexEntry(meta).catch(() => {});
+          }
         });
       },
 
@@ -432,6 +450,16 @@ export const useChatStore = create<ChatStore>()(
           state.agentStatus = 'idle';
           state.currentTool = null;
         });
+        // Persist the final completed message to disk.
+        // The initial placeholder (content: '') was already written by addMessage,
+        // but tokens accumulated in-memory only. updateLastMessage overwrites the
+        // last JSONL line so reloads see the full response.
+        const finalMsg = get().conversations[convId]?.messages.slice(-1)[0];
+        if (finalMsg) {
+          import('../core/session/conversationStorage').then(({ updateLastMessage }) => {
+            updateLastMessage(convId, finalMsg).catch(() => {});
+          });
+        }
       },
 
       updateToolCall: (convId, messageId, toolCallId, result, resultContent, isError, hideScreenshot) => {
