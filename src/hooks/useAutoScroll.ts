@@ -17,7 +17,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   guarded against content-shrink false positives.
  */
 export function useAutoScroll(options?: { following?: boolean }) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Callback ref pattern: ChatView mounts the scroll container conditionally
+  // (welcome screen vs chat view). A plain useRef would capture `null` on the
+  // first effect run and never re-attach when the element later mounts, since
+  // refs don't trigger re-renders. The callback ref + state combo guarantees
+  // the listener-attaching effects re-run as soon as the node is available.
+  const containerEl = useRef<HTMLDivElement | null>(null);
+  const [containerNode, setContainerNode] = useState<HTMLDivElement | null>(null);
+  const containerRef = useCallback((node: HTMLDivElement | null) => {
+    containerEl.current = node;
+    setContainerNode(node);
+  }, []);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const isAtBottomRef = useRef(true);
   const rafId = useRef(0);
@@ -34,7 +44,7 @@ export function useAutoScroll(options?: { following?: boolean }) {
   useEffect(() => { followingRef.current = following; }, [following]);
 
   const checkIfAtBottom = useCallback(() => {
-    const container = containerRef.current;
+    const container = containerEl.current;
     if (!container) return true;
     const { scrollTop, scrollHeight, clientHeight } = container;
     return scrollTop + clientHeight >= scrollHeight - 100;
@@ -43,7 +53,7 @@ export function useAutoScroll(options?: { following?: boolean }) {
   // Scroll to bottom and open a 300ms settling window.
   // Used by: conversation switch (useLayoutEffect), scroll-to-bottom button.
   const scrollToBottom = useCallback(() => {
-    const container = containerRef.current;
+    const container = containerEl.current;
     if (!container) return;
     isProgrammaticScroll.current = true;
     container.scrollTop = container.scrollHeight;
@@ -55,7 +65,7 @@ export function useAutoScroll(options?: { following?: boolean }) {
   // Re-enable auto-scroll and scroll to bottom immediately.
   // Used when the user sends a message.
   const resetToBottom = useCallback(() => {
-    const container = containerRef.current;
+    const container = containerEl.current;
     if (container) {
       isProgrammaticScroll.current = true;
       container.scrollTop = container.scrollHeight;
@@ -67,7 +77,7 @@ export function useAutoScroll(options?: { following?: boolean }) {
 
   // Track scroll position — works for both user and programmatic scrolls.
   useEffect(() => {
-    const container = containerRef.current;
+    const container = containerNode;
     if (!container) return;
 
     const handleScroll = () => {
@@ -96,12 +106,12 @@ export function useAutoScroll(options?: { following?: boolean }) {
 
     container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [checkIfAtBottom]);
+  }, [containerNode, checkIfAtBottom]);
 
   // Auto-scroll on DOM changes — debounced to one scroll per frame.
   // Paused during following mode to avoid fighting with the RAF loop.
   useEffect(() => {
-    const container = containerRef.current;
+    const container = containerNode;
     if (!container) return;
 
     const scheduleScroll = () => {
@@ -112,7 +122,7 @@ export function useAutoScroll(options?: { following?: boolean }) {
 
       rafId.current = requestAnimationFrame(() => {
         rafId.current = 0;
-        const c = containerRef.current;
+        const c = containerEl.current;
         if (!c) return;
 
         // During settling (conversation switch / send), iframe heights may
@@ -180,7 +190,7 @@ export function useAutoScroll(options?: { following?: boolean }) {
       mutationObserver.disconnect();
       resizeObserver.disconnect();
     };
-  }, [checkIfAtBottom]);
+  }, [containerNode, checkIfAtBottom]);
 
   // RAF loop for frame-perfect scroll following during streaming.
   // Runs every animation frame and directly sets scrollTop = scrollHeight.
@@ -199,25 +209,40 @@ export function useAutoScroll(options?: { following?: boolean }) {
     let lastMaxScroll = -1;
 
     const tick = () => {
-      const c = containerRef.current;
-      if (c && isAtBottomRef.current) {
+      const c = containerEl.current;
+      if (c) {
         const maxScroll = c.scrollHeight - c.clientHeight;
 
-        // Detect user scroll-up: scrollTop decreased, but maxScroll didn't
-        // decrease (which would mean content shrank, not user action).
-        if (
-          lastSetScrollTop >= 0 &&
-          c.scrollTop < lastSetScrollTop - 10 &&
-          maxScroll >= lastMaxScroll
-        ) {
-          isAtBottomRef.current = false;
-          setIsAtBottom(false);
-          lastSetScrollTop = -1;
-          lastMaxScroll = -1;
-        } else if (maxScroll - c.scrollTop > 0) {
-          c.scrollTop = maxScroll;
-          lastSetScrollTop = maxScroll;
-          lastMaxScroll = maxScroll;
+        if (isAtBottomRef.current) {
+          // Detect user scroll-up: scrollTop decreased, but maxScroll didn't
+          // decrease (which would mean content shrank, not user action).
+          if (
+            lastSetScrollTop >= 0 &&
+            c.scrollTop < lastSetScrollTop - 10 &&
+            maxScroll >= lastMaxScroll
+          ) {
+            isAtBottomRef.current = false;
+            setIsAtBottom(false);
+            lastSetScrollTop = -1;
+            lastMaxScroll = -1;
+          } else if (maxScroll - c.scrollTop > 0) {
+            c.scrollTop = maxScroll;
+            lastSetScrollTop = maxScroll;
+            lastMaxScroll = maxScroll;
+          }
+        } else {
+          // User had scrolled up. The scroll event handler is bypassed in
+          // following mode (see handleScroll), so detect manual scroll-back
+          // to bottom here and re-enable auto-follow.
+          // Use a tight 10px threshold (symmetric with the scroll-up detection
+          // above) — a looser threshold would falsely re-enable on short
+          // conversations where maxScroll itself is small.
+          if (maxScroll - c.scrollTop <= 10) {
+            isAtBottomRef.current = true;
+            setIsAtBottom(true);
+            lastSetScrollTop = -1;
+            lastMaxScroll = -1;
+          }
         }
       }
       id = requestAnimationFrame(tick);
