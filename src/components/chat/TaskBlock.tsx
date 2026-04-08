@@ -131,6 +131,16 @@ function generateSummary(steps: UnifiedStep[], t: TranslationDict, locale: strin
     else otherCount++;
   }
 
+  // Surface thinking-only state in the summary so a "hi" reply with no tools
+  // doesn't fall through to the bland "完成" / "处理中" fallback.
+  // Use the topic label ("思考过程") rather than the duration label so the
+  // collapsed header doesn't repeat the step's own "思考了 N 秒" label.
+  const thinkingStep = steps.find((s) => s.type === 'thinking');
+  const onlyThinking = thinkingStep && readCount + writeCount + createCount + commandCount + otherCount === 0 && !skillStep;
+  if (onlyThinking) {
+    actions.push(t.chat.thinkingProcess);
+  }
+
   if (skillStep) {
     const toolCount = readCount + writeCount + createCount + commandCount + otherCount;
     if (toolCount > 0) {
@@ -200,6 +210,32 @@ interface TaskBlockProps {
   onRetry?: () => void;
 }
 
+// Small toggle button used to re-open a completed thinking step's content.
+// Mirrors the visual idiom of CollapsibleDetail (the "结果" pill below tool steps).
+function ThinkingDetailToggle({ content, t }: { content: string; t: TranslationDict }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] hover:bg-[var(--abu-bg-pressed)] hover:text-[var(--abu-text-tertiary)] transition-colors"
+      >
+        {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        {t.chat.thinkingProcess}
+      </button>
+      {expanded && (
+        <div className="mt-2 rounded-lg bg-[var(--abu-bg-muted)] border border-[var(--abu-bg-hover)] overflow-hidden">
+          <div className="px-3 py-2 max-h-48 overflow-y-auto">
+            <pre className="text-[12px] text-[var(--abu-text-tertiary)] italic whitespace-pre-wrap break-words leading-relaxed font-sans m-0">
+              {content}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * TaskBlock component - Cowork-style workflow display with timeline
  * Supports both legacy WorkflowStep[] and new ExecutionStep[]
@@ -210,7 +246,11 @@ const PREVIEW_LIMIT = 3;
 type DisplayMode = 'collapsed' | 'preview' | 'expanded';
 
 export default function TaskBlock({ steps, executionSteps, isActive, onRetry }: TaskBlockProps) {
-  const [displayMode, setDisplayMode] = useState<DisplayMode>('collapsed');
+  // Lazy initializer: when the block mounts during a live execution, start in 'preview'
+  // so the body (with running thinking content / inline tool steps) is visible without
+  // requiring the user to click. The auto-collapse useEffect below handles the
+  // active→inactive transition to tuck everything away after the loop ends.
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => isActive ? 'preview' : 'collapsed');
   const { t, locale } = useI18n();
 
   // Auto-collapse when execution finishes (isActive: true → false)
@@ -467,6 +507,28 @@ function TaskStepItem({ step, showConnector, locale, t }: {
     );
   };
 
+  // Render thinking content — inline (with cursor) while still streaming reasoning,
+  // collapsible (default closed) once the thinking phase is done.
+  const renderThinkingDetail = () => {
+    if (!isThinking || !step.detail) return null;
+    if (isRunning) {
+      return (
+        <div className="mt-1 rounded-lg bg-[var(--abu-bg-muted)] border border-[var(--abu-bg-hover)] overflow-hidden">
+          <div className="px-3 py-2 max-h-48 overflow-y-auto">
+            <pre className="text-[12px] text-[var(--abu-text-tertiary)] italic whitespace-pre-wrap break-words leading-relaxed font-sans m-0">
+              {step.detail}
+              <span className="streaming-cursor inline-block ml-0.5" />
+            </pre>
+          </div>
+        </div>
+      );
+    }
+    if (isCompleted) {
+      return <ThinkingDetailToggle content={step.detail} t={t} />;
+    }
+    return null;
+  };
+
   // Render legacy collapsible details (backward compatibility)
   const renderLegacyDetails = () => {
     if (step.detailBlocks && step.detailBlocks.length > 0) {
@@ -538,6 +600,9 @@ function TaskStepItem({ step, showConnector, locale, t }: {
           )}
         </div>
 
+        {/* Thinking content — only for thinking steps; inline while running, toggle when done */}
+        {renderThinkingDetail()}
+
         {/* Detail blocks - prefer new architecture */}
         {renderDetailBlocks() || renderLegacyDetails()}
 
@@ -548,8 +613,10 @@ function TaskStepItem({ step, showConnector, locale, t }: {
           </div>
         )}
 
-        {/* Step detail (e.g., filename) - only show if no detail blocks or legacy details */}
-        {step.detail && !completionMsg && !typeLabel && !step.detailBlocks?.length && (
+        {/* Step detail (e.g., filename) - only show if no detail blocks or legacy details.
+            Skipped for thinking steps — their detail is the full reasoning text and is
+            already rendered above by renderThinkingDetail (inline / collapsible). */}
+        {step.detail && !isThinking && !completionMsg && !typeLabel && !step.detailBlocks?.length && (
           <div className="mt-1">
             <span className="inline-flex items-center px-2 py-0.5 rounded bg-[var(--abu-bg-muted)] text-[12px] text-[var(--abu-text-muted)] font-mono">
               {getFileName(step.detail)}

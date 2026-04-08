@@ -10,6 +10,7 @@ import FileAttachment, { ImagePreviewCard, ImageThumbnail, isImageFile } from '.
 import SourcesSection from './SourcesSection';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
 import { usePreviewStore } from '@/stores/previewStore';
+import { useI18n } from '@/i18n';
 import { MessageErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useTaskExecutionStore } from '@/stores/taskExecutionStore';
 import { extractWorkflowSteps, extractFileOutputs, extractFilePathsFromText } from '@/utils/workflowExtractor';
@@ -93,7 +94,7 @@ function buildRenderSegments(
 
     if (text) {
       // Flush accumulated steps before this text
-      if (pendingExecSteps.length > 0 || pendingLegacySteps.some((s) => s.type !== 'thinking')) {
+      if (pendingExecSteps.length > 0 || pendingLegacySteps.length > 0) {
         segments.push({
           kind: 'steps',
           executionSteps: pendingExecSteps,
@@ -144,6 +145,7 @@ function buildRenderSegments(
  * Renders text → merged tool steps, with consecutive tool-only turns combined.
  */
 export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = false }: MessageGroupProps) {
+  const { t } = useI18n();
   // Separate user and assistant messages
   const userMsg = messages.find((m) => m.role === 'user');
   const assistantMsgs = messages.filter((m) => m.role === 'assistant');
@@ -332,13 +334,31 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
     await runAgentLoop(convId, userContent, { images: retryImages });
   };
 
-  // Determine which step data source to use
-  const activeExecSteps = useMemo(
-    () => (executionSteps && executionSteps.length > 0)
+  // Determine which step data source to use.
+  // If thinking content exists but the upstream execution step list has no thinking
+  // step (eventRouter currently doesn't emit one), synthesize one and prepend it so
+  // it shows up alongside tool steps inside the same TaskBlock.
+  const activeExecSteps = useMemo(() => {
+    const base = (executionSteps && executionSteps.length > 0)
       ? executionSteps
-      : persistedExecutionSteps ?? [],
-    [executionSteps, persistedExecutionSteps]
-  );
+      : persistedExecutionSteps ?? [];
+    if (!thinkingContent) return base;
+    if (base.some((s) => s.type === 'thinking')) return base;
+    const synthThinking: ExecutionStep = {
+      id: 'thinking-synth',
+      executionId: '',
+      type: 'thinking',
+      label: '思考中...',
+      detail: thinkingContent,
+      status: thinkingDuration ? 'completed' : 'running',
+      toolName: '',
+      toolInput: {},
+      source: 'agent',
+      detailBlocks: [],
+      duration: thinkingDuration,
+    };
+    return [synthThinking, ...base];
+  }, [executionSteps, persistedExecutionSteps, thinkingContent, thinkingDuration]);
 
   // Build render segments: text and merged step groups
   const segments = useMemo(
@@ -366,9 +386,12 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
 
           {/* Content area */}
           <div className="flex-1 min-w-0 overflow-hidden">
-            {/* Thinking indicator - when streaming but no content yet */}
+            {/* Typing dots — shown only before any thinking or text bytes have arrived.
+                Once thinking starts streaming, segments will be populated (thinking step
+                inside a TaskBlock) and hasAnyContent flips true, hiding these dots. */}
             {isStreaming && !hasAnyContent && (
               <div className="flex items-center gap-1.5 py-2">
+                <span className="text-[12px] text-[var(--abu-text-muted)]">{t.status.thinking}</span>
                 <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[var(--abu-clay-60)]" />
                 <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[var(--abu-clay-60)]" />
                 <span className="typing-dot w-1.5 h-1.5 rounded-full bg-[var(--abu-clay-60)]" />
@@ -410,20 +433,20 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
 
               // kind === 'steps' — merged TaskBlock
               const hasExecSteps = seg.executionSteps.length > 0;
-              const hasLegacyNonThinking = seg.legacySteps.some((s) => s.type !== 'thinking');
+              const hasLegacySteps = seg.legacySteps.length > 0;
 
               return (
                 <div key={`steps-${segIdx}`}>
                   {hasExecSteps ? (
                     <TaskBlock
                       executionSteps={seg.executionSteps}
-                      isActive={seg.isLastGroup && isThisExecutionActive}
+                      isActive={seg.isLastGroup && (isThisExecutionActive || isStreaming)}
                       onRetry={seg.isLastGroup && hasError && !isStreaming ? handleRetry : undefined}
                     />
-                  ) : hasLegacyNonThinking && (
+                  ) : hasLegacySteps && (
                     <TaskBlock
                       steps={seg.legacySteps}
-                      isActive={seg.isLastGroup && isAnyExecuting}
+                      isActive={seg.isLastGroup && (isAnyExecuting || isStreaming)}
                       onRetry={seg.isLastGroup && hasError && !isStreaming ? handleRetry : undefined}
                     />
                   )}

@@ -16,11 +16,21 @@ describe('workflowExtractor', () => {
       expect(steps).toHaveLength(0);
     });
 
-    it('adds thinking step when thinking content exists', () => {
-      const steps = extractWorkflowSteps([], '思考中...');
+    it('thinking content without duration → running (still in flight)', () => {
+      const steps = extractWorkflowSteps([], '正在推理...');
+      expect(steps).toHaveLength(1);
+      expect(steps[0].type).toBe('thinking');
+      expect(steps[0].status).toBe('running');
+      expect(steps[0].detail).toBe('正在推理...');
+    });
+
+    it('thinking content with duration → completed', () => {
+      const steps = extractWorkflowSteps([], '推理完成的内容', undefined, undefined, 5);
       expect(steps).toHaveLength(1);
       expect(steps[0].type).toBe('thinking');
       expect(steps[0].status).toBe('completed');
+      expect(steps[0].duration).toBe(5);
+      expect(steps[0].detail).toBe('推理完成的内容');
     });
 
     it('adds running thinking step when agentStatus is thinking', () => {

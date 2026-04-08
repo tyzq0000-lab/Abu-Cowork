@@ -157,7 +157,11 @@ export function extractWorkflowSteps(
       id: 'thinking',
       type: 'thinking',
       label: '思考中...',
-      status: 'completed',
+      detail: thinking,
+      // Treat the step as still running until the thinking phase actually ends.
+      // thinkingDuration is set in agentLoop on the thinking → text/tool transition,
+      // so its presence is the canonical signal that thinking is done.
+      status: thinkingDuration ? 'completed' : 'running',
       timestamp: now - 1000,
       duration: thinkingDuration,
     });
