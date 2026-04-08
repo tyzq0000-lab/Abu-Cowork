@@ -435,18 +435,48 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
               const hasExecSteps = seg.executionSteps.length > 0;
               const hasLegacySteps = seg.legacySteps.length > 0;
 
+              // "Active" means the steps area should still pulse / show live state.
+              // Trust isStreaming as a per-group signal — it's always accurate after
+              // the finishStreaming(msgId) fix. Gate isThisExecutionActive on
+              // isLastGroupProp because the per-loop TaskExecution status can stay
+              // stale on older groups (this was the original "执行中..." stuck bug).
+              const execActive = isLastGroupProp && isThisExecutionActive;
+              const toolActive = isLastGroupProp && isAnyExecuting;
+              const groupActive = seg.isLastGroup && (execActive || toolActive || isStreaming);
+
+              // Auto-collapse rule for *non-trailing* steps segments (e.g. the
+              // thinking block when body text is already streaming after it):
+              // once all steps in this segment have completed, drop the active
+              // signal so TaskBlock collapses, since the work has clearly moved
+              // past this segment.
+              //
+              // For the *trailing* steps segment (no later segment in this group),
+              // trust groupActive directly — even if the current step batch
+              // happens to be momentarily complete (e.g. between a tool batch
+              // finishing and the next LLM turn starting), we still want the
+              // dots to keep pulsing so the user knows the loop is still going.
+              const hasLaterSegment = segIdx < segments.length - 1;
+              const execStepsRunning = seg.executionSteps.some(
+                (s) => s.status === 'running' || s.status === 'pending',
+              );
+              const legacyStepsRunning = seg.legacySteps.some(
+                (s) => s.status === 'running' || s.status === 'pending',
+              );
+              const execIsActive = hasLaterSegment ? (groupActive && execStepsRunning) : groupActive;
+              const legacyIsActive = hasLaterSegment ? (groupActive && legacyStepsRunning) : groupActive;
+
               return (
                 <div key={`steps-${segIdx}`}>
                   {hasExecSteps ? (
                     <TaskBlock
                       executionSteps={seg.executionSteps}
-                      isActive={seg.isLastGroup && (isThisExecutionActive || isStreaming)}
+                      isActive={execIsActive}
                       onRetry={seg.isLastGroup && hasError && !isStreaming ? handleRetry : undefined}
                     />
                   ) : hasLegacySteps && (
                     <TaskBlock
                       steps={seg.legacySteps}
-                      isActive={seg.isLastGroup && (isAnyExecuting || isStreaming)}
+                      isActive={legacyIsActive}
                       onRetry={seg.isLastGroup && hasError && !isStreaming ? handleRetry : undefined}
                     />
                   )}

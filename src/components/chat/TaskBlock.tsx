@@ -246,21 +246,7 @@ const PREVIEW_LIMIT = 3;
 type DisplayMode = 'collapsed' | 'preview' | 'expanded';
 
 export default function TaskBlock({ steps, executionSteps, isActive, onRetry }: TaskBlockProps) {
-  // Lazy initializer: when the block mounts during a live execution, start in 'preview'
-  // so the body (with running thinking content / inline tool steps) is visible without
-  // requiring the user to click. The auto-collapse useEffect below handles the
-  // active→inactive transition to tuck everything away after the loop ends.
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => isActive ? 'preview' : 'collapsed');
   const { t, locale } = useI18n();
-
-  // Auto-collapse when execution finishes (isActive: true → false)
-  const prevIsActiveRef = useRef(isActive);
-  useEffect(() => {
-    if (prevIsActiveRef.current && !isActive) {
-      setDisplayMode('collapsed');
-    }
-    prevIsActiveRef.current = isActive;
-  }, [isActive]);
 
   // Convert to unified steps
   const unifiedSteps = useMemo(() => {
@@ -272,6 +258,21 @@ export default function TaskBlock({ steps, executionSteps, isActive, onRetry }: 
     }
     return [];
   }, [steps, executionSteps]);
+
+  // Lazy initializer: when the block mounts during a live execution, start in 'preview'
+  // so the body (with running thinking content / inline tool steps) is visible without
+  // requiring the user to click. The auto-collapse useEffect below handles the
+  // active→inactive transition to tuck everything away after the loop ends.
+  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => isActive ? 'preview' : 'collapsed');
+
+  // Auto-collapse when execution finishes (isActive: true → false)
+  const prevIsActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (prevIsActiveRef.current && !isActive) {
+      setDisplayMode('collapsed');
+    }
+    prevIsActiveRef.current = isActive;
+  }, [isActive]);
 
   const completedCount = unifiedSteps.filter((s) => s.status === 'completed').length;
   const allCompleted = completedCount === unifiedSteps.length && unifiedSteps.length > 0 && !isActive;
