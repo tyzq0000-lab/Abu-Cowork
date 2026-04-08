@@ -36,7 +36,9 @@
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
         { "path": "/Volumes/**/.abu/**" },
-        { "path": "$TEMP/**" }
+        { "path": "$TEMP/**" },
+        { "path": "/Applications" },
+        { "path": "/Applications/**" }
       ]
     },
     {
@@ -55,7 +57,9 @@
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
         { "path": "/Volumes/**/.abu/**" },
-        { "path": "$TEMP/**" }
+        { "path": "$TEMP/**" },
+        { "path": "/Applications" },
+        { "path": "/Applications/**" }
       ]
     },
     {
@@ -108,7 +112,9 @@
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
         { "path": "/Volumes/**/.abu/**" },
-        { "path": "$TEMP/**" }
+        { "path": "$TEMP/**" },
+        { "path": "/Applications" },
+        { "path": "/Applications/**" }
       ]
     },
     {
@@ -131,7 +137,9 @@
         { "path": "/Volumes/**" },
         { "path": "/Volumes/**/.abu" },
         { "path": "/Volumes/**/.abu/**" },
-        { "path": "$TEMP/**" }
+        { "path": "$TEMP/**" },
+        { "path": "/Applications" },
+        { "path": "/Applications/**" }
       ]
     },
     {
@@ -176,7 +184,9 @@
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
         { "path": "/Volumes/**/.abu/**" },
-        { "path": "$TEMP/**" }
+        { "path": "$TEMP/**" },
+        { "path": "/Applications" },
+        { "path": "/Applications/**" }
       ]
     },
     {
