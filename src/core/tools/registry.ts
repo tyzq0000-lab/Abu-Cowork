@@ -36,13 +36,20 @@ export function toolResultHasImages(result: ToolResult): boolean {
  * Returns an error string if validation fails, null if OK.
  */
 function validateToolInput(tool: ToolDefinition, input: Record<string, unknown>): string | null {
-  // Detect truncated tool call JSON (LLM output hit max_tokens mid-JSON)
+  // Detect tool call args that failed to parse as JSON. Note: when the LLM
+  // hits max_tokens mid tool-call (finish_reason='length'), the openai-compatible
+  // adapter now drops broken tool calls and signals stopReason='max_tokens' so
+  // the agent loop's escalation can retry — that path no longer reaches here.
+  // This branch covers the remaining cases: model genuinely produced invalid JSON.
   if ('_parse_error' in input) {
-    return `Error: tool "${tool.name}" 的参数 JSON 被截断，无法解析。` +
-      `这通常是因为输出内容过长（超过 max_tokens 限制），导致 JSON 不完整。\n` +
-      `解决方法：不要在 write_file 的 content 参数中放大量代码。` +
-      `改用 run_command 执行 heredoc 或 echo 写入文件，将内容分批写入。` +
-      `例如：run_command({ command: "cat << 'SCRIPT_EOF' > /tmp/build.js\\n...脚本内容...\\nSCRIPT_EOF" })`;
+    const requiredFields = tool.inputSchema.required ?? [];
+    const requiredHint = requiredFields.length > 0
+      ? `\n该工具的必填参数：${requiredFields.join(', ')}`
+      : '';
+    return `Error: 工具 "${tool.name}" 的调用参数不是合法 JSON，无法解析。` +
+      requiredHint +
+      `\n请重新调用该工具，arguments 字段必须是严格序列化的 JSON 字符串。` +
+      `如果连续多次失败，可能是模型本轮输出已达上限。`;
   }
 
   const required = tool.inputSchema.required;

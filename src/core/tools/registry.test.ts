@@ -93,14 +93,19 @@ describe('ToolRegistry', () => {
       expect(result).toBe('info result');
     });
 
-    it('detects truncated tool call JSON (_parse_error) with recovery hint', async () => {
+    it('detects unparseable tool call JSON (_parse_error) and lists required params', async () => {
       toolRegistry.register(testTool);
       const result = await toolRegistry.execute('test_write', {
         _parse_error: 'Failed to parse tool input: {"path": "/tmp/build.js", "content": "const pptx...',
       });
-      expect(result).toContain('JSON 被截断');
-      expect(result).toContain('run_command');
-      expect(result).toContain('heredoc');
+      expect(result).toContain('不是合法 JSON');
+      expect(result).toContain('test_write');
+      expect(result).toContain('该工具的必填参数');
+      expect(result).toContain('path');
+      // Regression: stale write_file/heredoc guidance must not return.
+      expect(result).not.toContain('write_file');
+      expect(result).not.toContain('heredoc');
+      expect(result).not.toContain('SCRIPT_EOF');
     });
 
     it('still catches thrown errors after validation passes', async () => {

@@ -5,6 +5,48 @@ import { getTauriFetch } from './tauriFetch';
 import { normalizeMessages } from './messageNormalizer';
 import type { PreparedTurn, PreparedContentBlock } from './messageNormalizer';
 import { createHeartbeat } from './heartbeat';
+import { createLogger } from '../logging/logger';
+
+const logger = createLogger('openai-compatible');
+
+/**
+ * Safely parse a tool-call arguments string into a Record.
+ * - Empty string → {} (let validateToolInput surface missing required fields)
+ * - Non-object parse results (null, array, primitive) → {} (defensive)
+ * - Parse failure → null (caller should mark _parse_error)
+ */
+function safeParseToolArgs(args: string): Record<string, unknown> | null {
+  if (!args || !args.trim()) return {};
+  try {
+    const v = JSON.parse(args);
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      return v as Record<string, unknown>;
+    }
+    return {};
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build the input object for a tool_use event from a streamed tool call buffer.
+ * Logs full diagnostic context on parse failure so future issues can be traced
+ * from disk logs (appDataDir/logs/YYYY-MM-DD.log).
+ */
+function buildToolInput(
+  tc: { id: string; name: string; args: string },
+  source: string,
+): Record<string, unknown> {
+  const parsed = safeParseToolArgs(tc.args);
+  if (parsed !== null) return parsed;
+  logger.error('tool args JSON parse failed', {
+    source,
+    tool: tc.name,
+    argsLength: tc.args.length,
+    argsPreview: tc.args.slice(0, 500),
+  });
+  return { _parse_error: `Failed to parse tool input: ${tc.args.slice(0, 200)}` };
+}
 
 // Counter-based tool call ID generator — prevents collisions on rapid parallel calls
 let toolCallCounter = 0;
@@ -420,10 +462,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
             flushPendingContent();
             // Emit structured tool calls
             for (const [, tc] of toolCallBuffers) {
-              let input: Record<string, unknown> = {};
-              try { input = JSON.parse(tc.args); } catch {
-                input = { _parse_error: `Failed to parse tool input: ${tc.args.slice(0, 200)}` };
-              }
+              const input = buildToolInput(tc, '[DONE]');
               onEvent({ type: 'tool_use', id: tc.id, name: tc.name, input });
             }
             // Emit text-based <tool_call> tool calls
@@ -468,15 +507,21 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
 
             // Check finish_reason — flush pending content before finishing
             if (choice.finish_reason) flushPendingContent();
-            if (choice.finish_reason === 'tool_calls' || choice.finish_reason === 'tool_use') {
+            if (
+              choice.finish_reason === 'tool_calls' ||
+              choice.finish_reason === 'tool_use' ||
+              // Some OpenAI-compatible providers (legacy GLM/Zhipu, others) use the
+              // older 'function_call' alias instead of 'tool_calls'.
+              choice.finish_reason === 'function_call'
+            ) {
               for (const [, tc] of toolCallBuffers) {
-                let input: Record<string, unknown> = {};
-                try { input = JSON.parse(tc.args); } catch {
-                  input = { _parse_error: `Failed to parse tool input: ${tc.args.slice(0, 200)}` };
-                }
+                const input = buildToolInput(tc, `finish_reason=${choice.finish_reason}`);
                 onEvent({ type: 'tool_use', id: tc.id, name: tc.name, input });
               }
-              onEvent({ type: 'done', stopReason: 'tool_use' });
+              // Some providers mix native and text-based tool calls in one response.
+              const hasTextTC = emitTextToolCalls();
+              const hasToolCalls = toolCallBuffers.size > 0 || hasTextTC;
+              onEvent({ type: 'done', stopReason: hasToolCalls ? 'tool_use' : 'end_turn' });
               return;
             } else if (choice.finish_reason === 'stop') {
               // Emit text-based <tool_call> tool calls if any were buffered
@@ -487,6 +532,50 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
               }
               onEvent({ type: 'done', stopReason: 'end_turn' });
               return;
+            } else if (choice.finish_reason === 'length') {
+              // Model output reached max_tokens. Three sub-cases:
+              //   (a) Tool args fully accumulated → emit tool_use, signal tool_use
+              //   (b) Tool args partial / unparseable → DROP broken tool calls and
+              //       signal max_tokens so agentLoop's escalateMaxOutputTokens can
+              //       double the limit and retry. Keeping the broken tool call would
+              //       set collectedToolCalls.length > 0 and bypass the escalation
+              //       trigger condition (agentLoop.ts L1284).
+              //   (c) No tool calls (text output truncated) → signal max_tokens
+              const parsedAll: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
+              let anyParseFailed = false;
+              for (const [, tc] of toolCallBuffers) {
+                const parsed = safeParseToolArgs(tc.args);
+                if (parsed === null) {
+                  anyParseFailed = true;
+                  break;
+                }
+                parsedAll.push({ id: tc.id, name: tc.name, input: parsed });
+              }
+              if (!anyParseFailed && parsedAll.length > 0) {
+                // Case (a): all tool args complete despite length truncation
+                for (const e of parsedAll) {
+                  onEvent({ type: 'tool_use', id: e.id, name: e.name, input: e.input });
+                }
+                onEvent({ type: 'done', stopReason: 'tool_use' });
+              } else {
+                // Case (b) or (c): drop broken tool calls, signal max_tokens
+                logger.warn('finish_reason=length, dropping tool calls for escalation', {
+                  toolCallCount: toolCallBuffers.size,
+                  partials: Array.from(toolCallBuffers.values()).map((t) => ({
+                    name: t.name,
+                    argsLength: t.args.length,
+                    argsPreview: t.args.slice(0, 200),
+                  })),
+                });
+                onEvent({ type: 'done', stopReason: 'max_tokens' });
+              }
+              return;
+            } else if (choice.finish_reason) {
+              // Unknown finish_reason — log so we can diagnose new providers
+              logger.warn('unknown finish_reason', {
+                finish_reason: choice.finish_reason,
+                hasToolCalls: toolCallBuffers.size > 0,
+              });
             }
           } catch {
             // Skip unparseable lines
@@ -496,10 +585,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
 
       // Fallback: stream ended without [DONE] or finish_reason — emit pending tool calls and done
       for (const [, tc] of toolCallBuffers) {
-        let input: Record<string, unknown> = {};
-        try { input = JSON.parse(tc.args); } catch {
-          input = { _parse_error: `Failed to parse tool input: ${tc.args.slice(0, 200)}` };
-        }
+        const input = buildToolInput(tc, 'stream-end-fallback');
         onEvent({ type: 'tool_use', id: tc.id, name: tc.name, input });
       }
       onEvent({ type: 'done', stopReason: toolCallBuffers.size > 0 ? 'tool_use' : 'end_turn' });
