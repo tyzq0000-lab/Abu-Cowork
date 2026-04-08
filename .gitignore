@@ -51,3 +51,12 @@ eval-results/*.json
 仅供了解*
 docs/
 !website/docs/
+
+# Root-level design docs / drafts / prototypes (not for release)
+# Memory: feedback_no_design_docs — design docs should not be committed.
+# Tracked exceptions: CLAUDE.md, README*.md, index.html, tutorial-skill-proposal.md
+*-prd.md
+*-plan.md
+*-plan-*.md
+*-insights.html
+prototype-*.html
