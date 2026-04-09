@@ -241,15 +241,6 @@ export const useChatStore = create<ChatStore>()(
       },
 
       startNewConversation: () => {
-        // Index the conversation we're leaving (fire-and-forget, no LLM call)
-        const prevId = get().activeConversationId;
-        const prevConv = prevId ? get().conversations[prevId] : null;
-        if (prevConv && prevConv.messages.length >= 2) {
-          import('../core/memory/conversationIndexer').then(({ indexConversation }) => {
-            indexConversation(prevConv).catch(() => {});
-          });
-        }
-
         set((state) => {
           state.activeConversationId = null;
         });
@@ -258,15 +249,6 @@ export const useChatStore = create<ChatStore>()(
       },
 
       switchConversation: (id) => {
-        // Index the conversation we're leaving (fire-and-forget, no LLM call)
-        const prevId = get().activeConversationId;
-        const prevConv = prevId ? get().conversations[prevId] : null;
-        if (prevConv && prevConv.messages.length >= 2 && prevId !== id) {
-          import('../core/memory/conversationIndexer').then(({ indexConversation }) => {
-            indexConversation(prevConv).catch(() => {});
-          });
-        }
-
         set((state) => {
           state.activeConversationId = id;
         });
