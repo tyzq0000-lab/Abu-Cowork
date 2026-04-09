@@ -55,6 +55,7 @@ export interface TranslationDict {
     deleteTitle: string;
     legacyHint: string;
     emptyHint: string;
+    globalMemories: string;
   };
 
   // Soul (personality)

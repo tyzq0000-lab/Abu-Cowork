@@ -42,6 +42,7 @@ const enUS: TranslationDict = {
     deleteTitle: 'Delete Memory',
     legacyHint: 'Legacy memory (will be auto-migrated on next conversation)',
     emptyHint: 'AI will automatically accumulate memories during conversations',
+    globalMemories: 'Global Memories',
   },
 
   soul: {

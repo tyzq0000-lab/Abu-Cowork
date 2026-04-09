@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useI18n, format } from '@/i18n';
-import { HelpCircle, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { HelpCircle, Trash2, ChevronDown, ChevronUp, FolderOpen, Globe } from 'lucide-react';
 import { scanMemoryFiles, readMemoryFile } from '@/core/memdir/scan';
 import { deleteMemory } from '@/core/memdir/write';
 import type { MemoryHeader, MemoryType } from '@/core/memdir/types';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 
 function getTypeLabel(type: MemoryType, t: ReturnType<typeof useI18n>['t']): string {
@@ -34,28 +35,65 @@ function formatAge(timestamp: number): string {
   return `${Math.floor(days / 30)}个月前`;
 }
 
+interface MemoryGroup {
+  label: string;
+  icon: 'global' | 'workspace';
+  workspacePath: string | null;
+  headers: MemoryHeader[];
+}
+
 export default function PersonalMemorySection() {
   const { t } = useI18n();
-  const [headers, setHeaders] = useState<MemoryHeader[]>([]);
+  const [groups, setGroups] = useState<MemoryGroup[]>([]);
   const [expandedContent, setExpandedContent] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<MemoryHeader | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ header: MemoryHeader; workspacePath: string | null } | null>(null);
   const [showTip, setShowTip] = useState(false);
   const tipRef = useRef<HTMLDivElement>(null);
+  const recentPaths = useWorkspaceStore((s) => s.recentPaths);
+
+  const totalCount = groups.reduce((sum, g) => sum + g.headers.length, 0);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
     try {
-      // Load from global memdir (no workspace)
-      const items = await scanMemoryFiles(null);
-      setHeaders(items.sort((a, b) => b.updated - a.updated));
+      const result: MemoryGroup[] = [];
+
+      // Global memories
+      const globalItems = await scanMemoryFiles(null);
+      if (globalItems.length > 0) {
+        result.push({
+          label: t.memory.globalMemories,
+          icon: 'global',
+          workspacePath: null,
+          headers: globalItems.sort((a, b) => b.updated - a.updated),
+        });
+      }
+
+      // Per-workspace memories
+      for (const wsPath of recentPaths) {
+        try {
+          const wsItems = await scanMemoryFiles(wsPath);
+          if (wsItems.length > 0) {
+            const folderName = wsPath.split('/').filter(Boolean).pop() || wsPath;
+            result.push({
+              label: folderName,
+              icon: 'workspace',
+              workspacePath: wsPath,
+              headers: wsItems.sort((a, b) => b.updated - a.updated),
+            });
+          }
+        } catch { /* skip inaccessible workspaces */ }
+      }
+
+      setGroups(result);
     } catch {
-      setHeaders([]);
+      setGroups([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [recentPaths, t.memory]);
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
@@ -90,7 +128,7 @@ export default function PersonalMemorySection() {
   const handleDelete = async () => {
     if (!deleteTarget) return;
     try {
-      await deleteMemory(deleteTarget.filename, null);
+      await deleteMemory(deleteTarget.header.filename, deleteTarget.workspacePath);
       setDeleteTarget(null);
       await loadEntries();
     } catch (err) {
@@ -103,7 +141,7 @@ export default function PersonalMemorySection() {
       <ConfirmDialog
         open={!!deleteTarget}
         title={t.memory.deleteTitle}
-        message={deleteTarget?.name ?? ''}
+        message={deleteTarget?.header.name ?? ''}
         confirmText={t.common.delete}
         cancelText={t.common.cancel}
         onConfirm={handleDelete}
@@ -147,56 +185,75 @@ export default function PersonalMemorySection() {
           <div className="flex items-center justify-center py-16">
             <div className="w-5 h-5 border-2 border-[var(--abu-clay)] border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : headers.length > 0 ? (
-          <div className="space-y-2">
-            <div className="text-[12px] text-[var(--abu-text-placeholder)] mb-2">
-              {format(t.memory.entryCount, { count: String(headers.length) })}
+        ) : totalCount > 0 ? (
+          <div className="space-y-4">
+            <div className="text-[12px] text-[var(--abu-text-placeholder)]">
+              {format(t.memory.entryCount, { count: String(totalCount) })}
             </div>
-            {headers.map((header) => (
-              <div
-                key={header.filename}
-                className="border border-[var(--abu-border)] rounded-lg bg-[var(--abu-bg-muted)] overflow-hidden"
-              >
-                <div
-                  className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-[var(--abu-bg-muted)] transition-colors"
-                  onClick={() => handleExpand(header)}
-                >
-                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TYPE_COLORS[header.type]}`}>
-                    {getTypeLabel(header.type, t)}
-                  </span>
-                  <span className="text-[13px] text-[var(--abu-text-primary)] flex-1 truncate">
-                    {header.name}
-                  </span>
-                  <span className="text-[11px] text-[var(--abu-text-placeholder)] whitespace-nowrap">
-                    {formatAge(header.updated)}
-                  </span>
-                  {expandedId === header.filename ? (
-                    <ChevronUp className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
+            {groups.map((group) => (
+              <div key={group.workspacePath ?? '__global__'} className="space-y-2">
+                {/* Group header */}
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--abu-text-muted)] uppercase tracking-wider">
+                  {group.icon === 'global' ? (
+                    <Globe className="h-3 w-3" />
                   ) : (
-                    <ChevronDown className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
+                    <FolderOpen className="h-3 w-3" />
                   )}
+                  <span>{group.label}</span>
+                  <span className="text-[var(--abu-text-placeholder)]">({group.headers.length})</span>
                 </div>
 
-                {expandedId === header.filename && (
-                  <div className="px-3 pb-3 border-t border-[var(--abu-bg-active)]">
-                    <p className="text-[12px] text-[var(--abu-text-tertiary)] leading-relaxed mt-2 whitespace-pre-wrap">
-                      {expandedContent[header.filename] ?? header.description}
-                    </p>
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--abu-bg-muted)]">
-                      <span className="text-[10px] text-[var(--abu-text-placeholder)]">
-                        {header.source === 'auto_flush' ? t.memory.sourceAutoFlush : header.source === 'agent_explicit' ? t.memory.sourceAgentExplicit : t.memory.sourceUserManual}
-                        {' · '}
-                        {format(t.memory.recallCount, { count: String(header.accessCount) })}
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(header); }}
-                        className="p-1 rounded text-[var(--abu-text-placeholder)] hover:text-red-500 hover:bg-red-50 transition-colors"
+                {/* Group entries */}
+                {group.headers.map((header) => {
+                  const key = `${group.workspacePath ?? 'g'}:${header.filename}`;
+                  return (
+                    <div
+                      key={key}
+                      className="border border-[var(--abu-border)] rounded-lg bg-[var(--abu-bg-muted)] overflow-hidden"
+                    >
+                      <div
+                        className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-[var(--abu-bg-hover)] transition-colors"
+                        onClick={() => handleExpand(header)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TYPE_COLORS[header.type]}`}>
+                          {getTypeLabel(header.type, t)}
+                        </span>
+                        <span className="text-[13px] text-[var(--abu-text-primary)] flex-1 truncate">
+                          {header.name}
+                        </span>
+                        <span className="text-[11px] text-[var(--abu-text-placeholder)] whitespace-nowrap">
+                          {formatAge(header.updated)}
+                        </span>
+                        {expandedId === header.filename ? (
+                          <ChevronUp className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
+                        )}
+                      </div>
+
+                      {expandedId === header.filename && (
+                        <div className="px-3 pb-3 border-t border-[var(--abu-bg-active)]">
+                          <p className="text-[12px] text-[var(--abu-text-tertiary)] leading-relaxed mt-2 whitespace-pre-wrap">
+                            {expandedContent[header.filename] ?? header.description}
+                          </p>
+                          <div className="flex items-center justify-between mt-2 pt-2 border-t border-[var(--abu-bg-muted)]">
+                            <span className="text-[10px] text-[var(--abu-text-placeholder)]">
+                              {header.source === 'auto_flush' ? t.memory.sourceAutoFlush : header.source === 'agent_explicit' ? t.memory.sourceAgentExplicit : t.memory.sourceUserManual}
+                              {' · '}
+                              {format(t.memory.recallCount, { count: String(header.accessCount) })}
+                            </span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeleteTarget({ header, workspacePath: group.workspacePath }); }}
+                              className="p-1 rounded text-[var(--abu-text-placeholder)] hover:text-red-500 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
             ))}
           </div>
