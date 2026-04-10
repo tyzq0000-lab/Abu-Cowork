@@ -519,9 +519,9 @@ ${memoryTexts.join('\n\n')}
       console.warn('Failed to load memories:', err);
     }
 
-    // Inject computer use guidance (if enabled)
-    if (settingsState.computerUseEnabled) {
-      sections.push({ name: 'computer-use', text: `\n## 电脑操控能力
+    // Inject computer use guidance — always present since computer tool is always registered.
+    // The tool auto-enables the setting on first call.
+    sections.push({ name: 'computer-use', text: `\n## 电脑操控能力
 你有 computer 工具，可截屏、鼠标、键盘操作，操控用户屏幕上的任何应用。
 
 ### 核心原则：命令优先，GUI 兜底
@@ -563,7 +563,6 @@ ${isWindows()
 - 输入框问题 → 先点击确认焦点再 type
 - 应用无响应 → wait 更长时间，或检查是否有弹窗阻挡
 - 无法完成 → 诚实告诉用户卡在哪一步`, cacheable: true });
-    }
 
     // Browser guidance: when bridge is not connected, always guide to Abu-Browser skill.
     const browserBridgeConnected = mcpManager.isConnected('abu-browser-bridge');
