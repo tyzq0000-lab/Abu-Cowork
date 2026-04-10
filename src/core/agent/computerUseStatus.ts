@@ -1,8 +1,8 @@
 /**
  * Computer Use session state — module-level reactive store.
  *
- * Used by toolExecutor to signal state changes, consumed by FloatingConsole
- * and ComputerUseStatusBar via useSyncExternalStore.
+ * Used by toolExecutor to signal state changes, consumed by
+ * ComputerUseStatusBar via useSyncExternalStore.
  *
  * Not a Zustand store because it bridges core/ and components/ without persistence.
  */
@@ -14,7 +14,6 @@ export interface CUState {
   stepCount: number;
   currentAction: string | null;
   latestScreenshot: string | null; // base64
-  isFloating: boolean;
 }
 
 let state: CUState = {
@@ -22,7 +21,6 @@ let state: CUState = {
   stepCount: 0,
   currentAction: null,
   latestScreenshot: null,
-  isFloating: false,
 };
 
 const listeners = new Set<() => void>();
@@ -43,7 +41,7 @@ export function setComputerUseActive(active: boolean) {
   if (active) {
     update({ status: 'active', stepCount: 0, currentAction: null, latestScreenshot: null });
   } else {
-    update({ status: 'idle', stepCount: 0, currentAction: null, isFloating: false });
+    update({ status: 'idle', stepCount: 0, currentAction: null, latestScreenshot: null });
   }
 }
 
@@ -59,11 +57,6 @@ export function updateLatestScreenshot(base64: string) {
   if (state.status === 'active') {
     update({ latestScreenshot: base64 });
   }
-}
-
-/** Mark floating mode on/off. */
-export function setFloatingMode(floating: boolean) {
-  update({ isFloating: floating });
 }
 
 /** Set current action description. */

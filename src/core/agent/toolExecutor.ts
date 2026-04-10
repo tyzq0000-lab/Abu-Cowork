@@ -26,7 +26,7 @@ import { createLogger } from '../logging/logger';
 
 const logger = createLogger('toolExecutor');
 
-/** Human-readable description of a computer use action for the floating console. */
+/** Human-readable description of a computer use action for the status bar. */
 function actionToDescription(action: string, input: Record<string, unknown>): string {
   switch (action) {
     case 'screenshot': return '截屏';
