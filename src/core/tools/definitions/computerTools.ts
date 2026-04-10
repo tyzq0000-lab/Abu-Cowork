@@ -9,6 +9,7 @@ import { joinPath } from '../../../utils/pathUtils';
 import { isMacOS } from '../../../utils/platform';
 import { TOOL_NAMES } from '../toolNames';
 import { updateLatestScreenshot } from '../../agent/computerUseStatus';
+import { checkSensitiveApp, checkBlockedKeyCombo } from '../computerUseSafety';
 
 let lastScreenScaleFactor = 1;
 const SCREENSHOT_MAX_WIDTH = 1280;
@@ -288,6 +289,22 @@ export const computerTool: ToolDefinition = {
       }
     } catch {
       // Non-macOS or FFI unavailable — proceed
+    }
+
+    // Safety checks for interactive actions
+    if (action !== 'screenshot' && action !== 'wait') {
+      // Check if foreground app is sensitive (with 100ms cache to avoid repeated osascript calls)
+      try {
+        const activeWin = await invoke<{ app_name: string; bundle_id: string | null }>('get_active_window');
+        const blocked = checkSensitiveApp(activeWin.bundle_id, activeWin.app_name);
+        if (blocked) return `Error: ${blocked}`;
+      } catch { /* can't check, proceed */ }
+
+      // Check for dangerous key combos
+      if (action === 'key') {
+        const keyBlocked = checkBlockedKeyCombo(input.key as string, input.modifiers as string[] | undefined);
+        if (keyBlocked) return `Error: ${keyBlocked}`;
+      }
     }
 
     // Hide Abu window during operations so it doesn't block click targets
