@@ -262,8 +262,25 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
     // Show screen border overlay + status bar for interactive actions
     if (hasInteractiveAction) {
       try { await invoke('show_screen_border'); } catch { /* ignore */ }
+      // Remember the foreground app before hiding Abu, so we can re-activate it
+      // after Abu hides (focus may shift to a random window otherwise)
+      let targetAppName: string | null = null;
+      try {
+        const activeWin = await invoke<{ app_name: string }>('get_active_window');
+        // Don't re-activate Abu itself
+        if (activeWin.app_name && activeWin.app_name !== 'Abu' && activeWin.app_name !== 'Abu Dev') {
+          targetAppName = activeWin.app_name;
+        }
+      } catch { /* ignore */ }
+
       try { await invoke('window_hide'); } catch { /* ignore */ }
       await new Promise(r => setTimeout(r, 200));
+
+      // Re-activate the target app after Abu is hidden
+      if (targetAppName) {
+        try { await invoke('activate_app', { appName: targetAppName }); } catch { /* ignore */ }
+        await new Promise(r => setTimeout(r, 100));
+      }
     }
     setComputerUseActive(true);
     setComputerUseBatchMode(true);

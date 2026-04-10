@@ -571,3 +571,68 @@ fn capture_excluding_impl(
         })
     }
 }
+
+// ─── App focus management ────────────────────────────────────
+
+/// Activate (bring to front) an application by name.
+/// Uses AppleScript on macOS, PowerShell on Windows.
+#[tauri::command]
+pub fn activate_app(app_name: String) -> Result<String, String> {
+    activate_app_impl(&app_name)
+}
+
+#[cfg(target_os = "macos")]
+fn activate_app_impl(app_name: &str) -> Result<String, String> {
+    use std::process::{Command, Stdio};
+
+    // Sanitize app name to prevent AppleScript injection
+    let safe_name = app_name.replace('\\', "").replace('"', "");
+
+    let script = format!(
+        r#"tell application "{}" to activate"#,
+        safe_name
+    );
+
+    let output = Command::new("osascript")
+        .args(["-e", &script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed to run osascript: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to activate '{}': {}", app_name, stderr.trim()));
+    }
+
+    Ok(format!("Activated '{}'", app_name))
+}
+
+#[cfg(target_os = "windows")]
+fn activate_app_impl(app_name: &str) -> Result<String, String> {
+    use std::process::{Command, Stdio};
+
+    let script = format!(
+        r#"$proc = Get-Process -Name '{}' -ErrorAction SilentlyContinue | Select-Object -First 1; if ($proc) {{ [void][System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic'); [Microsoft.VisualBasic.Interaction]::AppActivate($proc.Id) }} else {{ Write-Error 'Process not found' }}"#,
+        app_name.replace('\'', "")
+    );
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed to run PowerShell: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to activate '{}': {}", app_name, stderr.trim()));
+    }
+
+    Ok(format!("Activated '{}'", app_name))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn activate_app_impl(app_name: &str) -> Result<String, String> {
+    Err(format!("activate_app not supported on this platform (tried to activate '{}')", app_name))
+}

@@ -1081,6 +1081,7 @@ pub fn run() {
             computer_use::request_screen_recording,
             computer_use::get_abu_window_id,
             computer_use::capture_screen_excluding,
+            computer_use::activate_app,
             overlay::show_screen_border,
             overlay::hide_screen_border,
             overlay::get_overlay_window_id,

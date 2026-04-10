@@ -1,6 +1,6 @@
 import { writeFile as writeBinFile } from '@tauri-apps/plugin-fs';
 import { desktopDir } from '@tauri-apps/api/path';
-import { writeText as clipboardWriteText } from '@tauri-apps/plugin-clipboard-manager';
+import { writeText as clipboardWriteText, readText as clipboardReadText } from '@tauri-apps/plugin-clipboard-manager';
 import { invoke } from '@tauri-apps/api/core';
 import type { ToolDefinition, ToolResult, ToolResultContent } from '../../../types';
 import { useSettingsStore } from '../../../stores/settingsStore';
@@ -347,10 +347,22 @@ export const computerTool: ToolDefinition = {
           // Detect non-ASCII (Chinese/CJK etc.) — use clipboard + Cmd+V for reliable input
           const hasNonAscii = /[^\u0020-\u007E\t\n\r]/.test(text);
           if (hasNonAscii) {
-            await clipboardWriteText(text);
-            await new Promise(r => setTimeout(r, 50));
-            const pasteModifier = isMacOS() ? 'meta' : 'ctrl';
-            await invoke<string>('keyboard_press', { key: 'v', modifiers: [pasteModifier] });
+            // Save user's clipboard, paste our text, then restore
+            let savedClipboard: string | null = null;
+            try { savedClipboard = await clipboardReadText(); } catch { /* empty clipboard */ }
+            try {
+              await clipboardWriteText(text);
+              await new Promise(r => setTimeout(r, 50));
+              const pasteModifier = isMacOS() ? 'meta' : 'ctrl';
+              await invoke<string>('keyboard_press', { key: 'v', modifiers: [pasteModifier] });
+              // Wait for paste to take effect before restoring
+              await new Promise(r => setTimeout(r, 150));
+            } finally {
+              // Restore original clipboard content
+              if (savedClipboard != null) {
+                try { await clipboardWriteText(savedClipboard); } catch { /* ignore */ }
+              }
+            }
             actionResult = `Typed (via paste): ${text} (${text.length} characters)`;
           } else {
             actionResult = await invoke<string>('keyboard_type', { text });
