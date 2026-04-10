@@ -224,10 +224,6 @@ vi.mock('../core/agent/subagentAbort', () => ({
   }),
 }));
 
-vi.mock('../core/memory/conversationIndexer', () => ({
-  indexConversation: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('../core/session/checkpoint', () => ({
   writeCheckpoint: vi.fn().mockResolvedValue(undefined),
 }));

@@ -18,7 +18,6 @@ import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { prepareContextMessages } from '../context/contextManager';
 import { compressContextIfNeeded } from '../context/contextCompressor';
 import { getMessageText } from '../context/contextUtils';
-import { loadAgentMemory } from './agentMemory';
 import { withRetry } from './retry';
 
 /**
@@ -143,23 +142,26 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
       systemPrompt += `\n\n## 上级对话背景\n${parentConversationSummary}`;
     }
 
-    // Load and inject persistent agent memory (structured + legacy fallback)
+    // Load and inject persistent memory from memdir
     try {
-      const { getMemoryBackend } = await import('../memory/router');
-      const backend = getMemoryBackend();
-      const entries = await backend.list({ scope: 'user' });
-      if (entries.length > 0) {
-        const top = entries
-          .sort((a, b) => b.updatedAt - a.updatedAt)
+      const { scanMemoryFiles, loadMemoryIndex } = await import('../memdir/scan');
+      const wsPath = useWorkspaceStore.getState().currentPath;
+
+      const [globalHeaders, wsHeaders, globalIndex] = await Promise.all([
+        scanMemoryFiles(null),
+        wsPath ? scanMemoryFiles(wsPath) : Promise.resolve([]),
+        loadMemoryIndex(null),
+      ]);
+      const allHeaders = [...globalHeaders, ...wsHeaders];
+
+      if (allHeaders.length > 0) {
+        const top = allHeaders
+          .sort((a, b) => b.updated - a.updated)
           .slice(0, 10);
-        const memText = top.map(e => `- [${e.category}] ${e.summary}`).join('\n');
+        const memText = top.map(e => `- [${e.type}] ${e.name}: ${e.description}`).join('\n');
         systemPrompt += `\n\n## 你的记忆\n以下是跨会话积累的记忆，可参考使用：\n${memText}`;
-      } else {
-        // Fallback to legacy per-agent memory file
-        const memory = await loadAgentMemory(agent.name);
-        if (memory.trim()) {
-          systemPrompt += `\n\n## 你的记忆\n以下是你在之前会话中积累的记忆，可参考使用：\n${memory}`;
-        }
+      } else if (globalIndex.trim()) {
+        systemPrompt += `\n\n## 你的记忆\n${globalIndex}`;
       }
     } catch {
       // Non-critical: proceed without memory

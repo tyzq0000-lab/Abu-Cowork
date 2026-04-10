@@ -33,11 +33,6 @@ export const recallTool: ToolDefinition = {
         type: 'string',
         description: '搜索关键词（匹配记忆内容、任务摘要、对话标题）',
       },
-      scope: {
-        type: 'string',
-        description: '搜索范围: user(个人级，默认) / project(项目级)',
-        enum: ['user', 'project'],
-      },
       limit: {
         type: 'number',
         description: '每类数据源最多返回条数，默认 10',
@@ -47,50 +42,51 @@ export const recallTool: ToolDefinition = {
   },
   execute: async (input, context) => {
     const query = ((input.query as string) || '').trim();
-    const scope = ((input.scope as string) || 'user') as 'user' | 'project';
     const limit = (input.limit as number) || 10;
     const queryTokens = query.toLowerCase().split(/\s+/).filter(t => t.length > 0);
 
     const workspacePath = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
     const sections: string[] = [];
 
-    // --- 1. Structured memories ---
+    // --- 1. Memdir memories (global + workspace) ---
     try {
-      const { getMemoryBackend } = await import('../../memory/router');
-      const backend = getMemoryBackend();
+      const { scanMemoryFiles, readMemoryFile } = await import('../../memdir/scan');
+      const { touchMemory } = await import('../../memdir/write');
 
-      let memories: import('../../memory/types').MemoryEntry[];
+      // Scan both global and workspace memories
+      const [globalHeaders, wsHeaders] = await Promise.all([
+        scanMemoryFiles(null),
+        workspacePath ? scanMemoryFiles(workspacePath) : Promise.resolve([]),
+      ]);
+      let allHeaders = [...globalHeaders, ...wsHeaders];
+
+      // Filter by query if provided
       if (queryTokens.length > 0) {
-        memories = await backend.search(query, {
-          scope,
-          projectPath: scope === 'project' ? workspacePath ?? undefined : undefined,
-          limit,
-        });
-      } else {
-        // No query: return most recent memories
-        const all = await backend.list({
-          scope,
-          projectPath: scope === 'project' ? workspacePath ?? undefined : undefined,
-        });
-        memories = all
-          .filter(e => e.category !== 'conversation_index')
-          .sort((a, b) => b.updatedAt - a.updatedAt)
-          .slice(0, limit);
+        allHeaders = allHeaders.filter(h =>
+          matchesQuery(h.name, queryTokens) ||
+          matchesQuery(h.description, queryTokens) ||
+          matchesQuery(h.filename, queryTokens)
+        );
       }
 
-      // Exclude conversation_index entries (those go in section 3)
-      memories = memories.filter(e => e.category !== 'conversation_index');
+      // Sort by relevance (recent + frequently accessed first)
+      allHeaders.sort((a, b) => {
+        const scoreA = a.accessCount * 0.3 + a.updated / 1e12;
+        const scoreB = b.accessCount * 0.3 + b.updated / 1e12;
+        return scoreB - scoreA;
+      });
+      const top = allHeaders.slice(0, limit);
 
-      if (memories.length > 0) {
-        const lines = memories.map(e =>
-          `- [${e.category}] ${e.summary}${e.content !== e.summary ? ': ' + e.content.slice(0, 150) : ''} (${formatTime(e.updatedAt)})`
-        );
-        sections.push(`## 记忆 (${memories.length}条)\n${lines.join('\n')}`);
-
-        // Touch accessed entries (fire-and-forget)
-        for (const e of memories) {
-          backend.touch(e.id).catch(() => {});
+      if (top.length > 0) {
+        const lines: string[] = [];
+        for (const h of top) {
+          const file = await readMemoryFile(h.filePath);
+          const contentPreview = file ? file.content.slice(0, 150) : '';
+          lines.push(`- [${h.type}] ${h.name}${contentPreview ? ': ' + contentPreview : ''} (${formatTime(h.updated)})`);
+          // Touch accessed memories (fire-and-forget)
+          touchMemory(h.filePath).catch(() => {});
         }
+        sections.push(`## 记忆 (${top.length}条)\n${lines.join('\n')}`);
       }
     } catch {
       // Non-critical
@@ -117,7 +113,7 @@ export const recallTool: ToolDefinition = {
       // Non-critical
     }
 
-    // --- 3. Conversation index (from chatStore + memory backend) ---
+    // --- 3. Conversation index (from chatStore) ---
     try {
       const conversationIndex = useChatStore.getState().conversationIndex;
       const convList = Object.values(conversationIndex)
@@ -135,30 +131,6 @@ export const recallTool: ToolDefinition = {
           `- "${c.title || '无标题'}" (${c.messageCount}条消息, ${formatTime(c.updatedAt)})`
         );
         sections.push(`## 历史会话 (${matched.length}条)\n${lines.join('\n')}`);
-      }
-
-      // Also check conversation_index entries from memory backend (for archived conversations no longer in chatStore)
-      const { getMemoryBackend } = await import('../../memory/router');
-      const backend = getMemoryBackend();
-      const indexEntries = await backend.list({ scope: 'user', category: 'conversation_index' as import('../../memory/types').MemoryCategory });
-      // Only show index entries for conversations NOT in current chatStore
-      const liveConvIds = new Set(Object.keys(conversationIndex));
-      const archivedEntries = indexEntries
-        .filter(e => {
-          const convId = e.keywords.find(k => k.startsWith('conv:'));
-          return convId && !liveConvIds.has(convId.slice(5));
-        })
-        .sort((a, b) => b.updatedAt - a.updatedAt);
-
-      let archivedMatched = archivedEntries;
-      if (queryTokens.length > 0) {
-        archivedMatched = archivedEntries.filter(e => matchesQuery(e.summary, queryTokens) || matchesQuery(e.content, queryTokens));
-      }
-      archivedMatched = archivedMatched.slice(0, limit);
-
-      if (archivedMatched.length > 0) {
-        const lines = archivedMatched.map(e => `- ${e.summary} (${formatTime(e.updatedAt)})`);
-        sections.push(`## 已归档会话 (${archivedMatched.length}条)\n${lines.join('\n')}`);
       }
     } catch {
       // Non-critical

@@ -55,6 +55,19 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/webp': 'webp',
 };
 
+/** Check whether any message in the conversation contains image content (user images or tool result images). */
+function conversationHasImages(messages: import('../../types').Message[]): boolean {
+  for (const msg of messages) {
+    // User-attached images
+    if (Array.isArray(msg.content) && msg.content.some(c => c.type === 'image')) return true;
+    // Tool result images
+    if (msg.toolCalls?.some(tc =>
+      tc.resultContent?.some(rc => rc.type === 'image')
+    )) return true;
+  }
+  return false;
+}
+
 /**
  * Save user-pasted images to disk so they survive localStorage persistence.
  * Returns array of file paths (one per image). On failure, returns undefined for that slot.
@@ -249,15 +262,7 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
 }
 
-/** Fire-and-forget: index conversation metadata for recall tool */
-function indexConversationAsync(conversationId: string): void {
-  const conv = useChatStore.getState().conversations[conversationId];
-  if (conv && conv.messages.length >= 2) {
-    import('../memory/conversationIndexer').then(({ indexConversation }) => {
-      indexConversation(conv).catch(() => {});
-    });
-  }
-}
+
 
 /**
  * Resolve and filter tools for current turn — called per-turn inside the while loop.
@@ -653,7 +658,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       persistExecutionSnapshot(conversationId, loopId);
       chatStore.setAgentStatus('idle');
       chatStore.setConversationStatus(conversationId, 'completed');
-      indexConversationAsync(conversationId);
+
       const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
       notifyTaskCompleted(convTitle);
     } catch (err) {
@@ -1099,7 +1104,13 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
             }
 
             case 'usage':
-              chatStore.setCurrentUsage(event.usage);
+              // Merge into finalUsage so cost tracking and token calibration work.
+              // Claude: message_start has cache fields, message_delta has output tokens.
+              // OpenAI-compatible: single usage chunk has both input and output.
+              finalUsage = finalUsage
+                ? { ...finalUsage, ...event.usage }
+                : { ...event.usage };
+              chatStore.setCurrentUsage(finalUsage);
               break;
 
             case 'done':
@@ -1411,18 +1422,23 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         });
         // Auto-deactivate skills after loop completes (single-turn lifecycle)
         deactivateAllSkills(conversationId);
+        // Clean up Computer Use session (restore window, hide overlay)
+        import('./computerUseStatus').then(({ setComputerUseActive }) => {
+          setComputerUseActive(false);
+        }).catch(() => {});
         // Clear crash recovery checkpoint — loop completed normally
         import('../session/checkpoint').then(({ clearCheckpoint }) => {
           clearCheckpoint(conversationId);
         }).catch(() => {});
         // Mark conversation status — error if recovery exhausted, otherwise completed
         chatStore.setConversationStatus(conversationId, maxTokensRecoveryExhausted ? 'error' : 'completed');
-        indexConversationAsync(conversationId);
+  
         // Auto-extract memories from desktop conversations (non-blocking)
         // IM conversations have their own extraction in channelRouter.ts
         if (!options?.imContext) {
-          import('../memory/extractor').then(({ extractMemoriesFromConversation }) =>
-            extractMemoriesFromConversation(conversationId)
+          const wsPath = useWorkspaceStore.getState().currentPath;
+          import('../memdir/extractor').then(({ extractMemoriesFromConversation }) =>
+            extractMemoriesFromConversation(conversationId, wsPath)
           ).catch(() => {});
         }
         const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
@@ -1469,7 +1485,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         }).catch(() => {});
         // Set status back to idle on cancel
         chatStore.setConversationStatus(conversationId, 'idle');
-        indexConversationAsync(conversationId);
+  
         continueLoop = false;
         return;
       }
@@ -1479,9 +1495,19 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       const errorCode = err instanceof LLMError ? err.code : undefined;
       logger.error('LLM call failed', { error: errorMessage, code: errorCode });
       logger.info('Agent loop ended', { conversationId, loopId, turnCount, reason: 'error' });
+
+      // Friendly message when a 400 error is likely caused by image content
+      // sent to a model that doesn't support vision
+      const isLikelyVisionError = errorCode === 'invalid_request'
+        && err instanceof LLMError && err.statusCode === 400
+        && conversationHasImages(useChatStore.getState().conversations[conversationId]?.messages ?? []);
+      const displayError = isLikelyVisionError
+        ? '当前模型可能不支持图片/视觉输入，请尝试移除图片或切换到支持视觉的模型（如 Claude、GPT-4o）。'
+        : errorMessage;
+
       chatStore.appendToLastMessage(
         conversationId,
-        `\n\n**Error:** ${errorMessage}`,
+        `\n\n**Error:** ${displayError}`,
         assistantMsgId
       );
       chatStore.finishStreaming(conversationId, assistantMsgId);
@@ -1491,13 +1517,17 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       persistExecutionSnapshot(conversationId, loopId);
       // Auto-deactivate skills on error
       deactivateAllSkills(conversationId);
+      // Clean up Computer Use session
+      import('./computerUseStatus').then(({ setComputerUseActive }) => {
+        setComputerUseActive(false);
+      }).catch(() => {});
       // Clear crash recovery checkpoint — loop ended with error
       import('../session/checkpoint').then(({ clearCheckpoint }) => {
         clearCheckpoint(conversationId);
       }).catch(() => {});
       // Mark conversation as error and send notification
       chatStore.setConversationStatus(conversationId, 'error');
-      indexConversationAsync(conversationId);
+
       const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
       notifyTaskError(convTitle);
       continueLoop = false;

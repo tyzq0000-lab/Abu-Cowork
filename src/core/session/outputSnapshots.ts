@@ -27,7 +27,7 @@
 
 import { exists, mkdir, readTextFile, writeTextFile, remove, stat, copyFile, rename } from '@tauri-apps/plugin-fs';
 import { appDataDir, homeDir } from '@tauri-apps/api/path';
-import { joinPath, normalizeSeparators, getBaseName, getParentDir, ensureParentDir } from '@/utils/pathUtils';
+import { joinPath, normalizeSeparators, getBaseName } from '@/utils/pathUtils';
 import { extractFileOutputs } from '@/utils/workflowExtractor';
 import type { ToolCall } from '@/types';
 import { createLogger } from '../logging/logger';
@@ -511,106 +511,6 @@ export async function resolveFileSource(
   return { status: 'missing', basename, originalPath };
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Restore — copy a snapshot back to the original (or chosen) path
-// ────────────────────────────────────────────────────────────────────────────
-
-export type RestoreResult =
-  | { ok: true; path: string }
-  | { ok: false; error: 'no-snapshot' | 'no-parent-dir' | 'copy-failed'; message?: string };
-
-/**
- * Restore a snapshot to its original location on disk.
- * Looks up the manifest entry by exact path or by basename fallback (mirrors
- * resolveFileSource semantics) and copies the snapshot file back to its
- * recorded originalPath.
- *
- * After a successful restore, the next resolveFileSource call will see the
- * file at originalPath and return live status — the UI will naturally swap
- * the "restore" button back to the normal "reveal in finder" / open action.
- */
-export async function restoreSnapshotToOriginal(
-  convId: string,
-  lookupPath: string,
-): Promise<RestoreResult> {
-  const manifest = await loadManifest(convId);
-  const normalized = normalizePath(lookupPath);
-  const basename = getBaseName(lookupPath);
-
-  // Look up by exact path first, then basename fallback
-  let entry: SnapshotEntry | undefined = manifest.entries[normalized];
-  if (!entry && basename) {
-    entry = Object.values(manifest.entries).find(
-      (e) => e.basename === basename && e.snapshotRelPath,
-    );
-  }
-  if (!entry || !entry.snapshotRelPath) {
-    return { ok: false, error: 'no-snapshot' };
-  }
-
-  const dir = await getOutputsDir(convId);
-  const src = joinPath(dir, entry.snapshotRelPath);
-  if (!(await exists(src))) {
-    return { ok: false, error: 'no-snapshot' };
-  }
-
-  // Ensure parent dir exists — user may have moved/deleted the original directory
-  try {
-    const parent = getParentDir(entry.originalPath);
-    if (parent && parent !== '/') {
-      if (!(await exists(parent))) {
-        await ensureParentDir(entry.originalPath);
-      }
-    }
-  } catch (e) {
-    return { ok: false, error: 'no-parent-dir', message: String(e) };
-  }
-
-  try {
-    await copyFile(src, entry.originalPath);
-    return { ok: true, path: entry.originalPath };
-  } catch (e) {
-    return { ok: false, error: 'copy-failed', message: String(e) };
-  }
-}
-
-/**
- * Save a snapshot to a user-chosen destination (escape hatch when restore-to-original
- * fails or when the user wants a copy elsewhere).
- */
-export async function saveSnapshotAs(
-  convId: string,
-  lookupPath: string,
-  destPath: string,
-): Promise<RestoreResult> {
-  const manifest = await loadManifest(convId);
-  const normalized = normalizePath(lookupPath);
-  const basename = getBaseName(lookupPath);
-
-  let entry: SnapshotEntry | undefined = manifest.entries[normalized];
-  if (!entry && basename) {
-    entry = Object.values(manifest.entries).find(
-      (e) => e.basename === basename && e.snapshotRelPath,
-    );
-  }
-  if (!entry || !entry.snapshotRelPath) {
-    return { ok: false, error: 'no-snapshot' };
-  }
-
-  const dir = await getOutputsDir(convId);
-  const src = joinPath(dir, entry.snapshotRelPath);
-  if (!(await exists(src))) {
-    return { ok: false, error: 'no-snapshot' };
-  }
-
-  try {
-    await ensureParentDir(destPath);
-    await copyFile(src, destPath);
-    return { ok: true, path: destPath };
-  } catch (e) {
-    return { ok: false, error: 'copy-failed', message: String(e) };
-  }
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Cleanup

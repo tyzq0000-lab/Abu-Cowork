@@ -42,6 +42,7 @@ const enUS: TranslationDict = {
     deleteTitle: 'Delete Memory',
     legacyHint: 'Legacy memory (will be auto-migrated on next conversation)',
     emptyHint: 'AI will automatically accumulate memories during conversations',
+    globalMemories: 'Global Memories',
   },
 
   soul: {
@@ -127,15 +128,6 @@ const enUS: TranslationDict = {
     fileOversized: 'File too large to auto-backup',
     fileBackupFailed: 'Backup failed',
     cannotRevealOriginal: 'Original file is no longer at this location',
-    restoreToOriginal: 'Restore to original',
-    restoreConfirmTitle: 'Restore file',
-    restoreConfirmBody: 'Restore the auto-backup to {path}?',
-    restoreSuccess: 'Restored to {path}',
-    restoreFailedNoSnapshot: 'No backup available',
-    restoreFailedNoParent: 'Original directory is gone — save to a new location?',
-    restoreFailedCopy: 'Restore failed: {reason}',
-    saveSnapshotAs: 'Save as...',
-    saveSnapshotAsSuccess: 'Saved to {path}',
     sources: 'Sources',
     showAllSources: 'Show all',
     collapseSources: 'Collapse',

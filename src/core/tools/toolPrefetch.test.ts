@@ -98,9 +98,14 @@ describe('toolPrefetch', () => {
       expect(result).toContain('computer');
     });
 
-    it('should not load computer tool when disabled', () => {
+    it('should not load computer tool when disabled and no keywords', () => {
       const result = prefetchTools(makeCtx({ computerUseEnabled: false }));
       expect(result).not.toContain('computer');
+    });
+
+    it('should load computer tool via keyword even when disabled', () => {
+      const result = prefetchTools(makeCtx({ computerUseEnabled: false, userInput: '帮我截屏看看' }));
+      expect(result).toContain('computer');
     });
 
     it('should load read_skill_file when active skills exist', () => {

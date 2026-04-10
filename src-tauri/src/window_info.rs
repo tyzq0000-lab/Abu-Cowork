@@ -9,6 +9,7 @@ use serde::Serialize;
 pub struct ActiveWindowInfo {
     pub app_name: String,
     pub window_title: String,
+    pub bundle_id: Option<String>,
 }
 
 /// Get the currently focused window's app name and title.
@@ -21,18 +22,19 @@ pub fn get_active_window() -> Result<ActiveWindowInfo, String> {
 fn get_active_window_impl() -> Result<ActiveWindowInfo, String> {
     use std::process::{Command, Stdio};
 
-    // AppleScript to get frontmost app name and window title
+    // AppleScript to get frontmost app name, window title, and bundle identifier
     let script = r#"
         tell application "System Events"
             set frontApp to first application process whose frontmost is true
             set appName to name of frontApp
+            set bundleId to bundle identifier of frontApp
             try
                 set winTitle to name of front window of frontApp
             on error
                 set winTitle to ""
             end try
         end tell
-        return appName & "|||" & winTitle
+        return appName & "|||" & winTitle & "|||" & bundleId
     "#;
 
     let output = Command::new("osascript")
@@ -47,11 +49,12 @@ fn get_active_window_impl() -> Result<ActiveWindowInfo, String> {
     }
 
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let parts: Vec<&str> = text.splitn(2, "|||").collect();
+    let parts: Vec<&str> = text.splitn(3, "|||").collect();
 
     Ok(ActiveWindowInfo {
         app_name: parts.first().unwrap_or(&"").to_string(),
         window_title: parts.get(1).unwrap_or(&"").to_string(),
+        bundle_id: parts.get(2).map(|s| s.to_string()).filter(|s| !s.is_empty()),
     })
 }
 
@@ -96,9 +99,12 @@ fn get_active_window_impl() -> Result<ActiveWindowInfo, String> {
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let parts: Vec<&str> = text.splitn(2, "|||").collect();
 
+    // On Windows, use process path as a pseudo bundle_id
+    let process_name = parts.first().unwrap_or(&"").to_string();
     Ok(ActiveWindowInfo {
-        app_name: parts.first().unwrap_or(&"").to_string(),
+        app_name: process_name.clone(),
         window_title: parts.get(1).unwrap_or(&"").to_string(),
+        bundle_id: if process_name.is_empty() { None } else { Some(process_name) },
     })
 }
 

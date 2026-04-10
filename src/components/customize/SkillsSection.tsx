@@ -241,7 +241,12 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
     try {
       const skillDir = getParentDir(skill.filePath);
       await remove(skillDir, { recursive: true });
-      if (selectedSkill === skill.name) setSelectedSkill(null);
+      // Select adjacent item so the user stays in context after deletion
+      if (selectedSkill === skill.name) {
+        const names = filteredSkills.map((s) => s.name);
+        const idx = names.indexOf(skill.name);
+        setSelectedSkill(names[idx - 1] ?? names[idx + 1] ?? null);
+      }
       await refresh();
     } catch (err) {
       console.error('Failed to delete skill:', err);
@@ -672,9 +677,9 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
             /* Show skill detail */
             <div className="px-6 py-6">
               {/* Row 1: Name + Toggle + Menu */}
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-[var(--abu-text-primary)]">{selected.name}</h2>
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <h2 className="text-xl font-semibold text-[var(--abu-text-primary)] truncate min-w-0" title={selected.name}>{selected.name}</h2>
+                <div className="flex items-center gap-2 shrink-0">
                   <Toggle
                     checked={!disabledSet.has(selected.name)}
                     onChange={() => toggleSkillEnabled(selected.name)}

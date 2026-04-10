@@ -10,6 +10,7 @@ import { clearInputQueue } from '../core/agent/userInputQueue';
 import { clearSkillHooksByConversation } from '../core/tools/builtins';
 import { removeAgentsByConversation, setConversationLookup } from '../core/agent/backgroundAgentRegistry';
 import { cancelSubagent } from '../core/agent/subagentAbort';
+import { setComputerUseActive } from '../core/agent/computerUseStatus';
 import type { ConversationMeta } from '../core/session/conversationStorage';
 
 function generateId(): string {
@@ -133,7 +134,7 @@ interface ChatState {
 interface ChatActions {
   createConversation: (workspacePath?: string | null, options?: { scheduledTaskId?: string; triggerId?: string; imChannelId?: string; imPlatform?: string; projectId?: string; skipActivate?: boolean }) => string;
   startNewConversation: () => void;
-  switchConversation: (id: string) => void;
+  switchConversation: (id: string) => Promise<void>;
   setConversationWorkspace: (convId: string, path: string | null) => void;
   setConversationProject: (convId: string, projectId: string | undefined) => void;
   deleteConversation: (id: string) => void;
@@ -190,6 +191,9 @@ interface ChatActions {
 
 export type ChatStore = ChatState & ChatActions;
 
+// Monotonic counter to discard stale switchConversation results on rapid clicks
+let switchSeq = 0;
+
 export const useChatStore = create<ChatStore>()(
   persist(
     immer((set, get) => ({
@@ -241,15 +245,6 @@ export const useChatStore = create<ChatStore>()(
       },
 
       startNewConversation: () => {
-        // Index the conversation we're leaving (fire-and-forget, no LLM call)
-        const prevId = get().activeConversationId;
-        const prevConv = prevId ? get().conversations[prevId] : null;
-        if (prevConv && prevConv.messages.length >= 2) {
-          import('../core/memory/conversationIndexer').then(({ indexConversation }) => {
-            indexConversation(prevConv).catch(() => {});
-          });
-        }
-
         set((state) => {
           state.activeConversationId = null;
         });
@@ -257,45 +252,36 @@ export const useChatStore = create<ChatStore>()(
         useWorkspaceStore.getState().clearWorkspace();
       },
 
-      switchConversation: (id) => {
-        // Index the conversation we're leaving (fire-and-forget, no LLM call)
-        const prevId = get().activeConversationId;
-        const prevConv = prevId ? get().conversations[prevId] : null;
-        if (prevConv && prevConv.messages.length >= 2 && prevId !== id) {
-          import('../core/memory/conversationIndexer').then(({ indexConversation }) => {
-            indexConversation(prevConv).catch(() => {});
-          });
+      switchConversation: async (id) => {
+        const seq = ++switchSeq;
+
+        // Load from disk first if not in memory — ensures data is ready
+        // before activeConversationId changes, so React renders only once
+        // (no flash of welcome page during LRU cache miss)
+        if (!get().conversations[id] && get().conversationIndex[id]) {
+          await get().loadConversation(id);
         }
+
+        // Discard if user already clicked another conversation while loading
+        if (seq !== switchSeq) return;
 
         set((state) => {
           state.activeConversationId = id;
         });
 
-        // Load from disk if not in memory, then sync workspace
+        // Unload old conversations AFTER activeConversationId is set,
+        // so the target conversation is protected from eviction
+        get().unloadOldConversations();
+
+        // Sync workspace
+        const ws = useWorkspaceStore.getState();
         const conv = get().conversations[id];
-        const meta = get().conversationIndex[id];
-        if (!conv && meta) {
-          // Set workspace from index immediately (avoid delay)
-          const ws = useWorkspaceStore.getState();
-          if (meta.workspacePath) ws.setWorkspace(meta.workspacePath);
-          else ws.clearWorkspace();
-          // Async load messages — guard against race if user switches again before load completes
-          get().loadConversation(id).then(() => {
-            // Only sync workspace if this conversation is still active
-            if (get().activeConversationId !== id) return;
-            const loaded = get().conversations[id];
-            if (loaded?.workspacePath) {
-              ws.setWorkspace(loaded.workspacePath);
-            }
-          });
+        if (conv?.workspacePath) {
+          ws.setWorkspace(conv.workspacePath);
         } else {
-          // Already in memory — sync workspace immediately
-          const ws = useWorkspaceStore.getState();
-          if (conv?.workspacePath) {
-            ws.setWorkspace(conv.workspacePath);
-          } else {
-            ws.clearWorkspace();
-          }
+          const meta = get().conversationIndex[id];
+          if (meta?.workspacePath) ws.setWorkspace(meta.workspacePath);
+          else ws.clearWorkspace();
         }
       },
 
@@ -672,6 +658,13 @@ export const useChatStore = create<ChatStore>()(
           controller.abort();
           abortControllers.delete(convId);
         }
+        // Clean up Computer Use overlay and status on abort (synchronous imports for reliability)
+        setComputerUseActive(false);
+        import('@tauri-apps/api/core').then(({ invoke }) => {
+          invoke('hide_screen_border').catch(() => {});
+          invoke('window_show').catch(() => {});
+        }).catch(() => {});
+
         set((state) => {
           const messages = state.conversations[convId]?.messages;
           if (messages?.length) {
@@ -906,11 +899,29 @@ export const useChatStore = create<ChatStore>()(
             };
           });
         } catch {
-          // Load failed — conversation will appear empty
+          // Load failed — create an empty conversation so the chat view still
+          // renders (instead of falling through to the welcome page)
+          const meta = get().conversationIndex[convId];
+          if (meta) {
+            set((state) => {
+              state.conversations[convId] = {
+                id: meta.id,
+                title: meta.title,
+                createdAt: meta.createdAt,
+                updatedAt: meta.updatedAt,
+                messages: [],
+                status: 'idle',
+                workspacePath: meta.workspacePath,
+                imChannelId: meta.imChannelId,
+                imPlatform: meta.imPlatform,
+                scheduledTaskId: meta.scheduledTaskId,
+                triggerId: meta.triggerId,
+                projectId: meta.projectId,
+              };
+            });
+          }
         }
 
-        // Unload old conversations to limit memory usage
-        get().unloadOldConversations();
       },
 
       unloadOldConversations: () => {

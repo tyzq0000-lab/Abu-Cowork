@@ -16,9 +16,14 @@ vi.mock('../skill/loader', () => ({
   },
 }));
 
-vi.mock('./agentMemory', () => ({
-  loadAgentMemory: vi.fn().mockResolvedValue(''),
-  loadProjectMemory: vi.fn().mockResolvedValue(''),
+vi.mock('../memdir/scan', () => ({
+  loadMemoryIndex: vi.fn().mockResolvedValue(''),
+  scanMemoryFiles: vi.fn().mockResolvedValue([]),
+  readMemoryFile: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('../memdir/write', () => ({
+  touchMemory: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./projectRules', () => ({
@@ -63,19 +68,18 @@ vi.mock('../skill/preprocessor', () => ({
 }));
 
 import { buildSystemPrompt, routeInput } from './orchestrator';
-import { loadAgentMemory, loadProjectMemory } from './agentMemory';
 import { loadAllRules } from './projectRules';
+import { loadMemoryIndex, scanMemoryFiles } from '../memdir/scan';
 
-const mockLoadAgentMemory = vi.mocked(loadAgentMemory);
-const mockLoadProjectMemory = vi.mocked(loadProjectMemory);
 const mockLoadAllRules = vi.mocked(loadAllRules);
+const mockLoadMemoryIndex = vi.mocked(loadMemoryIndex);
+const mockScanMemoryFiles = vi.mocked(scanMemoryFiles);
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Reset defaults
-  mockLoadAgentMemory.mockResolvedValue('');
-  mockLoadProjectMemory.mockResolvedValue('');
   mockLoadAllRules.mockResolvedValue('');
+  mockLoadMemoryIndex.mockResolvedValue('');
+  mockScanMemoryFiles.mockResolvedValue([]);
 });
 
 describe('buildSystemPrompt - security features', () => {
@@ -108,38 +112,43 @@ describe('buildSystemPrompt - security features', () => {
     expect(rulesContent).toContain('使用 TypeScript');
   });
 
-  it('wraps agent memory in <agent-memory> tags', async () => {
-    mockLoadAgentMemory.mockResolvedValue('用户喜欢简洁回复');
+  it('wraps agent memory in <agent-memory> tags when memdir has files', async () => {
+    const { readMemoryFile } = await import('../memdir/scan');
+    const mockReadMemoryFile = vi.mocked(readMemoryFile);
+    mockScanMemoryFiles.mockResolvedValue([{
+      filename: 'user_test.md', filePath: '/mock/user_test.md',
+      name: '用户喜欢简洁回复', description: '用户喜欢简洁回复',
+      type: 'user', source: 'agent_explicit',
+      created: Date.now(), updated: Date.now(), accessCount: 0,
+    }]);
+    mockReadMemoryFile.mockResolvedValue({
+      header: { filename: 'user_test.md', filePath: '/mock/user_test.md', name: '用户喜欢简洁回复', description: '用户喜欢简洁回复', type: 'user', source: 'agent_explicit', created: Date.now(), updated: Date.now(), accessCount: 0 },
+      content: '用户喜欢简洁回复',
+    });
     const prompt = await buildSystemPrompt(generalRoute, basePrompt, 'test-conv');
     expect(prompt).toContain('<agent-memory>');
-    expect(prompt).toContain('</agent-memory>');
-    const memStart = prompt.indexOf('<agent-memory>');
-    const memEnd = prompt.indexOf('</agent-memory>');
-    const memContent = prompt.slice(memStart, memEnd);
-    expect(memContent).toContain('用户喜欢简洁回复');
+    expect(prompt).toContain('用户喜欢简洁回复');
   });
 
-  it('wraps project memory in <project-memory> tags', async () => {
-    mockLoadProjectMemory.mockResolvedValue('技术栈: React + Vite');
+  it('wraps memory index in <memory-index> tags', async () => {
+    mockLoadMemoryIndex.mockResolvedValue('- [user_role.md](user_role.md) — 数据团队 PM');
     const prompt = await buildSystemPrompt(generalRoute, basePrompt, 'test-conv');
-    expect(prompt).toContain('<project-memory>');
-    expect(prompt).toContain('</project-memory>');
-    const memStart = prompt.indexOf('<project-memory>');
-    const memEnd = prompt.indexOf('</project-memory>');
+    expect(prompt).toContain('<memory-index>');
+    expect(prompt).toContain('</memory-index>');
+    const memStart = prompt.indexOf('<memory-index>');
+    const memEnd = prompt.indexOf('</memory-index>');
     const memContent = prompt.slice(memStart, memEnd);
-    expect(memContent).toContain('React + Vite');
+    expect(memContent).toContain('数据团队 PM');
   });
 
   it('safety anchor references the XML tag names', async () => {
     mockLoadAllRules.mockResolvedValue('some rules');
-    mockLoadAgentMemory.mockResolvedValue('some memory');
-    mockLoadProjectMemory.mockResolvedValue('some project memory');
+    mockLoadMemoryIndex.mockResolvedValue('- some memory index');
     const prompt = await buildSystemPrompt(generalRoute, basePrompt, 'test-conv');
     const safetySection = prompt.slice(prompt.lastIndexOf('## 安全提醒'));
-    // Anchor should reference all three tag names so the model knows what to be cautious about
+    // Anchor should reference key XML tag names so the model knows what to be cautious about
     expect(safetySection).toContain('<user-rules>');
     expect(safetySection).toContain('<agent-memory>');
-    expect(safetySection).toContain('<project-memory>');
   });
 
   it('includes trust boundary note for project rules', async () => {
@@ -172,7 +181,7 @@ describe('buildSystemPrompt - structure', () => {
 
   it('does not inject rules/memory in fork context', async () => {
     mockLoadAllRules.mockResolvedValue('should not appear');
-    mockLoadAgentMemory.mockResolvedValue('should not appear either');
+    mockLoadMemoryIndex.mockResolvedValue('should not appear either');
     const forkRoute = {
       type: 'skill' as const,
       name: 'test-skill',

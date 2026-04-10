@@ -15,6 +15,7 @@ mod trigger_server;
 mod feishu_ws;
 mod window_info;
 mod computer_use;
+mod overlay;
 
 /// Maximum number of output lines to collect from a shell command.
 /// Prevents OOM when commands produce unbounded output.
@@ -1012,6 +1013,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(McpState::default())
         .setup(|app| {
             // Build tray menu — bilingual labels for cross-locale compatibility
@@ -1078,6 +1080,12 @@ pub fn run() {
             computer_use::keyboard_press,
             computer_use::check_macos_permissions,
             computer_use::request_screen_recording,
+            computer_use::get_abu_window_id,
+            computer_use::capture_screen_excluding,
+            computer_use::activate_app,
+            overlay::show_screen_border,
+            overlay::hide_screen_border,
+            overlay::get_overlay_window_id,
             trigger_server::start_trigger_server,
             trigger_server::get_trigger_server_port,
             get_local_ip,

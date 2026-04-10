@@ -85,6 +85,11 @@ const KNOWN_MODELS: Record<string, ModelCapabilities> = {
   'mistral':                    { vision: false, thinking: false,              toolResultImages: 'none',       documentBlock: false, maxOutputTokens: 4096,  contextWindow: 32768 },
   'codellama':                  { vision: false, thinking: false,              toolResultImages: 'none',       documentBlock: false, maxOutputTokens: 4096,  contextWindow: 16384 },
   'deepseek-r1:distill':        { vision: false, thinking: 'openai-reasoning', toolResultImages: 'none',       documentBlock: false, maxOutputTokens: 8192,  contextWindow: 128000 },
+
+  // GLM series (Zhipu AI / Huawei ModelArts)
+  'glm-4':                      { vision: false, thinking: false,              toolResultImages: 'none',       documentBlock: false, maxOutputTokens: 4096,  contextWindow: 128000 },
+  'glm-4v':                     { vision: true,  thinking: false,              toolResultImages: 'workaround', documentBlock: false, maxOutputTokens: 4096,  contextWindow: 128000 },
+  'glm-5':                      { vision: false, thinking: false,              toolResultImages: 'none',       documentBlock: false, maxOutputTokens: 8192,  contextWindow: 128000 },
 };
 
 // ── Pattern-based defaults ──────────────────────────────────────────
@@ -140,6 +145,8 @@ export function resolveCapabilities(modelId: string): ModelCapabilities {
   if (/gemma/i.test(id)) return { ...FALLBACK_DEFAULT, vision: false, toolResultImages: 'none' };
   if (/phi[34]/i.test(id)) return { ...FALLBACK_DEFAULT, vision: false, toolResultImages: 'none' };
   if (/llama|mistral/i.test(id)) return { ...FALLBACK_DEFAULT, toolResultImages: 'none' };
+  if (/glm.*v/i.test(id)) return { vision: true, thinking: false, toolResultImages: 'workaround', documentBlock: false, maxOutputTokens: 4096, contextWindow: 128000 };
+  if (/glm/i.test(id)) return { vision: false, thinking: false, toolResultImages: 'none', documentBlock: false, maxOutputTokens: 8192, contextWindow: 128000 };
 
   // 4. Fallback: assume modern model with basic capabilities
   return FALLBACK_DEFAULT;

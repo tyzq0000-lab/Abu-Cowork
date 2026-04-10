@@ -1,15 +1,13 @@
 import { useActiveConversation } from '@/stores/chatStore';
 import { usePreviewStore } from '@/stores/previewStore';
 import { useI18n, format as i18nFormat } from '@/i18n';
-import { File, FileCode, FileJson, FileText, FileImage, ExternalLink, Undo2 } from 'lucide-react';
+import { File, FileCode, FileJson, FileText, FileImage, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useMemo, useState } from 'react';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { getBaseName } from '@/utils/pathUtils';
 import { extractFileOutputs } from '@/utils/workflowExtractor';
 import { resolveFileSource, type ResolvedSource } from '@/core/session/outputSnapshots';
-import { runRestoreFlow } from '@/utils/restoreFlow';
-import { useFileRefreshStore } from '@/stores/fileRefreshStore';
 
 // Extract file extension and return appropriate icon
 function getFileIcon(path: string) {
@@ -46,17 +44,14 @@ interface FileCardProps {
   operationLabels: Record<string, string>;
   previewTitle: string;
   finderTitle: string;
-  restoreTitle: string;
   fileMissingTitle: string;
 }
 
-function FileCard({ file, conversationId, operationLabels, previewTitle, finderTitle, restoreTitle, fileMissingTitle }: FileCardProps) {
+function FileCard({ file, conversationId, operationLabels, previewTitle, finderTitle, fileMissingTitle }: FileCardProps) {
   const Icon = getFileIcon(file.path);
   const fileName = getFileName(file.path);
   const openPreview = usePreviewStore((s) => s.openPreview);
   const [resolved, setResolved] = useState<ResolvedSource | null>(null);
-  // Subscribe to global refresh tick: any restore (here or elsewhere) re-resolves us.
-  const refreshTick = useFileRefreshStore((s) => s.tick);
 
   // Resolve effective state (live / snapshot / unavailable) so action buttons
   // can switch behavior intelligently.
@@ -68,9 +63,8 @@ function FileCard({ file, conversationId, operationLabels, previewTitle, finderT
         if (!cancelled) setResolved({ status: 'missing', basename: getBaseName(file.path), originalPath: file.path });
       });
     return () => { cancelled = true; };
-  }, [file.path, conversationId, refreshTick]);
+  }, [file.path, conversationId]);
 
-  const isFromSnapshot = resolved?.status === 'available' && resolved.isFromSnapshot;
   const isUnavailable = resolved?.status === 'missing' || resolved?.status === 'skipped';
   const effectivePath = resolved?.status === 'available' ? resolved.path : null;
 
@@ -78,20 +72,10 @@ function FileCard({ file, conversationId, operationLabels, previewTitle, finderT
     if (effectivePath) openPreview(effectivePath);
   };
 
-  const handleAction = async (e: React.MouseEvent) => {
+  const handleReveal = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!resolved) return;
-    if (resolved.status === 'available' && !resolved.isFromSnapshot) {
-      // Live: reveal original in Finder
-      try { await revealItemInDir(resolved.path); } catch (err) { console.error(err); }
-      return;
-    }
-    if (resolved.status === 'available' && resolved.isFromSnapshot && conversationId) {
-      // Snapshot: restore to original location.
-      // runRestoreFlow handles the global refresh signal — no manual tick bump needed.
-      await runRestoreFlow(conversationId, file.path);
-    }
-    // unavailable: nothing to do
+    if (!effectivePath) return;
+    try { await revealItemInDir(effectivePath); } catch (err) { console.error(err); }
   };
 
   return (
@@ -125,13 +109,11 @@ function FileCard({ file, conversationId, operationLabels, previewTitle, finderT
       </span>
       {!isUnavailable && (
         <button
-          onClick={handleAction}
+          onClick={handleReveal}
           className="p-0.5 rounded hover:bg-[var(--abu-bg-hover)] opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-          title={isFromSnapshot ? `${restoreTitle}: ${file.path}` : finderTitle}
+          title={finderTitle}
         >
-          {isFromSnapshot
-            ? <Undo2 className="w-3 h-3 text-amber-600" />
-            : <ExternalLink className="w-3 h-3 text-[var(--abu-text-muted)]" />}
+          <ExternalLink className="w-3 h-3 text-[var(--abu-text-muted)]" />
         </button>
       )}
     </div>
@@ -204,7 +186,6 @@ export default function FilesSection() {
             operationLabels={operationLabels}
             previewTitle={t.panel.clickToPreview}
             finderTitle={t.panel.showInFinderButton}
-            restoreTitle={t.chat.restoreToOriginal}
             fileMissingTitle={t.chat.fileMissing}
           />
         ))}

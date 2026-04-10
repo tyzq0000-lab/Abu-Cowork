@@ -49,19 +49,15 @@ export function WebSearchForm() {
           options={SEARCH_PROVIDERS.map((p) => ({ value: p.id, label: t.settings[p.labelKey] }))}
         />
         {currentProvider?.signupUrl && (
-          <a
-            href={currentProvider.signupUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-xs text-[var(--abu-clay)] hover:underline mt-1"
-            onClick={(e) => {
-              e.preventDefault();
+          <span
+            className="inline-flex items-center gap-1 text-xs text-[var(--abu-clay)] hover:underline mt-1 cursor-pointer"
+            onClick={() => {
               open(currentProvider.signupUrl!);
             }}
           >
             <ExternalLink className="h-3 w-3" />
             {isSearXNG ? 'SearXNG Docs' : 'Get API Key'}
-          </a>
+          </span>
         )}
       </div>
 

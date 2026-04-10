@@ -131,7 +131,8 @@ function App() {
       triggerEngine.start();
       imChannelRouter.start();
       reconcileIMSessions();
-      import('@/core/memory/migrator').then(m => m.migrateIfNeeded()).catch(() => {});
+      // Migrate old memory systems (entries.json / memory.md) to memdir (.md files)
+      import('@/core/memdir/migrate').then(m => m.migrateMemdirIfNeeded()).catch(() => {});
       // Initialize conversation file storage and check for crash recovery
       import('@/core/session/conversationStorage').then(m => m.initConversationStorage()).catch(() => {});
       import('@/core/session/checkpoint').then(async ({ findOrphanedCheckpoints, clearCheckpoint }) => {

@@ -42,10 +42,11 @@ const zhCN: TranslationDict = {
     deleteTitle: '删除记忆',
     legacyHint: '旧版记忆（将在下次对话时自动迁移为结构化格式）',
     emptyHint: '对话时 AI 会自动积累记忆，或你可以让 AI "记住这个"',
+    globalMemories: '全局记忆',
   },
 
   soul: {
-    title: '阿布人格',
+    title: '性格',
     subtitle: '阿布出厂自带性格，你可以按自己的喜好调整',
     defaultLabel: '当前使用默认性格',
     customize: '自定义',
@@ -127,15 +128,6 @@ const zhCN: TranslationDict = {
     fileOversized: '文件过大未自动备份',
     fileBackupFailed: '文件备份失败',
     cannotRevealOriginal: '原文件已不在原位置',
-    restoreToOriginal: '恢复到原位置',
-    restoreConfirmTitle: '恢复文件',
-    restoreConfirmBody: '将自动备份恢复到 {path}?',
-    restoreSuccess: '已恢复到 {path}',
-    restoreFailedNoSnapshot: '没有可用的备份',
-    restoreFailedNoParent: '原目录不存在,改用另存为吗?',
-    restoreFailedCopy: '恢复失败: {reason}',
-    saveSnapshotAs: '另存为...',
-    saveSnapshotAsSuccess: '已另存到 {path}',
     sources: '来源',
     showAllSources: '显示全部',
     collapseSources: '收起',
@@ -1154,7 +1146,7 @@ const zhCN: TranslationDict = {
   },
 
   imChannel: {
-    title: 'IM 频道',
+    title: '频道',
     description: '连接 IM 平台，让用户通过 @Abu 或私聊直接使用 Abu 的能力',
     addChannel: '添加频道',
     editChannel: '编辑频道',

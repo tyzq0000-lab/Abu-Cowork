@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useI18n } from '@/i18n';
-import {
-  loadProjectMemory, saveProjectMemory, clearProjectMemory,
-  loadAgentMemory, saveAgentMemory, clearAgentMemory,
-} from '@/core/agent/agentMemory';
+import { scanMemoryFiles, readMemoryFile } from '@/core/memdir/scan';
+import { deleteMemory, clearAllMemories } from '@/core/memdir/write';
+import type { MemoryHeader, MemoryType } from '@/core/memdir/types';
 import ConfirmDialog from './ConfirmDialog';
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { format } from '@/i18n';
 
 interface ProjectMemoryProps {
   open: boolean;
@@ -22,19 +23,43 @@ interface PersonalMemoryProps {
 
 type MemoryViewModalProps = ProjectMemoryProps | PersonalMemoryProps;
 
-const MAIN_AGENT_NAME = 'abu';
+const TYPE_COLORS: Record<MemoryType, string> = {
+  user: 'bg-orange-100 text-orange-700',
+  project: 'bg-purple-100 text-purple-700',
+  feedback: 'bg-teal-100 text-teal-700',
+  reference: 'bg-blue-100 text-blue-700',
+};
+
+const TYPE_LABELS: Record<MemoryType, string> = {
+  user: '偏好',
+  project: '项目',
+  feedback: '反馈',
+  reference: '参考',
+};
+
+function formatAge(timestamp: number): string {
+  const diffMs = Date.now() - timestamp;
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 60) return `${minutes}分钟前`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}天前`;
+  return `${Math.floor(days / 30)}个月前`;
+}
 
 export default function MemoryViewModal(props: MemoryViewModalProps) {
   const { open, onClose, scope } = props;
   const { t } = useI18n();
-  const [content, setContent] = useState('');
+  const [headers, setHeaders] = useState<MemoryHeader[]>([]);
+  const [expandedContent, setExpandedContent] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MemoryHeader | null>(null);
 
   const isPersonal = scope === 'personal';
-  // Only re-fetch when workspacePath changes in project mode; ignore it in personal mode
-  const effectivePath = isPersonal ? undefined : props.workspacePath;
+  const wsPath = isPersonal ? null : props.workspacePath;
 
   useEffect(() => {
     if (!open) return;
@@ -42,19 +67,17 @@ export default function MemoryViewModal(props: MemoryViewModalProps) {
     async function load() {
       setLoading(true);
       try {
-        const text = isPersonal
-          ? await loadAgentMemory(MAIN_AGENT_NAME)
-          : await loadProjectMemory(props.workspacePath);
-        if (!cancelled) setContent(text);
+        const items = await scanMemoryFiles(wsPath);
+        if (!cancelled) setHeaders(items.sort((a, b) => b.updated - a.updated));
       } catch {
-        if (!cancelled) setContent('');
+        if (!cancelled) setHeaders([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     load();
     return () => { cancelled = true; };
-  }, [open, isPersonal, effectivePath, props.workspacePath]);
+  }, [open, wsPath]);
 
   useEffect(() => {
     if (!open) return;
@@ -67,30 +90,37 @@ export default function MemoryViewModal(props: MemoryViewModalProps) {
 
   if (!open) return null;
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      if (isPersonal) {
-        await saveAgentMemory(MAIN_AGENT_NAME, content);
-      } else {
-        await saveProjectMemory(props.workspacePath, content);
+  const handleExpand = async (header: MemoryHeader) => {
+    const id = header.filename;
+    if (expandedId === id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(id);
+    if (!expandedContent[id]) {
+      const file = await readMemoryFile(header.filePath);
+      if (file) {
+        setExpandedContent(prev => ({ ...prev, [id]: file.content }));
       }
-      onClose();
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteMemory(deleteTarget.filename, wsPath);
+      setDeleteTarget(null);
+      const items = await scanMemoryFiles(wsPath);
+      setHeaders(items.sort((a, b) => b.updated - a.updated));
     } catch (err) {
-      console.error('Failed to save memory:', err);
-    } finally {
-      setSaving(false);
+      console.error('Failed to delete memory:', err);
     }
   };
 
   const handleClear = async () => {
     try {
-      if (isPersonal) {
-        await clearAgentMemory(MAIN_AGENT_NAME);
-      } else {
-        await clearProjectMemory(props.workspacePath);
-      }
-      setContent('');
+      await clearAllMemories(wsPath);
+      setHeaders([]);
       setShowClearConfirm(false);
     } catch (err) {
       console.error('Failed to clear memory:', err);
@@ -99,7 +129,6 @@ export default function MemoryViewModal(props: MemoryViewModalProps) {
 
   const title = isPersonal ? t.sidebar.personalMemoryTitle : t.panel.memoryTitle;
   const desc = isPersonal ? t.sidebar.personalMemoryDesc : t.panel.memoryDesc;
-  const placeholder = isPersonal ? t.sidebar.personalMemoryPlaceholder : t.panel.memoryPlaceholder;
   const accentColor = isPersonal ? 'var(--abu-clay)' : '#8b7ec8';
 
   return (
@@ -112,6 +141,17 @@ export default function MemoryViewModal(props: MemoryViewModalProps) {
         cancelText={t.common.cancel}
         onConfirm={handleClear}
         onCancel={() => setShowClearConfirm(false)}
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={t.memory.deleteTitle}
+        message={deleteTarget?.name ?? ''}
+        confirmText={t.common.delete}
+        cancelText={t.common.cancel}
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
         variant="danger"
       />
 
@@ -136,20 +176,64 @@ export default function MemoryViewModal(props: MemoryViewModalProps) {
                 style={{ borderColor: accentColor, borderTopColor: 'transparent' }}
               />
             </div>
+          ) : headers.length > 0 ? (
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-2 mb-4">
+              <div className="text-[12px] text-[var(--abu-text-placeholder)] mb-2">
+                {format(t.memory.entryCount, { count: String(headers.length) })}
+              </div>
+              {headers.map((header) => (
+                <div
+                  key={header.filename}
+                  className="border border-[var(--abu-border)] rounded-lg bg-[var(--abu-bg-muted)] overflow-hidden"
+                >
+                  <div
+                    className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-[var(--abu-bg-hover)] transition-colors"
+                    onClick={() => handleExpand(header)}
+                  >
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${TYPE_COLORS[header.type]}`}>
+                      {TYPE_LABELS[header.type]}
+                    </span>
+                    <span className="text-[12px] text-[var(--abu-text-primary)] flex-1 truncate">
+                      {header.name}
+                    </span>
+                    <span className="text-[10px] text-[var(--abu-text-placeholder)] whitespace-nowrap shrink-0">
+                      {formatAge(header.updated)}
+                    </span>
+                    {expandedId === header.filename ? (
+                      <ChevronUp className="h-3 w-3 text-[var(--abu-text-placeholder)] shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3 text-[var(--abu-text-placeholder)] shrink-0" />
+                    )}
+                  </div>
+
+                  {expandedId === header.filename && (
+                    <div className="px-3 pb-2.5 border-t border-[var(--abu-bg-active)]">
+                      <p className="text-[11px] text-[var(--abu-text-tertiary)] leading-relaxed mt-2 whitespace-pre-wrap">
+                        {expandedContent[header.filename] ?? header.description}
+                      </p>
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteTarget(header); }}
+                          className="p-1 rounded text-[var(--abu-text-placeholder)] hover:text-red-500 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           ) : (
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={placeholder}
-              className="flex-1 min-h-[280px] max-h-[50vh] w-full px-3 py-3 rounded-lg border border-[var(--abu-border)] text-[13px] text-[var(--abu-text-primary)] bg-[var(--abu-bg-base)] focus:outline-none transition-colors resize-none font-mono leading-relaxed"
-              style={{ '--tw-ring-color': accentColor } as React.CSSProperties}
-              onFocus={(e) => e.target.style.borderColor = accentColor}
-              onBlur={(e) => e.target.style.borderColor = 'var(--abu-border)'}
-            />
+            <div className="flex-1 flex items-center justify-center py-12">
+              <p className="text-[13px] text-[var(--abu-text-placeholder)]">
+                {t.panel.memoryEmpty}
+              </p>
+            </div>
           )}
 
-          <div className="flex gap-3 mt-4">
-            {content.trim() && (
+          <div className="flex gap-3">
+            {headers.length > 0 && (
               <button
                 onClick={() => setShowClearConfirm(true)}
                 className="px-4 py-2.5 rounded-lg text-[13px] font-medium text-red-500 hover:bg-red-50 transition-colors"
@@ -162,14 +246,7 @@ export default function MemoryViewModal(props: MemoryViewModalProps) {
               onClick={onClose}
               className="px-4 py-2.5 rounded-lg text-[13px] font-medium bg-[var(--abu-bg-muted)] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-hover)] transition-colors"
             >
-              {t.common.cancel}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || loading}
-              className="px-4 py-2.5 rounded-lg text-[14px] font-medium bg-[var(--abu-clay)] text-white hover:bg-[var(--abu-clay-hover)] transition-colors disabled:opacity-50"
-            >
-              {saving ? t.panel.instructionsSaving : t.common.save}
+              {t.common.close}
             </button>
           </div>
         </div>

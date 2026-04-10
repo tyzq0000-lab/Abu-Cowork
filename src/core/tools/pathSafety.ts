@@ -235,6 +235,38 @@ function isInAuthorizedWorkspace(path: string, capability: 'read' | 'write' = 'r
 }
 
 /**
+ * Check if an absolute path is inside an Abu memory directory.
+ * Whitelists ~/.abu/memory/ and ~/.abu/projects/{key}/memory/.
+ * This allows file tools (read_file, write_file, edit_file) to operate
+ * on memory files without triggering permission dialogs.
+ */
+async function isAbuMemoryPath(normalizedPath: string): Promise<boolean> {
+  const home = await getHomeDir();
+  const abuBase = `${home}/.abu`;
+
+  // ~/.abu/memory/
+  if (normalizedPath.startsWith(`${abuBase}/memory/`) || normalizedPath === `${abuBase}/memory`) {
+    return true;
+  }
+
+  // ~/.abu/projects/*/memory/
+  const projectsPrefix = `${abuBase}/projects/`;
+  if (normalizedPath.startsWith(projectsPrefix)) {
+    const rest = normalizedPath.slice(projectsPrefix.length);
+    // rest looks like "<key>/memory/..." or "<key>/memory"
+    const slashIdx = rest.indexOf('/');
+    if (slashIdx > 0) {
+      const afterKey = rest.slice(slashIdx + 1);
+      if (afterKey === 'memory' || afterKey.startsWith('memory/')) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * Normalize and resolve a path for security checking.
  * Handles both Unix and Windows paths:
  * - Strips Windows extended-length path prefix (\\?\)
@@ -457,6 +489,11 @@ export async function checkReadPath(path: string): Promise<PathCheckResult> {
     return { allowed: true };
   }
 
+  // Check Abu memory directories (~/.abu/memory/, ~/.abu/projects/*/memory/)
+  if (await isAbuMemoryPath(normalizedPath)) {
+    return { allowed: true };
+  }
+
   // Check always allowed paths (/tmp etc.)
   for (const allowedPath of ALWAYS_ALLOWED_PATHS) {
     if (normalizedPath.startsWith(allowedPath)) {
@@ -540,6 +577,11 @@ export async function checkWritePath(path: string): Promise<PathCheckResult> {
 
   // Check if in authorized workspace (already granted permission)
   if (isInAuthorizedWorkspace(normalizedPath, 'write')) {
+    return { allowed: true };
+  }
+
+  // Check Abu memory directories (~/.abu/memory/, ~/.abu/projects/*/memory/)
+  if (await isAbuMemoryPath(normalizedPath)) {
     return { allowed: true };
   }
 

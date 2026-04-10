@@ -4,18 +4,8 @@ import { useWorkspaceStore } from '../../../stores/workspaceStore';
 import { appendTaskLog, type TaskCategory } from '../../agent/taskLog';
 import { getTodos, addTodo, updateTodo, setTodos, formatTodosForPrompt } from '../../agent/todoManager';
 import type { TodoStatus } from '../../agent/todoManager';
-import { clearAgentMemory, clearProjectMemory } from '../../agent/agentMemory';
 import { TOOL_NAMES } from '../toolNames';
-
-/** Auto-extract keywords from content when none provided */
-function autoExtractKeywords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[\s,;.!?，。！？、；：""''（）[\]{}:：\-\n]+/)
-    .filter(w => w.length >= 2 && w.length <= 20 && !/^\d+$/.test(w))
-    .filter((w, i, arr) => arr.indexOf(w) === i) // dedupe
-    .slice(0, 10);
-}
+import type { MemoryType } from '../../memdir/types';
 
 export const reportPlanTool: ToolDefinition = {
   name: TOOL_NAMES.REPORT_PLAN,
@@ -43,105 +33,56 @@ export const reportPlanTool: ToolDefinition = {
 
 export const updateMemoryTool: ToolDefinition = {
   name: TOOL_NAMES.UPDATE_MEMORY,
-  description: '保存持久记忆。每条记忆需指定 category 分类。scope="user" 保存个人偏好（跨项目），scope="project" 保存项目知识（仅当前工作区）。注意：项目规则（.abu/ABU.md）由用户手动维护，不要用此工具修改规则。',
+  description: '保存持久记忆。记忆按当前工作区隔离存储，无工作区时存为全局记忆。注意：项目规则（.abu/ABU.md）由用户手动维护，不要用此工具修改规则。',
   inputSchema: {
     type: 'object',
     properties: {
-      agent_name: { type: 'string', description: '代理名称' },
+      name: { type: 'string', description: '记忆名称（简短标题）' },
       content: { type: 'string', description: '记忆内容（必填）' },
-      summary: { type: 'string', description: '一句话摘要' },
-      category: {
+      description: { type: 'string', description: '一句话描述，用于索引检索' },
+      type: {
         type: 'string',
-        description: '分类: user_preference(用户偏好) / project_knowledge(项目知识) / conversation_fact(对话事实) / decision(决策) / action_item(待办) / feedback(行为纠正)',
-        enum: ['user_preference', 'project_knowledge', 'conversation_fact', 'decision', 'action_item', 'feedback'],
-      },
-      keywords: {
-        type: 'array',
-        items: { type: 'string' },
-        description: '关键词列表，用于检索（2-5个）',
-      },
-      scope: {
-        type: 'string',
-        description: '记忆范围: user(个人级) / project(项目级)',
-        enum: ['user', 'project'],
+        description: '分类: user(用户偏好/角色/知识水平) / feedback(行为纠正或确认，含原因和适用场景) / project(项目动态/决策/技术栈) / reference(外部系统指针)',
+        enum: ['user', 'feedback', 'project', 'reference'],
       },
       action: {
         type: 'string',
-        description: '操作类型: append(添加，默认) / rewrite(清空并重写) / clear(清空所有记忆)',
-        enum: ['append', 'rewrite', 'clear'],
+        description: '操作类型: append(添加，默认) / clear(清空所有记忆)',
+        enum: ['append', 'clear'],
       },
     },
-    required: ['agent_name', 'content'],
+    required: ['name', 'content'],
   },
   execute: async (input, context) => {
     const action = (input.action as string) || 'append';
     const content = (input.content as string) || '';
-    const scope = ((input.scope as string) || 'user') as 'user' | 'project';
-    const summary = (input.summary as string) || content.slice(0, 80);
-    const category = ((input.category as string) || 'conversation_fact') as import('../../memory/types').MemoryCategory;
-    const keywords = (input.keywords as string[]) || [];
+    const name = (input.name as string) || content.slice(0, 40);
+    const description = (input.description as string) || content.slice(0, 80);
+    const type = ((input.type as string) || 'project') as MemoryType;
 
     try {
       const workspacePath = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
 
-      if (scope === 'project' && !workspacePath) {
-        return '错误：当前没有设置工作区，无法使用项目级记忆。请先设置工作区路径。';
-      }
-
       if (action === 'clear') {
-        // Clear both structured entries AND legacy files
-        const { getMemoryBackend } = await import('../../memory/router');
-        const backend = getMemoryBackend();
-        const entries = await backend.list({ scope, projectPath: scope === 'project' ? workspacePath ?? undefined : undefined });
-        for (const e of entries) {
-          await backend.remove(e.id);
-        }
-        // Also clear legacy files for completeness
-        if (scope === 'project' && workspacePath) {
-          await clearProjectMemory(workspacePath);
-        } else {
-          await clearAgentMemory('abu');
-        }
-        return `已清空${scope === 'project' ? '项目' : '个人'}记忆（${entries.length} 条）。`;
+        const { clearAllMemories } = await import('../../memdir/write');
+        const count = await clearAllMemories(workspacePath);
+        return `已清空记忆（${count} 条）。`;
       }
 
-      if (action === 'rewrite') {
-        // Rewrite = clear all + add new entry
-        if (!content) return '错误：rewrite 操作需要提供 content。';
-        const { getMemoryBackend } = await import('../../memory/router');
-        const backend = getMemoryBackend();
-        const entries = await backend.list({ scope, projectPath: scope === 'project' ? workspacePath ?? undefined : undefined });
-        for (const e of entries) {
-          await backend.remove(e.id);
-        }
-        const entry = await backend.add({
-          category,
-          summary,
-          content,
-          keywords: keywords.length > 0 ? keywords : autoExtractKeywords(content),
-          sourceType: 'agent_explicit',
-          scope,
-          projectPath: scope === 'project' ? workspacePath ?? undefined : undefined,
-        });
-        return `已重写记忆 [${category}]: ${entry.summary}`;
-      }
-
-      // Append: add structured memory entry
+      // Append: write a new .md memory file
       if (!content) return '错误：content 不能为空。';
 
-      const { getMemoryBackend } = await import('../../memory/router');
-      const backend = getMemoryBackend();
-      const entry = await backend.add({
-        category,
-        summary,
+      const { writeMemory } = await import('../../memdir/write');
+      const filename = await writeMemory({
+        name,
+        description,
+        type,
         content,
-        keywords: keywords.length > 0 ? keywords : autoExtractKeywords(content),
-        sourceType: 'agent_explicit',
-        scope,
-        projectPath: scope === 'project' ? workspacePath ?? undefined : undefined,
+        source: 'agent_explicit',
+        workspacePath,
       });
 
-      return `已保存记忆 [${category}]: ${entry.summary}`;
+      return `已保存记忆 [${type}]: ${name} → ${filename}`;
     } catch (err) {
       return `Error updating memory: ${err instanceof Error ? err.message : String(err)}`;
     }

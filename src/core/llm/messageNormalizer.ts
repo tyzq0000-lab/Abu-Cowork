@@ -110,7 +110,7 @@ function convertUserContent(
   if (imageCount > 0 && !supportsVision) {
     blocks.push({
       type: 'text',
-      text: `[用户上传了${imageCount}张图片，当前模型不支持图片理解]`,
+      text: `[用户上传了${imageCount}张图片，但当前模型不支持图片理解，也无法通过 read_file 等工具间接查看图片。请直接告知用户当前模型不支持图片识别，建议切换到支持视觉的模型。]`,
     });
   }
 
@@ -154,14 +154,21 @@ export function normalizeMessages(
         const result = 'result' in tc ? tc.result : undefined;
         const resultContent = 'resultContent' in tc ? tc.resultContent : undefined;
         const isError = 'isError' in tc ? !!tc.isError : false;
-        const images = supportsVision ? extractImages(resultContent) : [];
+        const rawImages = extractImages(resultContent);
+        const images = supportsVision ? rawImages : [];
+
+        // When images are stripped for non-vision models, append a hint so the
+        // model knows it cannot see screenshots and should stop requesting them.
+        let effectiveResult = result ?? ORPHAN_PLACEHOLDER;
+        if (!supportsVision && rawImages.length > 0 && result !== undefined) {
+          effectiveResult += '\n[当前模型不支持视觉识别，无法查看截图内容。请使用其他方式获取信息，不要再尝试截图操作。]';
+        }
 
         return {
           id: generateToolId(i, mi),
           name: tc.name,
           input: tc.input,
-          // ★ Orphan fix: guarantee result is never undefined
-          result: result ?? ORPHAN_PLACEHOLDER,
+          result: effectiveResult,
           resultImages: images,
           isError: result === undefined ? true : isError,
         };

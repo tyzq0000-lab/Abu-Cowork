@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists } from '@tauri-apps/plugin-fs';
+import { scanMemoryFiles } from '@/core/memdir/scan';
 import {
   FolderOpen,
   ExternalLink,
@@ -79,8 +80,9 @@ export default function WorkspaceSection() {
         setHasInstructions(false);
       }
       try {
-        const memoryPath = joinPath(currentPath, '.abu', 'MEMORY.md');
-        setHasMemory(await exists(memoryPath));
+        // Check memdir for this workspace
+        const headers = await scanMemoryFiles(currentPath);
+        setHasMemory(headers.length > 0);
       } catch {
         setHasMemory(false);
       }
@@ -174,9 +176,14 @@ export default function WorkspaceSection() {
       {currentPath && (
         <MemoryViewModal
           open={showMemoryModal}
-          onClose={() => {
+          onClose={async () => {
             setShowMemoryModal(false);
-            exists(joinPath(currentPath, '.abu', 'MEMORY.md')).then(setHasMemory).catch(() => setHasMemory(false));
+            try {
+              const headers = await scanMemoryFiles(currentPath);
+              setHasMemory(headers.length > 0);
+            } catch {
+              setHasMemory(false);
+            }
           }}
           scope="project"
           workspacePath={currentPath}

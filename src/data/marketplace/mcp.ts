@@ -3,20 +3,6 @@ import type { MCPTemplate, ModelPreset } from '@/types/marketplace';
 /** MCP Server templates for quick installation */
 export const mcpTemplates: MCPTemplate[] = [
   {
-    id: 'filesystem',
-    name: 'filesystem',
-    description: '文件系统访问，支持读写文件和目录操作',
-    command: 'npx',
-    defaultArgs: ['-y', '@anthropic/mcp-server-filesystem', '/path/to/allowed/dir'],
-    configurableArgs: [
-      {
-        index: 2,
-        label: '允许访问的目录',
-        placeholder: '~/projects',
-      },
-    ],
-  },
-  {
     id: 'brave-search',
     name: 'brave-search',
     description: '使用 Brave Search API 进行网络搜索',
@@ -195,7 +181,7 @@ export const mcpTemplates: MCPTemplate[] = [
     command: 'npx',
     defaultArgs: ['-y', 'abu-browser-bridge@latest'],
     configurableArgs: [],
-    setupHint: '需要配合 Abu Browser Bridge Chrome 插件使用。请在 Chrome 扩展商店搜索安装 "Abu Browser Bridge"，或从 GitHub 下载手动加载。',
+    setupHint: '需要配合 Abu Browser Bridge Chrome 插件使用。请从 GitHub 仓库下载插件，解压后在 Chrome 扩展管理页面（chrome://extensions）开启开发者模式并加载已解压的扩展。',
     defaultTimeout: 120000, // 120s — browser automation needs longer timeouts (e.g. waiting for popups)
   },
 ];

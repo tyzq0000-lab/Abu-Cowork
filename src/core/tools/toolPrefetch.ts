@@ -71,6 +71,10 @@ const PREFETCH_RULES: ReadonlyArray<{
     keywords: ['通知我', '提醒我', '完成后通知', 'notify'],
     tools: [TOOL_NAMES.SYSTEM_NOTIFY],
   },
+  {
+    keywords: ['截屏', '截图', '屏幕', '打开应用', '点击', '操控电脑', '操作电脑', '鼠标', '键盘', 'screenshot', 'click', 'computer use', '帮我打开', '帮我点'],
+    tools: [TOOL_NAMES.COMPUTER],
+  },
 ];
 
 export interface PrefetchContext {
@@ -98,7 +102,7 @@ export function prefetchTools(ctx: PrefetchContext): string[] {
     }
   }
 
-  // Computer use: load when enabled in settings
+  // Computer use: load when enabled (auto-enabled on first call) OR via keyword prefetch
   if (ctx.computerUseEnabled) {
     additionalTools.push(TOOL_NAMES.COMPUTER);
   }

@@ -115,7 +115,12 @@ export default function AgentsSection({ manualCreateTrigger, onAICreate, onManua
     try {
       const agentDir = getParentDir(agent.filePath);
       await remove(agentDir, { recursive: true });
-      if (selectedAgent === agent.name) setSelectedAgent(null);
+      // Select adjacent item so the user stays in context after deletion
+      if (selectedAgent === agent.name) {
+        const names = filteredAgents.map((a) => a.name);
+        const idx = names.indexOf(agent.name);
+        setSelectedAgent(names[idx - 1] ?? names[idx + 1] ?? null);
+      }
       await refresh();
     } catch (err) {
       console.error('Failed to delete agent:', err);
@@ -290,12 +295,12 @@ export default function AgentsSection({ manualCreateTrigger, onAICreate, onManua
         {selected ? (
           <div className="px-6 py-6">
             {/* Row 1: Name + Toggle + Menu */}
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <AgentAvatar agent={selected} />
-                <h2 className="text-xl font-semibold text-[var(--abu-text-primary)]">{displayName(selected)}</h2>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="shrink-0"><AgentAvatar agent={selected} /></span>
+                <h2 className="text-xl font-semibold text-[var(--abu-text-primary)] truncate" title={displayName(selected)}>{displayName(selected)}</h2>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {selected.name !== 'abu' && (
                   <>
                     <Toggle

@@ -177,9 +177,10 @@ export default function MCPSection({ showAddForm: externalShowAddForm, onAddForm
   // Auto-select first visible item when none selected (initial load or after deletion)
   useEffect(() => {
     if (selected) {
-      // Verify the selected item still exists
+      // If the selected server was removed, fall back to its template view (or clear)
       if (selected.kind === 'server' && !servers[selected.name]) {
-        setSelected(null);
+        const tmpl = mcpTemplates.find((t) => t.name === selected.name);
+        setSelected(tmpl ? { kind: 'template', id: tmpl.id } : null);
       }
       return;
     }
@@ -370,8 +371,19 @@ export default function MCPSection({ showAddForm: externalShowAddForm, onAddForm
   };
 
   const handleRemoveServer = async (name: string) => {
-    // Clear selection first so the right panel stops showing stale data
-    if (selected?.kind === 'server' && selected.name === name) setSelected(null);
+    // Keep selection in context after removal
+    if (selected?.kind === 'server' && selected.name === name) {
+      // If it's a template MCP, switch to template view (stays on same item)
+      const tmpl = mcpTemplates.find((t) => t.name === name);
+      if (tmpl) {
+        setSelected({ kind: 'template', id: tmpl.id });
+      } else {
+        // Custom server: select adjacent item
+        const idx = customServers.findIndex((s) => s.config.name === name);
+        const nextName = customServers[idx - 1]?.config.name ?? customServers[idx + 1]?.config.name;
+        setSelected(nextName ? { kind: 'server', name: nextName } : null);
+      }
+    }
     // Disconnect before removing to avoid stale connected state
     try { await disconnectServer(name); } catch { /* ignore */ }
     removeServer(name);
@@ -757,14 +769,14 @@ function ServerDetail({
 
   return (
     <div className="px-6 py-6">
-      {/* Header: Name + Status + Actions */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <Server className="h-5 w-5 text-[var(--abu-text-muted)]" />
-          <h2 className="text-xl font-semibold text-[var(--abu-text-primary)]">{config.name}</h2>
-          <span className={cn('text-xs font-medium', statusColor)}>{statusLabel}</span>
-        </div>
-        <div className="flex items-center gap-1">
+      {/* Header: Name + Actions / Status */}
+      <div className="flex flex-col gap-1.5 mb-5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Server className="h-5 w-5 shrink-0 text-[var(--abu-text-muted)]" />
+            <h2 className="text-xl font-semibold text-[var(--abu-text-primary)] truncate" title={config.name}>{config.name}</h2>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
           <button onClick={onToggleLogs} className="p-1.5 rounded-lg text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-muted)] transition-colors" title={t.toolbox.viewLogs}>
             <ScrollText className="h-4 w-4" />
           </button>
@@ -784,6 +796,10 @@ function ServerDetail({
           <button onClick={onRemove} className="p-1.5 rounded-lg text-[var(--abu-text-muted)] hover:text-red-500 hover:bg-red-50 transition-colors">
             <Trash2 className="h-4 w-4" />
           </button>
+        </div>
+        </div>
+        <div className="flex items-center gap-2 pl-8">
+          <span className={cn('text-xs font-medium', statusColor)}>{statusLabel}</span>
         </div>
       </div>
 
