@@ -45,6 +45,14 @@ const MAX_TEXT_READ_SIZE = 256 * 1024; // 256 KB
 /** Default number of lines to read when file exceeds size limit. */
 const DEFAULT_LINE_LIMIT = 2000;
 
+// Python source read by pdfplumber strategy. The file path is passed as
+// argv[1] — never via string interpolation — so any characters in the path
+// (quotes, $(...), backticks) cannot be parsed as Python or shell code.
+const PDFPLUMBER_SCRIPT = `import sys, pdfplumber
+pdf = pdfplumber.open(sys.argv[1])
+print(chr(10).join((p.extract_text() or '') for p in pdf.pages))
+pdf.close()`;
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
@@ -89,10 +97,9 @@ export const readFileTool: ToolDefinition = {
         // Strategy 1: pdftotext (macOS/Linux — fast, native)
         if (!isWindows()) {
           try {
-            const output = await invoke<CommandOutput>('run_shell_command', {
-              command: `pdftotext "${filePath}" -`,
-              cwd: null,
-              background: false,
+            const output = await invoke<CommandOutput>('run_argv_command', {
+              program: 'pdftotext',
+              args: [filePath, '-'],
               timeout: 30,
             });
             if (output.code === 0 && output.stdout.trim()) {
@@ -104,16 +111,9 @@ export const readFileTool: ToolDefinition = {
         // Strategy 2: Python pdfplumber (cross-platform)
         try {
           const pyBin = isWindows() ? 'python' : 'python3';
-          // On Windows, convert backslashes to forward slashes (Python handles both) and
-          // escape single quotes for Python; on Unix, escape single quotes for shell.
-          const escapedPath = isWindows()
-            ? filePath.replace(/\\/g, '/').replace(/'/g, "\\'")
-            : filePath.replace(/'/g, "'\\''");
-          const pyCmd = `${pyBin} -c "import pdfplumber; pdf=pdfplumber.open('${escapedPath}'); print('\\n'.join(p.extract_text() or '' for p in pdf.pages)); pdf.close()"`;
-          const output = await invoke<CommandOutput>('run_shell_command', {
-            command: pyCmd,
-            cwd: null,
-            background: false,
+          const output = await invoke<CommandOutput>('run_argv_command', {
+            program: pyBin,
+            args: ['-c', PDFPLUMBER_SCRIPT, filePath],
             timeout: 30,
           });
           if (output.code === 0 && output.stdout.trim()) {

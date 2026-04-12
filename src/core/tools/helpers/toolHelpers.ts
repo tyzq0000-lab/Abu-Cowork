@@ -199,30 +199,26 @@ async function extractDocxText(filePath: string): Promise<string> {
   }
 }
 
-/** Extract PowerPoint text via Python (python-pptx) — no JS alternative */
-async function extractPptxViaPython(filePath: string): Promise<string> {
-  const pyBin = isWindows() ? 'python' : 'python3';
-  // On Windows, convert backslashes to forward slashes (Python handles both) and
-  // escape single quotes for Python; on Unix, escape single quotes for shell.
-  const escapedPath = isWindows()
-    ? filePath.replace(/\\/g, '/').replace(/'/g, "\\'")
-    : filePath.replace(/'/g, "'\\''");
-
-  const pyCmd = `${pyBin} -c "
+// Python source read by python-pptx strategy. File path is passed as
+// argv[1] — no string interpolation, so quotes / $(...) / backticks in the
+// path cannot be parsed as code.
+const PPTX_SCRIPT = `import sys
 from pptx import Presentation
-prs = Presentation('${escapedPath}')
+prs = Presentation(sys.argv[1])
 for i, slide in enumerate(prs.slides, 1):
     print(f'=== Slide {i} ===')
     for shape in slide.shapes:
         if hasattr(shape, 'text') and shape.text:
-            print(shape.text)
-"`;
+            print(shape.text)`;
+
+/** Extract PowerPoint text via Python (python-pptx) — no JS alternative */
+async function extractPptxViaPython(filePath: string): Promise<string> {
+  const pyBin = isWindows() ? 'python' : 'python3';
 
   try {
-    const output = await invoke<CommandOutput>('run_shell_command', {
-      command: pyCmd,
-      cwd: null,
-      background: false,
+    const output = await invoke<CommandOutput>('run_argv_command', {
+      program: pyBin,
+      args: ['-c', PPTX_SCRIPT, filePath],
       timeout: 30,
     });
     if (output.code === 0 && output.stdout.trim()) {
@@ -241,30 +237,50 @@ for i, slide in enumerate(prs.slides, 1):
  * List contents of an archive file using system commands.
  */
 export async function listArchiveContents(filePath: string, ext: string): Promise<string> {
-  let command: string;
+  // Windows zip uses a complex inline .NET PowerShell pipeline; keep that
+  // path on run_shell_command with the existing '' quoting until argv-based
+  // PowerShell invocations are wired up. The Unix zip / tar / file paths
+  // below all use run_argv_command so the user-controlled file name cannot
+  // reach any shell parser.
+  if (ext === '.zip' && isWindows()) {
+    const psPath = filePath.replace(/'/g, "''");
+    const command = `powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::OpenRead('${psPath}').Entries | Select-Object FullName, Length | Format-Table -AutoSize"`;
+    try {
+      const output = await invoke<CommandOutput>('run_shell_command', {
+        command,
+        cwd: null,
+        background: false,
+        timeout: 15,
+      });
+      if (output.code === 0) {
+        return output.stdout || 'Archive is empty.';
+      }
+      return `Error listing archive: ${output.stderr || 'Unknown error'}`;
+    } catch {
+      return `Error: Could not list archive contents.`;
+    }
+  }
+
+  let program: string;
+  let args: string[];
 
   if (ext === '.zip') {
-    if (isWindows()) {
-      const psPath = filePath.replace(/'/g, "''");
-      command = `powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::OpenRead('${psPath}').Entries | Select-Object FullName, Length | Format-Table -AutoSize"`;
-    } else {
-      command = `unzip -l "${filePath}"`;
-    }
+    program = 'unzip';
+    args = ['-l', filePath];
   } else if (ext === '.tar' || ext === '.tar.gz' || ext === '.tgz') {
-    command = isWindows()
-      ? `tar -tf "${filePath}"`
-      : `tar -tf "${filePath}"`;
+    program = 'tar';
+    args = ['-tf', filePath];
   } else if (ext === '.gz' && !filePath.endsWith('.tar.gz')) {
-    command = `file "${filePath}"`;
+    program = 'file';
+    args = [filePath];
   } else {
     return `Archive listing not supported for ${ext}. Use run_command to extract.`;
   }
 
   try {
-    const output = await invoke<CommandOutput>('run_shell_command', {
-      command,
-      cwd: null,
-      background: false,
+    const output = await invoke<CommandOutput>('run_argv_command', {
+      program,
+      args,
       timeout: 15,
     });
     if (output.code === 0) {
