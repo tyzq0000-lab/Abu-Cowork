@@ -38,7 +38,7 @@ Download the installer for your platform from [GitHub Releases](https://github.c
 ### 2. Configure a Model
 
 1. Open Abu and click the **settings icon** at the bottom left
-2. Go to **"Custom Models"**
+2. Go to **"AI Services"**
 3. Select your API provider (Anthropic, DeepSeek, OpenAI, etc.)
 4. Enter your API Key
 5. Choose the model to use
@@ -223,7 +223,7 @@ Abu comes with built-in system tools — no extra installation needed:
 | **Delegate to Agent** | Launch sub-agents for isolated subtasks (up to 5 concurrent) |
 | **Memory Update** | Write to personal/project memory (Memdir) |
 | **Memory Recall** | Search historical memory by keyword |
-| **MCP Management** | List/enable/disable configured MCP servers |
+| **Manage MCP Servers** | Search, install, and manage MCP server connections |
 | **TODO Management** | Maintain a task checklist during long workflows |
 | **Update Soul** | Adjust Abu's global personality settings |
 
@@ -389,7 +389,7 @@ Every Monday at 10 AM, organize last week's meeting notes into a weekly report
 
 **Method 2: Task panel**
 
-1. Click the **Scheduled Tasks** icon in the sidebar
+1. Click **"Automation"** in the sidebar → **"Scheduled Tasks"** tab
 2. Click **"Create Task"**
 3. Set frequency (hourly / daily / weekly / custom)
 4. Enter task description
@@ -450,8 +450,8 @@ Triggers are event-driven automation. When an external event happens, Abu automa
 
 **Method 1: Manual creation**
 
-1. Click the **"On-call"** icon in the sidebar
-2. Click **"New on-call"**
+1. Click **"Automation"** in the sidebar → **"Triggers"** tab
+2. Click **"New Trigger"**
 3. Fill in the trigger configuration and save
 
 **Method 2: Let Abu create it**
@@ -828,7 +828,9 @@ Open **Settings** → **AI Services** to view your current configuration.
 | **DeepSeek** | — | Cost-effective, reasoning models |
 | **Qiniu** | — | Multi-model aggregation, 15+ models |
 | **OpenRouter** | — | International model router |
-| **Local Models** | — | Ollama, LM Studio, etc. |
+| **MiniMax** | — | MiniMax M2.7/M2.5 series |
+| **Ollama** | — | Local Ollama service, no API key needed |
+| **Local Models** | — | LM Studio and other local inference engines |
 | **Custom API** | — | Any OpenAI/Anthropic-compatible endpoint |
 
 > **✅** = Provider natively supports web search — works out of the box.
@@ -855,10 +857,16 @@ When using the "Custom API" provider:
 
 For Ollama or similar local models:
 
+**Ollama** (recommended):
+1. Select **"Ollama"** as provider — no API key needed
+2. Base URL defaults to `http://localhost:11434`
+3. Enter your local model name (e.g., `llama3`)
+
+**Other local engines** (LM Studio, etc.):
 1. Select **"Local Models"** or **"Custom API"** as provider
-2. Base URL: `http://localhost:11434/v1` (Ollama default)
-3. API Key: any value (e.g., `ollama`)
-4. Model name: your local model name (e.g., `llama3`)
+2. Base URL: your engine's URL
+3. API Key: any value
+4. Model name: your local model name
 
 ### Advanced Parameters
 
@@ -998,8 +1006,8 @@ Abu will not access without permission:
 
 ### Configuring the Sandbox
 
-1. Open **Settings** → **Security Sandbox**
-2. Toggle **OS Sandbox** on/off
+1. Open **Settings** → **Security**
+2. Toggle **Sandbox Protection** on/off
 3. Toggle **Network Isolation** on/off
 4. Manage the **domain whitelist**
 
@@ -1011,7 +1019,7 @@ Behavior Awareness lets Abu understand your work patterns so it can give context
 
 ### How It Works
 
-- Samples the **active window's app name** (e.g. Chrome, VS Code) every 5 minutes
+- Samples the **active window's title** (e.g. Chrome, VS Code) every 5 minutes
 - Data is retained for 7 days, then auto-cleaned
 - Aggregated into a 3–5 line summary that's injected into the conversation context
 
@@ -1026,14 +1034,14 @@ Behavior Awareness lets Abu understand your work patterns so it can give context
 
 1. Open **Settings** → **Preferences**
 2. Find **"Behavior Awareness"** and toggle it on
-3. macOS first-time enable requires **Accessibility** permission
+3. macOS first-time enable requires **Automation** permission (System Settings → Privacy & Security → Automation, allow Abu to control "System Events")
 
 ### Privacy Protections
 
 | Protection | Description |
 |-----------|-------------|
 | **Off by default** | User must explicitly enable |
-| **App name only** | Doesn't record window titles, screen content, or screenshots |
+| **Window title only** | Doesn't record screen content or screenshots |
 | **Raw data stays local** | Only the aggregated summary is sent to the AI; raw logs are never sent |
 | **Clearable anytime** | Once enabled, the settings page shows a "Clear Behavior Data" button |
 
@@ -1110,7 +1118,7 @@ No. Abu is a local-first app — your files and data are processed locally. The 
 
 ### Q: Where is my API Key stored?
 
-API Keys are encrypted and stored in your local app data directory. They are never uploaded to any server.
+API Keys are stored in your local app data directory. They are never uploaded to any server.
 
 ### Q: Where is my memory and where are my project rules stored?
 
@@ -1164,7 +1172,7 @@ On macOS, grant **Screen Recording** and **Accessibility** to Abu in **System Se
 
 ### Q: Does Behavior Awareness leak my privacy?
 
-No. Behavior Awareness only records app names (e.g. Chrome, VS Code), not window titles or screen content. Raw data stays local; only the aggregated summary is injected into the conversation context. You can disable it and clear data at any time in Settings.
+No. Behavior Awareness only records window titles (e.g. app names), not screen content or screenshots. Raw data stays local; only the aggregated summary is injected into the conversation context. You can disable it and clear data at any time in Settings.
 
 ### Q: What languages are supported?
 
