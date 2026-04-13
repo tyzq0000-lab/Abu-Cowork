@@ -290,6 +290,10 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
   // Auto-preview: only when agent transitions from running → done (not on mount/conversation switch)
   const openPreview = usePreviewStore((s) => s.openPreview);
   const isAgentDone = !isStreaming && !isThisExecutionActive && activeConv?.status !== 'running';
+  // File card display: previous groups are already done — only the last group needs the
+  // global conversation status check to filter intermediate temp files during execution.
+  const isGroupDone = !isStreaming && !isThisExecutionActive &&
+    (!isLastGroupProp || activeConv?.status !== 'running');
   const prevAgentDoneRef = useRef(isAgentDone);
   useEffect(() => {
     const wasDone = prevAgentDoneRef.current;
@@ -486,9 +490,10 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
               );
             })}
 
-            {/* File attachments - only show after agent loop fully ends
-                (ensures intermediate scripts are properly filtered out) */}
-            {fileOutputs.length > 0 && isAgentDone && (() => {
+            {/* File attachments - show when this group's execution is done.
+                Previous groups always show; last group waits for global status
+                to ensure intermediate scripts are properly filtered out. */}
+            {fileOutputs.length > 0 && isGroupDone && (() => {
               const imageFiles = fileOutputs.filter((f) => isImageFile(f.path));
               const otherFiles = fileOutputs.filter((f) => !isImageFile(f.path));
               return (
