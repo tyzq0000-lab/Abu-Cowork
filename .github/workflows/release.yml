@@ -63,92 +63,71 @@ jobs:
             See the assets below for download links.
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: true
           args: --target ${{ matrix.target }}
-
-      - name: Find updater artifacts
-        id: artifacts
-        shell: bash
-        run: |
-          if [[ "${{ matrix.target }}" == *"apple"* ]]; then
-            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
-            UPDATE_FILE=$(find "$BUNDLE_DIR" -name "*.app.tar.gz" -not -name "*.sig" | head -1)
-            SIG_FILE="${UPDATE_FILE}.sig"
-          else
-            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
-            UPDATE_FILE=$(find "$BUNDLE_DIR" -name "*-setup.nsis.zip" -not -name "*.sig" | head -1)
-            SIG_FILE="${UPDATE_FILE}.sig"
-          fi
-          echo "update_file=$UPDATE_FILE" >> "$GITHUB_OUTPUT"
-          echo "sig_file=$SIG_FILE" >> "$GITHUB_OUTPUT"
-          echo "Found: $UPDATE_FILE"
-          echo "Sig: $SIG_FILE"
-
-      - name: Upload updater artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: updater-${{ matrix.target }}
-          path: |
-            ${{ steps.artifacts.outputs.update_file }}
-            ${{ steps.artifacts.outputs.sig_file }}
-          retention-days: 1
 
   publish:
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all updater artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
+      - name: Download updater assets from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p release-assets
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            -D release-assets \
+            -p "*.tar.gz" -p "*.tar.gz.sig" -p "*.nsis.zip" -p "*.nsis.zip.sig"
+          echo "Downloaded assets:"
+          ls -la release-assets/
 
       - name: Generate latest.json
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${{ github.ref_name }}"
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           OSS_BASE="https://${{ secrets.OSS_BUCKET }}.${{ secrets.OSS_REGION }}.aliyuncs.com/releases/${VERSION}"
 
           # Read signatures
-          AARCH64_SIG=$(cat artifacts/updater-aarch64-apple-darwin/*.sig)
-          X86_64_SIG=$(cat artifacts/updater-x86_64-apple-darwin/*.sig)
-          WINDOWS_SIG=$(cat artifacts/updater-x86_64-pc-windows-msvc/*.sig)
+          AARCH64_SIG=$(cat release-assets/*aarch64*.tar.gz.sig 2>/dev/null || echo "")
+          X86_64_SIG=$(cat release-assets/*x64*.tar.gz.sig 2>/dev/null || echo "")
+          WINDOWS_SIG=$(cat release-assets/*.nsis.zip.sig 2>/dev/null || echo "")
 
-          # Find artifact filenames
-          AARCH64_FILE=$(basename $(ls artifacts/updater-aarch64-apple-darwin/*.tar.gz))
-          X86_64_FILE=$(basename $(ls artifacts/updater-x86_64-apple-darwin/*.tar.gz))
-          WINDOWS_FILE=$(basename $(ls artifacts/updater-x86_64-pc-windows-msvc/*.nsis.zip))
+          # Find filenames (exclude .sig files)
+          AARCH64_FILE=$(ls release-assets/*aarch64*.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          X86_64_FILE=$(ls release-assets/*x64*.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          WINDOWS_FILE=$(ls release-assets/*.nsis.zip 2>/dev/null | grep -v '.sig' | head -1 | xargs basename 2>/dev/null || echo "")
 
-          cat > latest.json << ENDJSON
-          {
-            "version": "${VERSION}",
-            "notes": "See https://github.com/PM-Shawn/Abu-Cowork/releases/tag/${VERSION}",
-            "pub_date": "${DATE}",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "${AARCH64_SIG}",
-                "url": "${OSS_BASE}/${AARCH64_FILE}"
-              },
-              "darwin-x86_64": {
-                "signature": "${X86_64_SIG}",
-                "url": "${OSS_BASE}/${X86_64_FILE}"
-              },
-              "windows-x86_64": {
-                "signature": "${WINDOWS_SIG}",
-                "url": "${OSS_BASE}/${WINDOWS_FILE}"
-              }
-            }
+          echo "aarch64: $AARCH64_FILE | x64: $X86_64_FILE | windows: $WINDOWS_FILE"
+
+          # Build latest.json with python for safe JSON encoding
+          python3 -c "
+          import json, sys
+          platforms = {}
+          aarch64_file, aarch64_sig = '$AARCH64_FILE', '''$AARCH64_SIG'''
+          x64_file, x64_sig = '$X86_64_FILE', '''$X86_64_SIG'''
+          win_file, win_sig = '$WINDOWS_FILE', '''$WINDOWS_SIG'''
+          oss_base = '$OSS_BASE'
+          if aarch64_file and aarch64_sig:
+              platforms['darwin-aarch64'] = {'signature': aarch64_sig.strip(), 'url': f'{oss_base}/{aarch64_file}'}
+          if x64_file and x64_sig:
+              platforms['darwin-x86_64'] = {'signature': x64_sig.strip(), 'url': f'{oss_base}/{x64_file}'}
+          if win_file and win_sig:
+              platforms['windows-x86_64'] = {'signature': win_sig.strip(), 'url': f'{oss_base}/{win_file}'}
+          data = {
+              'version': '$VERSION',
+              'notes': 'See https://github.com/${{ github.repository }}/releases/tag/$VERSION',
+              'pub_date': '$DATE',
+              'platforms': platforms
           }
-          ENDJSON
-
-          echo "Generated latest.json:"
-          cat latest.json
+          json.dump(data, open('latest.json', 'w'), indent=2)
+          print(json.dumps(data, indent=2))
+          "
 
       - name: Install ossutil
-        run: |
-          curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | bash
+        run: curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | bash
 
       - name: Configure ossutil
         run: |
@@ -157,24 +136,19 @@ jobs:
             -i ${{ secrets.ALIYUN_ACCESS_KEY_ID }} \
             -k ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
-      - name: Upload artifacts to OSS
+      - name: Upload to OSS
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${{ github.ref_name }}"
           BUCKET="oss://${{ secrets.OSS_BUCKET }}"
 
-          # Upload update packages (per-version directory)
-          for dir in artifacts/updater-*; do
-            for file in "$dir"/*; do
-              [ -f "$file" ] || continue
-              ossutil cp "$file" "${BUCKET}/releases/${VERSION}/$(basename $file)" -f
-            done
+          # Upload update packages
+          for file in release-assets/*; do
+            [ -f "$file" ] || continue
+            ossutil cp "$file" "${BUCKET}/releases/${VERSION}/$(basename $file)" -f
           done
 
-          # Upload latest.json to root (with no-cache header)
-          ossutil cp latest.json "${BUCKET}/latest.json" \
-            -f \
-            --meta "Cache-Control:no-cache"
+          # Upload latest.json with no-cache
+          ossutil cp latest.json "${BUCKET}/latest.json" -f --meta "Cache-Control:no-cache"
 
-          echo "Upload complete. Verify:"
+          echo "Done. Listing:"
           ossutil ls "${BUCKET}/releases/${VERSION}/"
-          ossutil stat "${BUCKET}/latest.json"
