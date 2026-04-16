@@ -512,6 +512,16 @@ export const useChatStore = create<ChatStore>()(
             }
           }
         });
+        // Persist the updated tool result immediately. Without this, tool results
+        // only hit disk when finishStreaming / turn-boundary replaceMessageById fires —
+        // so a crash/force-quit mid-stream (or a late-arriving result after the
+        // enclosing message was already snapshotted) loses toolCalls on reload.
+        const updatedMsg = get().conversations[convId]?.messages.find((m) => m.id === messageId);
+        if (updatedMsg) {
+          import('../core/session/conversationStorage').then(({ replaceMessageById }) => {
+            replaceMessageById(convId, updatedMsg).catch(() => {});
+          });
+        }
       },
 
       // New message operations
