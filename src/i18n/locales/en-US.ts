@@ -1221,6 +1221,11 @@ const enUS: TranslationDict = {
     releaseNotes: 'Release Notes',
     checkFailed: 'Update check failed',
     justChecked: 'Just checked',
+    downloading: 'Downloading update...',
+    installing: 'Installing update...',
+    restartToInstall: 'Restart to Install',
+    downloadFailed: 'Download failed',
+    retry: 'Retry',
   },
 
   about: {

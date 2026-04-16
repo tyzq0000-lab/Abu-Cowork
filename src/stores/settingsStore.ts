@@ -278,6 +278,8 @@ interface SettingsState {
   updateInfo: UpdateInfo | null;
   updateChecking: boolean;
   lastUpdateCheck: number;
+  updateDownloadProgress: { downloaded: number; total: number } | null;
+  updateInstalling: boolean;
   userNickname: string;
   userAvatar: string;
   guideShown: boolean;
@@ -347,6 +349,8 @@ interface SettingsActions {
   setUpdateInfo: (info: UpdateInfo | null) => void;
   setUpdateChecking: (checking: boolean) => void;
   setLastUpdateCheck: (time: number) => void;
+  setUpdateDownloadProgress: (progress: { downloaded: number; total: number } | null) => void;
+  setUpdateInstalling: (installing: boolean) => void;
   setUserNickname: (nickname: string) => void;
   setUserAvatar: (avatar: string) => void;
   setGuideShown: (shown: boolean) => void;
@@ -526,6 +530,8 @@ export const useSettingsStore = create<SettingsStore>()(
       updateInfo: null,
       updateChecking: false,
       lastUpdateCheck: 0,
+      updateDownloadProgress: null,
+      updateInstalling: false,
       userNickname: '',
       userAvatar: '',
       guideShown: false,
@@ -741,6 +747,8 @@ export const useSettingsStore = create<SettingsStore>()(
       setUpdateInfo: (updateInfo) => set({ updateInfo }),
       setUpdateChecking: (updateChecking) => set({ updateChecking }),
       setLastUpdateCheck: (lastUpdateCheck) => set({ lastUpdateCheck }),
+      setUpdateDownloadProgress: (updateDownloadProgress) => set({ updateDownloadProgress }),
+      setUpdateInstalling: (updateInstalling) => set({ updateInstalling }),
       setUserNickname: (userNickname) => set({ userNickname }),
       setUserAvatar: (userAvatar) => set({ userAvatar }),
       setGuideShown: (guideShown) => set({ guideShown }),
@@ -1075,6 +1083,8 @@ export const useSettingsStore = create<SettingsStore>()(
         state.toolboxSearchQuery = '';
         state.installingItem = null;
         state.viewMode = 'chat';
+        state.updateDownloadProgress = null;
+        state.updateInstalling = false;
       },
     }
   )

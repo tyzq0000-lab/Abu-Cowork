@@ -1,6 +1,6 @@
 {
   "productName": "Abu",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "identifier": "com.abu.app",
   "build": {
     "beforeDevCommand": "npm run copy-resources && npm run dev",
@@ -36,6 +36,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "endpoints": [
+        "https://abu-agent.oss-cn-beijing.aliyuncs.com/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhEMDY1MTJCQ0QzN0QwNEMKUldSTTBEZk5LMUVHalQ2V0EwZnpoaFJtQ2hHTmF2VDZiVFRmKzBOWnZHVk1pTFZjcFhFdDNoMVoK"
     }
   },
   "bundle": {

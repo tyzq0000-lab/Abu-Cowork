@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-shell';
-import { RefreshCw, Download, CheckCircle, CircleAlert } from 'lucide-react';
+import { RefreshCw, Download, CheckCircle, CircleAlert, RotateCcw } from 'lucide-react';
 import abuAvatar from '@/assets/abu-avatar.png';
 import { APP_VERSION } from '@/utils/version';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { checkForUpdate } from '@/core/updates/checker';
+import { checkForUpdate, downloadAndInstallUpdate, restartApp } from '@/core/updates/checker';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 
@@ -13,8 +13,11 @@ type CheckResult = 'idle' | 'just-checked' | 'error';
 export default function AboutSection() {
   const updateInfo = useSettingsStore((s) => s.updateInfo);
   const updateChecking = useSettingsStore((s) => s.updateChecking);
+  const downloadProgress = useSettingsStore((s) => s.updateDownloadProgress);
+  const updateInstalling = useSettingsStore((s) => s.updateInstalling);
   const { t } = useI18n();
   const [checkResult, setCheckResult] = useState<CheckResult>('idle');
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const handleOpenLink = async (url: string) => {
     try {
@@ -28,10 +31,8 @@ export default function AboutSection() {
     setCheckResult('idle');
     try {
       const result = await checkForUpdate(true);
-      // If no new version found (result is null and no updateInfo), show "just checked" feedback
       if (!result) {
         setCheckResult('just-checked');
-        // Reset after 3 seconds
         setTimeout(() => setCheckResult('idle'), 3000);
       }
     } catch {
@@ -39,6 +40,29 @@ export default function AboutSection() {
       setTimeout(() => setCheckResult('idle'), 3000);
     }
   }, []);
+
+  const handleDownload = useCallback(async () => {
+    setDownloadError(null);
+    try {
+      await downloadAndInstallUpdate();
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : String(err));
+    }
+  }, []);
+
+  const handleRestart = useCallback(async () => {
+    try {
+      await restartApp();
+    } catch (err) {
+      console.error('Failed to restart:', err);
+    }
+  }, []);
+
+  const progressPercent = downloadProgress
+    ? downloadProgress.total > 0
+      ? Math.round((downloadProgress.downloaded / downloadProgress.total) * 100)
+      : 0
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -74,9 +98,49 @@ export default function AboutSection() {
               <p className="text-sm text-[var(--abu-text-secondary)] whitespace-pre-line">{updateInfo.releaseNotes}</p>
             </div>
           )}
-          {updateInfo.downloadUrl && (
+
+          {/* Download progress bar */}
+          {downloadProgress && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-[var(--abu-text-tertiary)]">
+                <span>{t.updates.downloading}</span>
+                <span>{progressPercent}%</span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-[var(--abu-bg-active)] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[var(--abu-clay)] transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Download error */}
+          {downloadError && (
+            <div className="flex items-center gap-2 text-sm text-red-500">
+              <CircleAlert className="h-4 w-4 shrink-0" />
+              <span className="flex-1">{t.updates.downloadFailed}</span>
+              <button
+                onClick={handleDownload}
+                className="text-xs font-medium text-[var(--abu-clay)] hover:underline"
+              >
+                {t.updates.retry}
+              </button>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          {updateInstalling ? (
             <button
-              onClick={() => handleOpenLink(updateInfo.downloadUrl)}
+              onClick={handleRestart}
+              className="flex items-center gap-2 w-full justify-center py-2 px-4 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors"
+            >
+              <RotateCcw className="h-4 w-4" />
+              {t.updates.restartToInstall}
+            </button>
+          ) : !downloadProgress && !downloadError && (
+            <button
+              onClick={handleDownload}
               className="flex items-center gap-2 w-full justify-center py-2 px-4 rounded-lg bg-[var(--abu-clay)] text-white text-sm font-medium hover:bg-[var(--abu-clay-hover)] transition-colors"
             >
               <Download className="h-4 w-4" />
@@ -117,10 +181,10 @@ export default function AboutSection() {
       {/* Check for updates button */}
       <button
         onClick={handleCheckUpdate}
-        disabled={updateChecking}
+        disabled={updateChecking || !!downloadProgress}
         className={cn(
           'flex items-center gap-2 w-full justify-center py-2.5 px-4 rounded-lg border text-sm font-medium transition-all duration-200',
-          updateChecking
+          updateChecking || downloadProgress
             ? 'border-[var(--abu-border)] text-[var(--abu-text-muted)] cursor-not-allowed'
             : 'border-[var(--abu-border)] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-active)] hover:border-[var(--abu-border-hover)] active:scale-[0.98]'
         )}

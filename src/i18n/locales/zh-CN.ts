@@ -1222,6 +1222,11 @@ const zhCN: TranslationDict = {
     releaseNotes: '更新日志',
     checkFailed: '检查更新失败',
     justChecked: '刚刚已检查',
+    downloading: '正在下载更新...',
+    installing: '正在安装更新...',
+    restartToInstall: '重启以完成更新',
+    downloadFailed: '下载更新失败',
+    retry: '重试',
   },
 
   about: {
