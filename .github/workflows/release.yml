@@ -66,6 +66,32 @@ jobs:
           includeUpdaterJson: true
           args: --target ${{ matrix.target }}
 
+      - name: Upload updater assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TARGET="${{ matrix.target }}"
+          TAG="${{ github.ref_name }}"
+
+          if [[ "$TARGET" == *"apple"* ]]; then
+            BUNDLE_DIR="src-tauri/target/${TARGET}/release/bundle/macos"
+          else
+            BUNDLE_DIR="src-tauri/target/${TARGET}/release/bundle/nsis"
+          fi
+
+          echo "=== Debug: pwd=$(pwd) ==="
+          echo "=== Bundle dir: $BUNDLE_DIR ==="
+          ls -la "$BUNDLE_DIR"/ 2>&1 || echo "Directory not found, listing parent:"
+          ls -la "src-tauri/target/${TARGET}/release/bundle/" 2>&1 || echo "Bundle parent not found either"
+
+          for f in "$BUNDLE_DIR"/*.tar.gz "$BUNDLE_DIR"/*.tar.gz.sig "$BUNDLE_DIR"/*.nsis.zip "$BUNDLE_DIR"/*.nsis.zip.sig; do
+            if [ -f "$f" ]; then
+              echo "Uploading: $(basename $f)"
+              gh release upload "$TAG" "$f" --clobber
+            fi
+          done
+
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -76,12 +102,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p release-assets
+
+          echo "=== All release assets ==="
+          gh release view "${{ github.ref_name }}" --repo "${{ github.repository }}" --json assets --jq '.assets[].name'
+
           gh release download "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             -D release-assets \
-            -p "*.tar.gz" -p "*.tar.gz.sig" -p "*.nsis.zip" -p "*.nsis.zip.sig"
-          echo "Downloaded assets:"
-          ls -la release-assets/
+            -p "*.tar.gz" -p "*.tar.gz.sig" -p "*.nsis.zip" -p "*.nsis.zip.sig" \
+            || echo "Warning: some patterns had no matches"
+
+          echo "=== Downloaded ==="
+          ls -la release-assets/ || echo "No files downloaded"
 
       - name: Generate latest.json
         shell: bash
@@ -90,32 +122,25 @@ jobs:
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           OSS_BASE="https://${{ secrets.OSS_BUCKET }}.${{ secrets.OSS_REGION }}.aliyuncs.com/releases/${VERSION}"
 
-          # Read signatures
           AARCH64_SIG=$(cat release-assets/*aarch64*.tar.gz.sig 2>/dev/null || echo "")
           X86_64_SIG=$(cat release-assets/*x64*.tar.gz.sig 2>/dev/null || echo "")
           WINDOWS_SIG=$(cat release-assets/*.nsis.zip.sig 2>/dev/null || echo "")
 
-          # Find filenames (exclude .sig files)
           AARCH64_FILE=$(ls release-assets/*aarch64*.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
           X86_64_FILE=$(ls release-assets/*x64*.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
           WINDOWS_FILE=$(ls release-assets/*.nsis.zip 2>/dev/null | grep -v '.sig' | head -1 | xargs basename 2>/dev/null || echo "")
 
-          echo "aarch64: $AARCH64_FILE | x64: $X86_64_FILE | windows: $WINDOWS_FILE"
-
-          # Build latest.json with python for safe JSON encoding
           python3 -c "
-          import json, sys
+          import json
           platforms = {}
-          aarch64_file, aarch64_sig = '$AARCH64_FILE', '''$AARCH64_SIG'''
-          x64_file, x64_sig = '$X86_64_FILE', '''$X86_64_SIG'''
-          win_file, win_sig = '$WINDOWS_FILE', '''$WINDOWS_SIG'''
-          oss_base = '$OSS_BASE'
-          if aarch64_file and aarch64_sig:
-              platforms['darwin-aarch64'] = {'signature': aarch64_sig.strip(), 'url': f'{oss_base}/{aarch64_file}'}
-          if x64_file and x64_sig:
-              platforms['darwin-x86_64'] = {'signature': x64_sig.strip(), 'url': f'{oss_base}/{x64_file}'}
-          if win_file and win_sig:
-              platforms['windows-x86_64'] = {'signature': win_sig.strip(), 'url': f'{oss_base}/{win_file}'}
+          pairs = [
+              ('darwin-aarch64', '$AARCH64_FILE', '''$AARCH64_SIG'''),
+              ('darwin-x86_64', '$X86_64_FILE', '''$X86_64_SIG'''),
+              ('windows-x86_64', '$WINDOWS_FILE', '''$WINDOWS_SIG'''),
+          ]
+          for key, fname, sig in pairs:
+              if fname and sig.strip():
+                  platforms[key] = {'signature': sig.strip(), 'url': '$OSS_BASE/' + fname}
           data = {
               'version': '$VERSION',
               'notes': 'See https://github.com/${{ github.repository }}/releases/tag/$VERSION',
@@ -141,13 +166,11 @@ jobs:
           VERSION="${{ github.ref_name }}"
           BUCKET="oss://${{ secrets.OSS_BUCKET }}"
 
-          # Upload update packages
           for file in release-assets/*; do
             [ -f "$file" ] || continue
             ossutil cp "$file" "${BUCKET}/releases/${VERSION}/$(basename $file)" -f
           done
 
-          # Upload latest.json with no-cache
           ossutil cp latest.json "${BUCKET}/latest.json" -f --meta "Cache-Control:no-cache"
 
           echo "Done. Listing:"
