@@ -19,7 +19,7 @@
     );
     const imgWidth = images[0].naturalWidth;
     const imgHeight = images[0].naturalHeight;
-    const scaleX = imgWidth / viewportWidth;
+    const _scaleX = imgWidth / viewportWidth;
     const scaleY = imgHeight / viewportHeight;
     canvas.width = imgWidth;
     canvas.height = Math.round(totalHeight * scaleY);

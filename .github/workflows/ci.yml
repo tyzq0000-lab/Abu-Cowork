@@ -37,3 +37,31 @@ jobs:
 
       - name: Build frontend
         run: npm run build
+
+      - name: Verify Chrome extension bundle is in sync with source
+        shell: bash
+        run: |
+          # Rebuild the extension from source in a clean env, then compare the
+          # output against the committed src-tauri/browser-extension/ bundle.
+          # Any drift means someone changed abu-chrome-extension/src/ (or
+          # abu-browser-shared/types.ts) without rebuilding + syncing the
+          # committed artifact — so the released app would ship a stale extension.
+          (cd abu-chrome-extension && npm ci && npm run build)
+
+          # .map files excluded: non-behavioral, sourcemap paths can have minor
+          # environmental variance. .js/.html/manifest.json are what users run.
+          if ! diff -r --exclude='*.map' \
+              abu-chrome-extension/dist \
+              src-tauri/browser-extension > /tmp/ext-diff.txt 2>&1; then
+            echo "::error::Chrome extension bundle is out of sync with source."
+            echo ""
+            echo "--- Differences ---"
+            cat /tmp/ext-diff.txt
+            echo ""
+            echo "--- Fix ---"
+            echo "cd abu-chrome-extension && npm run build"
+            echo "cd .. && npm run copy-resources"
+            echo "git add src-tauri/browser-extension/ && commit"
+            exit 1
+          fi
+          echo "OK: Chrome extension bundle matches source"
