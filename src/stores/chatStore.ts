@@ -684,6 +684,17 @@ export const useChatStore = create<ChatStore>()(
                 lastMsg.content += '\n\n*[已停止]*';
               }
             }
+            // If cancel happened mid-thinking, finalize thinkingDuration so the
+            // synthesized thinking step flips from 'running' → 'completed' and the
+            // UI stops rendering the spinner + streaming cursor inside the bubble.
+            // thinkingDuration is the canonical "thinking done" signal in both
+            // MessageGroup's synth path and workflowExtractor's legacy path.
+            if (lastMsg.thinking && lastMsg.thinkingDuration === undefined) {
+              const start = state.thinkingStartTime;
+              lastMsg.thinkingDuration = start
+                ? Math.max(1, Math.round((Date.now() - start) / 1000))
+                : 1;
+            }
             // Mark any executing tool calls as cancelled
             if (lastMsg.toolCalls) {
               lastMsg.toolCalls.forEach((tc) => {
@@ -696,6 +707,7 @@ export const useChatStore = create<ChatStore>()(
           }
           state.agentStatus = 'idle';
           state.currentTool = null;
+          state.thinkingStartTime = null;
         });
       },
 
