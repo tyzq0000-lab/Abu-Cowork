@@ -4,5 +4,11 @@
 <dict>
     <key>NSUserNotificationAlertStyle</key>
     <string>banner</string>
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Abu 需要访问「桌面」文件夹，以便按照你的指令读取或写入桌面上的文件。</string>
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Abu 需要访问「文稿」文件夹，以便按照你的指令读取或写入其中的文件。</string>
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Abu 需要访问「下载」文件夹，以便按照你的指令读取或写入其中的文件。</string>
 </dict>
 </plist>
