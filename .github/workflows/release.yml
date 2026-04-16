@@ -144,13 +144,16 @@ jobs:
           echo "=== Downloaded ==="
           ls -la release-assets/
 
+      - uses: actions/checkout@v4
+
       - name: Generate latest.json
         shell: bash
+        env:
+          VERSION_TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
+          OSS_REGION: ${{ secrets.OSS_REGION }}
         run: |
-          VERSION="${{ github.ref_name }}"
-          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          OSS_BASE="https://${{ secrets.OSS_BUCKET }}.${{ secrets.OSS_REGION }}.aliyuncs.com/releases/${VERSION}"
-
           AARCH64_SIG=$(cat release-assets/*aarch64*.tar.gz.sig 2>/dev/null || echo "")
           X86_64_SIG=$(cat release-assets/*x64*.tar.gz.sig 2>/dev/null || echo "")
           WINDOWS_SIG=$(cat release-assets/*-setup.exe.sig 2>/dev/null || echo "")
@@ -159,26 +162,51 @@ jobs:
           X86_64_FILE=$(ls release-assets/*x64*.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
           WINDOWS_FILE=$(ls release-assets/*-setup.exe 2>/dev/null | grep -v '.sig' | head -1 | xargs basename 2>/dev/null || echo "")
 
-          python3 -c "
-          import json
+          export AARCH64_SIG X86_64_SIG WINDOWS_SIG AARCH64_FILE X86_64_FILE WINDOWS_FILE
+          python3 <<'PYEOF'
+          import json, os, re
+          from datetime import datetime, timezone
+
+          version_tag = os.environ['VERSION_TAG']  # e.g. "v0.11.2"
+          version_num = version_tag.lstrip('v')
+          repo = os.environ['REPO']
+          oss_base = f"https://{os.environ['OSS_BUCKET']}.{os.environ['OSS_REGION']}.aliyuncs.com/releases/{version_tag}"
+
+          # Extract release notes for this version from CHANGELOG.md.
+          # Falls back to a GitHub link if the entry is missing.
+          notes = f"See https://github.com/{repo}/releases/tag/{version_tag}"
+          try:
+              with open('CHANGELOG.md', encoding='utf-8') as f:
+                  cl = f.read()
+              # Match "## v0.11.2 ..." through just before the next "## v" or EOF
+              pattern = rf'^## v{re.escape(version_num)}[^\n]*\n(.*?)(?=^## v|\Z)'
+              m = re.search(pattern, cl, re.MULTILINE | re.DOTALL)
+              if m:
+                  body = m.group(1).strip()
+                  if body:
+                      notes = body
+          except FileNotFoundError:
+              pass
+
           platforms = {}
-          pairs = [
-              ('darwin-aarch64', '$AARCH64_FILE', '''$AARCH64_SIG'''),
-              ('darwin-x86_64', '$X86_64_FILE', '''$X86_64_SIG'''),
-              ('windows-x86_64', '$WINDOWS_FILE', '''$WINDOWS_SIG'''),
-          ]
-          for key, fname, sig in pairs:
+          for key, fname, sig in [
+              ('darwin-aarch64', os.environ['AARCH64_FILE'], os.environ['AARCH64_SIG']),
+              ('darwin-x86_64',  os.environ['X86_64_FILE'],  os.environ['X86_64_SIG']),
+              ('windows-x86_64', os.environ['WINDOWS_FILE'], os.environ['WINDOWS_SIG']),
+          ]:
               if fname and sig.strip():
-                  platforms[key] = {'signature': sig.strip(), 'url': '$OSS_BASE/' + fname}
+                  platforms[key] = {'signature': sig.strip(), 'url': f'{oss_base}/{fname}'}
+
           data = {
-              'version': '$VERSION',
-              'notes': 'See https://github.com/${{ github.repository }}/releases/tag/$VERSION',
-              'pub_date': '$DATE',
-              'platforms': platforms
+              'version': version_tag,
+              'notes': notes,
+              'pub_date': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'platforms': platforms,
           }
-          json.dump(data, open('latest.json', 'w'), indent=2)
-          print(json.dumps(data, indent=2))
-          "
+          with open('latest.json', 'w', encoding='utf-8') as f:
+              json.dump(data, f, indent=2, ensure_ascii=False)
+          print(json.dumps(data, indent=2, ensure_ascii=False))
+          PYEOF
 
       - name: Install ossutil
         run: curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | sudo bash
