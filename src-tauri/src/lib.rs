@@ -16,6 +16,7 @@ mod feishu_ws;
 mod window_info;
 mod computer_use;
 mod overlay;
+mod secrets;
 
 /// Maximum number of output lines to collect from a shell command.
 /// Prevents OOM when commands produce unbounded output.
@@ -965,6 +966,52 @@ fn app_exit(app: AppHandle) {
     app.exit(0);
 }
 
+// ── Secret storage commands ──
+
+#[tauri::command]
+fn secret_get(
+    state: tauri::State<'_, secrets::SecretStore>,
+    key: String,
+) -> Result<Option<String>, String> {
+    state.get(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn secret_set(
+    state: tauri::State<'_, secrets::SecretStore>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    state.set(&key, &value).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn secret_delete(
+    state: tauri::State<'_, secrets::SecretStore>,
+    key: String,
+) -> Result<(), String> {
+    state.delete(&key).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn secret_has(
+    state: tauri::State<'_, secrets::SecretStore>,
+    key: String,
+) -> Result<bool, String> {
+    state.has(&key).map_err(|e| e.to_string())
+}
+
+/// Returns all stored secret keys, or `None` if the backend cannot
+/// enumerate (Windows/Linux keyring). Used by the migration routine to
+/// detect already-migrated entries; the `None` case falls back to a
+/// per-key `secret_has` probe.
+#[tauri::command]
+fn secret_list(
+    state: tauri::State<'_, secrets::SecretStore>,
+) -> Result<Option<Vec<String>>, String> {
+    state.list().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn window_hide(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -1105,6 +1152,32 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .manage(McpState::default())
         .setup(|app| {
+            // Initialize encrypted secret storage. On macOS the ciphertext
+            // file lives in app_data_dir (created lazily); on Windows/Linux
+            // the path is unused because storage is OS-managed.
+            let secrets_path = app
+                .path()
+                .app_data_dir()
+                .map(|dir| dir.join("secrets.bin"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("secrets.bin"));
+            match secrets::SecretStore::load(&secrets_path) {
+                Ok(store) => {
+                    app.manage(store);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "[secrets] Failed to load secret store: {}. Starting with empty store.",
+                        e
+                    );
+                    // Fall back to a best-effort temp-dir store so the UI doesn't crash;
+                    // migration will retry on next launch.
+                    let fallback_path = std::env::temp_dir().join("abu-secrets-fallback.bin");
+                    if let Ok(store) = secrets::SecretStore::load(&fallback_path) {
+                        app.manage(store);
+                    }
+                }
+            }
+
             // Build tray menu — bilingual labels for cross-locale compatibility
             let show_item = MenuItem::with_id(app, "show", "Show Abu / 显示窗口", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit / 退出", true, None::<&str>)?;
@@ -1182,7 +1255,12 @@ pub fn run() {
             feishu_ws::start_feishu_ws,
             feishu_ws::stop_feishu_ws,
             feishu_ws::get_feishu_ws_status,
-            update_tray_menu
+            update_tray_menu,
+            secret_get,
+            secret_set,
+            secret_delete,
+            secret_has,
+            secret_list
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

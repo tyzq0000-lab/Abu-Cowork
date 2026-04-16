@@ -41,6 +41,20 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSResponder"] }
 objc2-core-graphics = "0.3"
+# Secrets: hardware-bound AES-256-GCM (keyring avoided to sidestep
+# ad-hoc-signed ACL re-prompts on every auto-update).
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+machine-uid = "0.5"
+
+# Secrets: Credential Manager (DPAPI) on Windows, secret-service on Linux.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring = { version = "3", features = ["windows-native", "sync-secret-service"] }
+
+[dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 strip = true
