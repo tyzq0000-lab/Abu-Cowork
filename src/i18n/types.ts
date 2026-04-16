@@ -1187,6 +1187,11 @@ export interface TranslationDict {
     releaseNotes: string;
     checkFailed: string;
     justChecked: string;
+    downloading: string;
+    installing: string;
+    restartToInstall: string;
+    downloadFailed: string;
+    retry: string;
   };
 
   // About

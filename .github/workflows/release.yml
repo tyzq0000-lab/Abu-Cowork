@@ -54,6 +54,8 @@ jobs:
         uses: tauri-apps/tauri-action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Abu ${{ github.ref_name }}'
@@ -62,3 +64,117 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --target ${{ matrix.target }}
+
+      - name: Find updater artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          if [[ "${{ matrix.target }}" == *"apple"* ]]; then
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+            UPDATE_FILE=$(find "$BUNDLE_DIR" -name "*.app.tar.gz" -not -name "*.sig" | head -1)
+            SIG_FILE="${UPDATE_FILE}.sig"
+          else
+            BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/nsis"
+            UPDATE_FILE=$(find "$BUNDLE_DIR" -name "*-setup.nsis.zip" -not -name "*.sig" | head -1)
+            SIG_FILE="${UPDATE_FILE}.sig"
+          fi
+          echo "update_file=$UPDATE_FILE" >> "$GITHUB_OUTPUT"
+          echo "sig_file=$SIG_FILE" >> "$GITHUB_OUTPUT"
+          echo "Found: $UPDATE_FILE"
+          echo "Sig: $SIG_FILE"
+
+      - name: Upload updater artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-${{ matrix.target }}
+          path: |
+            ${{ steps.artifacts.outputs.update_file }}
+            ${{ steps.artifacts.outputs.sig_file }}
+          retention-days: 1
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all updater artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate latest.json
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          OSS_BASE="https://${{ secrets.OSS_BUCKET }}.${{ secrets.OSS_REGION }}.aliyuncs.com/releases/${VERSION}"
+
+          # Read signatures
+          AARCH64_SIG=$(cat artifacts/updater-aarch64-apple-darwin/*.sig)
+          X86_64_SIG=$(cat artifacts/updater-x86_64-apple-darwin/*.sig)
+          WINDOWS_SIG=$(cat artifacts/updater-x86_64-pc-windows-msvc/*.sig)
+
+          # Find artifact filenames
+          AARCH64_FILE=$(basename $(ls artifacts/updater-aarch64-apple-darwin/*.tar.gz))
+          X86_64_FILE=$(basename $(ls artifacts/updater-x86_64-apple-darwin/*.tar.gz))
+          WINDOWS_FILE=$(basename $(ls artifacts/updater-x86_64-pc-windows-msvc/*.nsis.zip))
+
+          cat > latest.json << ENDJSON
+          {
+            "version": "${VERSION}",
+            "notes": "See https://github.com/PM-Shawn/Abu-Cowork/releases/tag/${VERSION}",
+            "pub_date": "${DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${AARCH64_SIG}",
+                "url": "${OSS_BASE}/${AARCH64_FILE}"
+              },
+              "darwin-x86_64": {
+                "signature": "${X86_64_SIG}",
+                "url": "${OSS_BASE}/${X86_64_FILE}"
+              },
+              "windows-x86_64": {
+                "signature": "${WINDOWS_SIG}",
+                "url": "${OSS_BASE}/${WINDOWS_FILE}"
+              }
+            }
+          }
+          ENDJSON
+
+          echo "Generated latest.json:"
+          cat latest.json
+
+      - name: Install ossutil
+        run: |
+          curl -fsSL https://gosspublic.alicdn.com/ossutil/install.sh | bash
+
+      - name: Configure ossutil
+        run: |
+          ossutil config \
+            -e ${{ secrets.OSS_REGION }}.aliyuncs.com \
+            -i ${{ secrets.ALIYUN_ACCESS_KEY_ID }} \
+            -k ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+
+      - name: Upload artifacts to OSS
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          BUCKET="oss://${{ secrets.OSS_BUCKET }}"
+
+          # Upload update packages (per-version directory)
+          for dir in artifacts/updater-*; do
+            for file in "$dir"/*; do
+              [ -f "$file" ] || continue
+              ossutil cp "$file" "${BUCKET}/releases/${VERSION}/$(basename $file)" -f
+            done
+          done
+
+          # Upload latest.json to root (with no-cache header)
+          ossutil cp latest.json "${BUCKET}/latest.json" \
+            -f \
+            --meta "Cache-Control:no-cache"
+
+          echo "Upload complete. Verify:"
+          ossutil ls "${BUCKET}/releases/${VERSION}/"
+          ossutil stat "${BUCKET}/latest.json"
