@@ -51,46 +51,44 @@ jobs:
         shell: bash
 
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0.5
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Abu ${{ github.ref_name }}'
-          releaseBody: |
-            See the assets below for download links.
-          releaseDraft: false
-          prerelease: false
-          includeUpdaterJson: true
-          args: --target ${{ matrix.target }}
+        run: npx tauri build --target ${{ matrix.target }}
 
-      - name: Upload updater assets to release
+      - name: Create GitHub Release (idempotent)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "Abu ${{ github.ref_name }}" \
+            --notes "See the assets below for download links." \
+            || true
+
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          TARGET="${{ matrix.target }}"
           TAG="${{ github.ref_name }}"
+          TARGET="${{ matrix.target }}"
+          BUNDLE="src-tauri/target/${TARGET}/release/bundle"
+
+          echo "=== Bundle contents ==="
+          ls -la "$BUNDLE"/macos/ 2>/dev/null || true
+          ls -la "$BUNDLE"/dmg/ 2>/dev/null || true
+          ls -la "$BUNDLE"/nsis/ 2>/dev/null || true
 
           if [[ "$TARGET" == *"apple"* ]]; then
-            BUNDLE_DIR="src-tauri/target/${TARGET}/release/bundle/macos"
+            gh release upload "$TAG" "$BUNDLE"/dmg/*.dmg --clobber || true
+            gh release upload "$TAG" "$BUNDLE"/macos/*.tar.gz --clobber
+            gh release upload "$TAG" "$BUNDLE"/macos/*.tar.gz.sig --clobber
           else
-            BUNDLE_DIR="src-tauri/target/${TARGET}/release/bundle/nsis"
+            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.exe --clobber || true
+            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.nsis.zip --clobber
+            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.nsis.zip.sig --clobber
           fi
-
-          echo "=== Debug: pwd=$(pwd) ==="
-          echo "=== Bundle dir: $BUNDLE_DIR ==="
-          ls -la "$BUNDLE_DIR"/ 2>&1 || echo "Directory not found, listing parent:"
-          ls -la "src-tauri/target/${TARGET}/release/bundle/" 2>&1 || echo "Bundle parent not found either"
-
-          for f in "$BUNDLE_DIR"/*.tar.gz "$BUNDLE_DIR"/*.tar.gz.sig "$BUNDLE_DIR"/*.nsis.zip "$BUNDLE_DIR"/*.nsis.zip.sig; do
-            if [ -f "$f" ]; then
-              echo "Uploading: $(basename $f)"
-              gh release upload "$TAG" "$f" --clobber
-            fi
-          done
 
   publish:
     needs: build
@@ -109,11 +107,10 @@ jobs:
           gh release download "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             -D release-assets \
-            -p "*.tar.gz" -p "*.tar.gz.sig" -p "*.nsis.zip" -p "*.nsis.zip.sig" \
-            || echo "Warning: some patterns had no matches"
+            -p "*.tar.gz" -p "*.tar.gz.sig" -p "*.nsis.zip" -p "*.nsis.zip.sig"
 
           echo "=== Downloaded ==="
-          ls -la release-assets/ || echo "No files downloaded"
+          ls -la release-assets/
 
       - name: Generate latest.json
         shell: bash
