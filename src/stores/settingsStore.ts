@@ -6,6 +6,26 @@ import type { PermissionMode } from '../core/permissions/permissionMode';
 import type { WebSearchProviderType } from '../core/search/providers';
 import { setLanguage, initLanguage, type LanguageSetting } from '@/i18n';
 import type { UpdateInfo } from '@/core/updates/checker';
+import {
+  SECRET_KEYS,
+  getSecret,
+  writeSecretOrDelete,
+  deleteSecret,
+} from '@/utils/secretStore';
+
+/**
+ * Fire-and-forget helper for secret-store side effects. We intentionally
+ * swallow failures here: the in-memory state is authoritative for the
+ * session and localStorage still has a copy during Phase 2, so a transient
+ * secret-store error (e.g. Tauri not ready during early boot tests) must
+ * not break the UI setter. Phase 3 will harden this once the plaintext
+ * fallback is removed.
+ */
+function fafSecret(promise: Promise<void>, label: string): void {
+  promise.catch((err) => {
+    console.warn(`[secrets] ${label} failed:`, err);
+  });
+}
 
 // ============================================================
 // Static Provider Registry (used for defaults, guides, initialization)
@@ -566,28 +586,43 @@ export const useSettingsStore = create<SettingsStore>()(
           return update;
         });
         returnId = id;
+        // Mirror apiKey to encrypted secret store.
+        fafSecret(writeSecretOrDelete(SECRET_KEYS.provider(id), config.apiKey), `addProvider(${id})`);
         return returnId;
       },
 
-      updateProvider: (id, patch) => set((s) => ({
-        providers: s.providers.map(p => p.id === id ? { ...p, ...patch } : p),
-      })),
-
-      removeProvider: (id) => set((s) => {
-        const providers = s.providers.filter(p => p.id !== id);
-        const update: Partial<SettingsState> = { providers };
-        // If we removed the active provider, switch to first enabled
-        if (s.activeModel.providerId === id) {
-          const fallback = providers.find(p => p.enabled);
-          if (fallback) {
-            update.activeModel = {
-              providerId: fallback.id,
-              modelId: fallback.models[0]?.id ?? '',
-            };
-          }
+      updateProvider: (id, patch) => {
+        set((s) => ({
+          providers: s.providers.map(p => p.id === id ? { ...p, ...patch } : p),
+        }));
+        // Only touch the secret store when apiKey is actually being updated;
+        // other patches (enabled flag, status, model list) must not clobber it.
+        if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) {
+          fafSecret(
+            writeSecretOrDelete(SECRET_KEYS.provider(id), patch.apiKey ?? ''),
+            `updateProvider(${id})`,
+          );
         }
-        return update;
-      }),
+      },
+
+      removeProvider: (id) => {
+        set((s) => {
+          const providers = s.providers.filter(p => p.id !== id);
+          const update: Partial<SettingsState> = { providers };
+          // If we removed the active provider, switch to first enabled
+          if (s.activeModel.providerId === id) {
+            const fallback = providers.find(p => p.enabled);
+            if (fallback) {
+              update.activeModel = {
+                providerId: fallback.id,
+                modelId: fallback.models[0]?.id ?? '',
+              };
+            }
+          }
+          return update;
+        });
+        fafSecret(deleteSecret(SECRET_KEYS.provider(id)), `removeProvider(${id})`);
+      },
 
       toggleProvider: (id) => set((s) => ({
         providers: s.providers.map(p =>
@@ -665,13 +700,25 @@ export const useSettingsStore = create<SettingsStore>()(
 
       // ── Auxiliary services ──
 
-      setAuxiliaryWebSearch: (config) => set((s) => ({
-        auxiliaryServices: { ...s.auxiliaryServices, webSearch: config },
-      })),
+      setAuxiliaryWebSearch: (config) => {
+        set((s) => ({
+          auxiliaryServices: { ...s.auxiliaryServices, webSearch: config },
+        }));
+        fafSecret(
+          writeSecretOrDelete(SECRET_KEYS.auxWebSearch, config?.apiKey ?? ''),
+          'setAuxiliaryWebSearch',
+        );
+      },
 
-      setAuxiliaryImageGen: (config) => set((s) => ({
-        auxiliaryServices: { ...s.auxiliaryServices, imageGen: config },
-      })),
+      setAuxiliaryImageGen: (config) => {
+        set((s) => ({
+          auxiliaryServices: { ...s.auxiliaryServices, imageGen: config },
+        }));
+        fafSecret(
+          writeSecretOrDelete(SECRET_KEYS.auxImageGen, config?.apiKey ?? ''),
+          'setAuxiliaryImageGen',
+        );
+      },
 
       // ════════════════════════════════════════════════
       // General settings actions (unchanged)
@@ -1089,3 +1136,82 @@ export const useSettingsStore = create<SettingsStore>()(
     }
   )
 );
+
+/**
+ * Hydrate API keys from the encrypted secret store into the in-memory settings
+ * state. Called once after Zustand rehydration completes, typically from
+ * `App.tsx`. Failures are logged but never thrown: during Phase 2 the
+ * localStorage-persisted plaintext still works as a fallback, so a transient
+ * secret-store error must not block the UI.
+ *
+ * On first run after Phase 2 rollout, the secret store is empty and this
+ * function is a no-op — existing apiKeys remain in place from persist
+ * rehydration. Backfill-on-save happens naturally through the setter
+ * write-through; Phase 3 will add an explicit migration pass to bulk-move
+ * legacy keys.
+ */
+export async function bootstrapSecrets(): Promise<void> {
+  const state = useSettingsStore.getState();
+
+  type Fetch =
+    | { kind: 'provider'; providerId: string; value: string | null }
+    | { kind: 'webSearch'; value: string | null }
+    | { kind: 'imageGen'; value: string | null };
+
+  const tasks: Promise<Fetch>[] = [];
+
+  for (const p of state.providers) {
+    tasks.push(
+      getSecret(SECRET_KEYS.provider(p.id)).then(
+        (value) => ({ kind: 'provider', providerId: p.id, value } as Fetch),
+      ),
+    );
+  }
+  tasks.push(
+    getSecret(SECRET_KEYS.auxWebSearch).then(
+      (value) => ({ kind: 'webSearch', value } as Fetch),
+    ),
+  );
+  tasks.push(
+    getSecret(SECRET_KEYS.auxImageGen).then(
+      (value) => ({ kind: 'imageGen', value } as Fetch),
+    ),
+  );
+
+  let results: Fetch[];
+  try {
+    results = await Promise.all(tasks);
+  } catch (err) {
+    console.warn('[secrets] bootstrap failed:', err);
+    return;
+  }
+
+  useSettingsStore.setState((s) => {
+    const providerUpdates = new Map<string, string>();
+    let webSearchSecret: string | null = null;
+    let imageGenSecret: string | null = null;
+
+    for (const r of results) {
+      if (r.kind === 'provider' && r.value) providerUpdates.set(r.providerId, r.value);
+      else if (r.kind === 'webSearch') webSearchSecret = r.value;
+      else if (r.kind === 'imageGen') imageGenSecret = r.value;
+    }
+
+    // Only overwrite when we got a non-null secret — leaves in-memory
+    // plaintext (from persist rehydration) untouched when the store is empty.
+    const providers = s.providers.map((p) => {
+      const fetched = providerUpdates.get(p.id);
+      return fetched ? { ...p, apiKey: fetched } : p;
+    });
+
+    const auxiliaryServices = { ...s.auxiliaryServices };
+    if (webSearchSecret && auxiliaryServices.webSearch) {
+      auxiliaryServices.webSearch = { ...auxiliaryServices.webSearch, apiKey: webSearchSecret };
+    }
+    if (imageGenSecret && auxiliaryServices.imageGen) {
+      auxiliaryServices.imageGen = { ...auxiliaryServices.imageGen, apiKey: imageGenSecret };
+    }
+
+    return { providers, auxiliaryServices };
+  });
+}

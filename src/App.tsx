@@ -27,7 +27,7 @@ initPlatform().then(() => {
 }).catch((err) => {
   console.warn('[App] Platform detection init error:', err);
 });
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useSettingsStore, bootstrapSecrets } from '@/stores/settingsStore';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { PanelLeft, PanelRight } from 'lucide-react';
 import { isMacOS } from '@/utils/platform';
@@ -119,6 +119,13 @@ function App() {
     registerBuiltinTools();
     refreshDiscovery();
     initMCPStoreSync();
+
+    // Hydrate API keys from the encrypted secret store. During Phase 2 the
+    // plaintext apiKey is still persisted via localStorage as a fallback,
+    // so a transient failure here is logged but non-fatal.
+    bootstrapSecrets().catch((err) => {
+      console.warn('[App] Secret bootstrap error:', err);
+    });
 
     // Initialize notifications with logging
     initNotifications().then((granted) => {
