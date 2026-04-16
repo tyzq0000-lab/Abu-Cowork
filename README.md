@@ -131,6 +131,7 @@
 - **网络隔离** — 本地代理 + 域名白名单 + 私有网络访问开关，可控制每条请求的目标
 - **路径与命令双重校验** — 敏感目录（系统目录、SSH 密钥等）默认拦截；危险命令（`rm -rf /` 等）静态识别
 - **电脑操控防护** — 敏感应用黑名单（钥匙串/系统设置/微信/Slack 等 15+）、危险按键拦截（Cmd+Q、Cmd+Tab、Force Quit 等）、会话级窗口隐藏、5 分钟超时熔断
+- **API Key 加密存储**（v0.12+）— Windows DPAPI / macOS AES-256-GCM（硬件 UUID 派生），不再明文写 localStorage
 - **本地优先** — 数据存在本地，API Key 存在本地，不经过第三方服务器
 - **跨平台** — 支持 macOS (Apple Silicon / Intel) 和 Windows
 

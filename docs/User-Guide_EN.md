@@ -1146,9 +1146,19 @@ Create a tech-themed poster about "AI Shaping the Future"
 
 No. Abu is a local-first app — your files and data are processed locally. The only network traffic is API requests to your LLM provider.
 
-### Q: Where is my API Key stored?
+### Q: Where is my API Key stored? Is it safe?
 
-API Keys are stored in your local app data directory. They are never uploaded to any server.
+Starting with v0.12, API Keys live in your OS-level secret manager — never in plaintext localStorage, and never uploaded to any server:
+
+- **Windows**: Credential Manager (encrypted via DPAPI, bound to your login account)
+- **macOS**: local AES-256-GCM encryption with a key derived from your hardware UUID
+- **Linux**: not officially supported
+
+**Upgrading from 0.11**: legacy plaintext keys are automatically migrated to the encrypted store on first launch. The migration is silent and completes in under a second.
+
+**Moving machines**: the derived key is bound to the current hardware, so after migrating to a new Mac or swapping the logic board, you will need to re-enter your API keys in Settings. This is intentional — it prevents stolen backup drives from leaking your keys. Affected provider cards display a red "please re-enter API Key" hint.
+
+**Hard reset**: the Settings → AI Services page has a "Clear all stored keys" button at the bottom for wiping every stored credential at once.
 
 ### Q: Where is my memory and where are my project rules stored?
 

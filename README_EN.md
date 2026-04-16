@@ -131,6 +131,7 @@ Turn Abu into your team bot — just @Abu in your chat:
 - **Network Isolation** — Local proxy + domain whitelist + private-network toggle to control every outbound request
 - **Path & Command Safety** — Sensitive directories (system folders, SSH keys, etc.) blocked by default; dangerous commands (`rm -rf /`, etc.) caught statically
 - **Computer Use Safeguards** — 15+ blocked sensitive apps (Keychain, System Settings, WeChat, Slack, etc.), dangerous key interception (Cmd+Q, Cmd+Tab, Force Quit), session-level window hiding, 5-minute timeout
+- **Encrypted API Key Storage** (v0.12+) — Windows DPAPI / macOS AES-256-GCM with a hardware-UUID-derived key; keys are no longer written to localStorage in plaintext
 - **Local-First** — Your data stays local, your API keys stay local — nothing goes through third-party servers
 - **Cross-Platform** — Supports macOS (Apple Silicon / Intel) and Windows
 
