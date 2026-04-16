@@ -116,9 +116,10 @@ jobs:
             gh release upload "$TAG" "$BUNDLE"/macos/Abu_${ARCH_SUFFIX}.app.tar.gz --clobber
             gh release upload "$TAG" "$BUNDLE"/macos/Abu_${ARCH_SUFFIX}.app.tar.gz.sig --clobber
           else
-            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.exe --clobber || true
-            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.nsis.zip --clobber
-            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.nsis.zip.sig --clobber
+            # Tauri 2 signs the NSIS .exe installer directly (not a separate .nsis.zip).
+            # The .exe is both the installer and the updater bundle.
+            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.exe --clobber
+            gh release upload "$TAG" "$BUNDLE"/nsis/*-setup.exe.sig --clobber
           fi
 
   publish:
@@ -138,7 +139,7 @@ jobs:
           gh release download "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             -D release-assets \
-            -p "*.tar.gz" -p "*.tar.gz.sig" -p "*.nsis.zip" -p "*.nsis.zip.sig"
+            -p "*.tar.gz" -p "*.tar.gz.sig" -p "*-setup.exe" -p "*-setup.exe.sig"
 
           echo "=== Downloaded ==="
           ls -la release-assets/
@@ -152,11 +153,11 @@ jobs:
 
           AARCH64_SIG=$(cat release-assets/*aarch64*.tar.gz.sig 2>/dev/null || echo "")
           X86_64_SIG=$(cat release-assets/*x64*.tar.gz.sig 2>/dev/null || echo "")
-          WINDOWS_SIG=$(cat release-assets/*.nsis.zip.sig 2>/dev/null || echo "")
+          WINDOWS_SIG=$(cat release-assets/*-setup.exe.sig 2>/dev/null || echo "")
 
           AARCH64_FILE=$(ls release-assets/*aarch64*.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
           X86_64_FILE=$(ls release-assets/*x64*.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
-          WINDOWS_FILE=$(ls release-assets/*.nsis.zip 2>/dev/null | grep -v '.sig' | head -1 | xargs basename 2>/dev/null || echo "")
+          WINDOWS_FILE=$(ls release-assets/*-setup.exe 2>/dev/null | grep -v '.sig' | head -1 | xargs basename 2>/dev/null || echo "")
 
           python3 -c "
           import json
