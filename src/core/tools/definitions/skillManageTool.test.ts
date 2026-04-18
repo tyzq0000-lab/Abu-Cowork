@@ -188,6 +188,32 @@ describe('skill_manage · create', () => {
     expect(result.error).toMatch(/already exists/);
   });
 
+  it('uses context.workspacePath when present, even if the global store is cleared', async () => {
+    // Regression guard for "workspace lost mid-turn": the global store is
+    // sometimes cleared between tool calls (e.g. chatStore.setActiveConversation
+    // clears it when switching to a conv with no bound workspace), but the
+    // agentLoop's toolContext still holds the snapshot from loop start.
+    // skill_manage must prefer context over the live store.
+    useWorkspaceStore.setState({ currentPath: null });
+    vi.spyOn(skillLoader, 'getSkill').mockReturnValue(undefined);
+
+    const result = JSON.parse(
+      (await skillManageTool.execute(
+        {
+          action: 'create',
+          name: 'ctx-fallback',
+          frontmatter: { name: 'ctx-fallback', description: 'x' },
+          content: '# body',
+        },
+        { workspacePath: '/Users/testuser/projects/from-ctx' },
+      )) as string,
+    );
+
+    expect(result.success).toBe(true);
+    // Write landed under the context-provided workspace, not the (null) store.
+    expect(result.path).toContain('projects/-Users-testuser-projects-from-ctx/skills/ctx-fallback');
+  });
+
   it('blocks dangerous content via contentGuard before any write happens', async () => {
     vi.spyOn(skillLoader, 'getSkill').mockReturnValue(undefined);
 

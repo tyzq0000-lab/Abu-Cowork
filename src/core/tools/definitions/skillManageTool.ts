@@ -44,7 +44,7 @@
 import { readTextFile, exists, mkdir, readDir } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
 
-import type { ToolDefinition, SkillMetadata, Skill } from '../../../types';
+import type { ToolDefinition, SkillMetadata, Skill, ToolExecutionContext } from '../../../types';
 import { TOOL_NAMES } from '../toolNames';
 import {
   atomicWrite,
@@ -88,9 +88,17 @@ async function getWorkspaceAutoSkillsDir(workspacePath: string): Promise<string>
   return joinPath(home, '.abu/projects', key, 'skills');
 }
 
-/** Require an active workspace for any write — no writes to global dirs without one. */
-function requireWorkspace(): string {
-  const wp = useWorkspaceStore.getState().currentPath;
+/**
+ * Require an active workspace for any write — no writes to global dirs without one.
+ *
+ * Prefers the loop-time snapshot in `context.workspacePath` (agentLoop builds
+ * this once per loop from imContext or the store), falling back to the live
+ * global store only when context is absent. This avoids the "workspace lost
+ * mid-turn" failure where the user switches conversations or the store is
+ * cleared between tool calls even though the conversation is still bound.
+ */
+function requireWorkspace(context?: ToolExecutionContext): string {
+  const wp = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
   if (!wp) {
     throw new Error(
       'skill_manage requires an active workspace. Open a project first, then retry.',
@@ -337,7 +345,7 @@ async function scanOrRollback(
 
 // ── Action: create ──────────────────────────────────────────────────────
 
-async function createAction(input: Record<string, unknown>): Promise<ActionResult> {
+async function createAction(input: Record<string, unknown>, context?: ToolExecutionContext): Promise<ActionResult> {
   const name = input.name as string;
   const content = input.content as string;
 
@@ -373,7 +381,7 @@ async function createAction(input: Record<string, unknown>): Promise<ActionResul
     return { success: false, error: `content exceeds ${MAX_CONTENT_CHARS} chars` };
   }
 
-  const workspacePath = requireWorkspace();
+  const workspacePath = requireWorkspace(context);
 
   // Name collision: abort if a non-draft skill with this name already exists.
   // Drafts with the same name are allowed to be overwritten (superseded).
@@ -512,7 +520,7 @@ async function createAction(input: Record<string, unknown>): Promise<ActionResul
 
 // ── Action: patch ───────────────────────────────────────────────────────
 
-async function patchAction(input: Record<string, unknown>): Promise<ActionResult> {
+async function patchAction(input: Record<string, unknown>, context?: ToolExecutionContext): Promise<ActionResult> {
   const name = input.name as string;
   const oldString = input.old_string as string;
   const newString = input.new_string as string;
@@ -534,7 +542,7 @@ async function patchAction(input: Record<string, unknown>): Promise<ActionResult
     };
   }
 
-  const workspacePath = requireWorkspace();
+  const workspacePath = requireWorkspace(context);
 
   const existing = skillLoader.getSkill(name);
   if (!existing) {
@@ -666,7 +674,7 @@ function buildPatchDiagnostic(content: string, oldString: string): Partial<Error
 
 // ── Action: write_file ──────────────────────────────────────────────────
 
-async function writeFileAction(input: Record<string, unknown>): Promise<ActionResult> {
+async function writeFileAction(input: Record<string, unknown>, context?: ToolExecutionContext): Promise<ActionResult> {
   const name = input.name as string;
   const filePath = input.file_path as string;
   const fileContent = input.file_content as string;
@@ -689,7 +697,7 @@ async function writeFileAction(input: Record<string, unknown>): Promise<ActionRe
     };
   }
 
-  const workspacePath = requireWorkspace();
+  const workspacePath = requireWorkspace(context);
 
   const existing = skillLoader.getSkill(name);
   if (!existing) {
@@ -821,19 +829,19 @@ export const skillManageTool: ToolDefinition = {
     },
     required: ['action', 'name'],
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const action = input.action as SkillAction;
     let result: ActionResult;
     try {
       switch (action) {
         case 'create':
-          result = await createAction(input);
+          result = await createAction(input, context);
           break;
         case 'patch':
-          result = await patchAction(input);
+          result = await patchAction(input, context);
           break;
         case 'write_file':
-          result = await writeFileAction(input);
+          result = await writeFileAction(input, context);
           break;
         default:
           result = {
