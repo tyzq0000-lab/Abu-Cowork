@@ -55,6 +55,8 @@ const zhCN: TranslationDict = {
     restoreConfirmTitle: '恢复默认性格',
     restoreConfirmMessage: '当前自定义内容将被清除，恢复为出厂默认性格。确定要继续吗？',
     filePath: '文件位置：~/.abu/SOUL.md（高级用户可直接编辑）',
+    proactivityTitle: '主动度',
+    proactivityDesc: '阿布在对话中要不要主动提议沉淀技能。害羞只在你明说时才建，伙伴明确可帮上时主动提议（推荐），管家每次成功任务都考虑提议。',
   },
 
   sidebar: {

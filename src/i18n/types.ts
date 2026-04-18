@@ -69,6 +69,9 @@ export interface TranslationDict {
     restoreConfirmTitle: string;
     restoreConfirmMessage: string;
     filePath: string;
+    // Proactivity preset (Task #23)
+    proactivityTitle: string;
+    proactivityDesc: string;
   };
 
   // Sidebar

@@ -3,6 +3,7 @@ import { useI18n } from '@/i18n';
 import { loadSoul, saveSoul, getDefaultSoulTemplate } from '@/core/agent/soulConfig';
 import { Textarea } from '@/components/ui/textarea';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import ProactivityPicker from './ProactivityPicker';
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
 
@@ -108,6 +109,11 @@ export default function SoulSection() {
           {t.soul.subtitle}
         </p>
       </div>
+
+      {/* Proactivity preset — permanent home for the shy / companion /
+          butler selector. SkillDraftsPanel has a one-time onboarding
+          flow for first-draft users, but this is where they switch later. */}
+      <ProactivityPicker />
 
       <div className="space-y-3">
         <div className="relative">

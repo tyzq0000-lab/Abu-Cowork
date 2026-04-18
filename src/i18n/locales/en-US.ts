@@ -55,6 +55,8 @@ const enUS: TranslationDict = {
     restoreConfirmTitle: 'Restore Default Personality',
     restoreConfirmMessage: 'Your custom personality will be cleared and reset to the factory default. Are you sure?',
     filePath: 'File: ~/.abu/SOUL.md (advanced users can edit directly)',
+    proactivityTitle: 'Proactivity',
+    proactivityDesc: 'How actively Abu proposes to save workflows as skills. Shy = only when you ask. Companion = propose when clearly helpful (recommended). Butler = consider every successful task.',
   },
 
   sidebar: {
