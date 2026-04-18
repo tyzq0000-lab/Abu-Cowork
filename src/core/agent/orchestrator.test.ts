@@ -33,6 +33,7 @@ vi.mock('./projectRules', () => ({
 vi.mock('../../stores/workspaceStore', () => ({
   useWorkspaceStore: {
     getState: vi.fn().mockReturnValue({ currentPath: '/test/workspace' }),
+    subscribe: vi.fn(),
   },
 }));
 

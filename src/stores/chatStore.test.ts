@@ -8,6 +8,7 @@ vi.mock('./workspaceStore', () => ({
       setWorkspace: vi.fn(),
       clearWorkspace: vi.fn(),
     }),
+    subscribe: vi.fn(),
   },
 }));
 

@@ -3,6 +3,7 @@ import type { SkillMetadata, SubagentMetadata } from '../types';
 import { skillLoader } from '../core/skill/loader';
 import { agentRegistry } from '../core/agent/registry';
 import { useSettingsStore } from './settingsStore';
+import { useWorkspaceStore } from './workspaceStore';
 
 interface DiscoveryState {
   skills: SkillMetadata[];
@@ -24,8 +25,11 @@ export const useDiscoveryStore = create<DiscoveryStore>()((set) => ({
   refresh: async () => {
     set({ isLoading: true });
     try {
+      // Pass current workspace to the loader so project-scoped and
+      // agent-written skills are included in the discovery.
+      const wp = useWorkspaceStore.getState().currentPath;
       const [skills, agents] = await Promise.all([
-        skillLoader.discoverSkills(),
+        skillLoader.discoverSkills(wp),
         agentRegistry.discoverAgents(),
       ]);
 
@@ -45,3 +49,20 @@ export const useDiscoveryStore = create<DiscoveryStore>()((set) => ({
     }
   },
 }));
+
+// ── Auto-re-discover on workspace switch ────────────────────────────────
+//
+// App.tsx already triggers an initial `refresh()` at boot. This subscription
+// only kicks in for subsequent workspace changes — switching workspaces
+// should replace the project/project-standard/workspace-auto/draft scope
+// without requiring a manual refresh.
+//
+// Module-level subscribe registers once per process. Fire-and-forget: the
+// refresh action handles its own errors.
+let lastWorkspaceForDiscovery: string | null | undefined;
+useWorkspaceStore.subscribe((state) => {
+  if (state.currentPath !== lastWorkspaceForDiscovery) {
+    lastWorkspaceForDiscovery = state.currentPath;
+    void useDiscoveryStore.getState().refresh();
+  }
+});
