@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import type { Message, MessageContent } from '@/types';
 import MarkdownRenderer from './MarkdownRenderer';
 import ToolCallsGroup from './ToolCallsGroup';
-import SkillProposalCard from './SkillProposalCard';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
 import { usePreviewStore } from '@/stores/previewStore';
 import { runAgentLoop } from '@/core/agent/agentLoop';
@@ -479,19 +478,6 @@ export default function MessageBubble({
         {message.toolCalls && message.toolCalls.length > 0 && (
           <ToolCallsGroup toolCalls={message.toolCalls} />
         )}
-        {/* Interactive notice cards attached to tool calls (Module I) —
-            rendered inline after the tool group so the proposal appears
-            in the conversation flow, not only in the Toolbox panel. */}
-        {convId && message.toolCalls?.filter((tc) => tc.noticeCard).map((tc) => (
-          <SkillProposalCard
-            key={tc.id}
-            conversationId={convId}
-            messageId={message.id}
-            toolCallId={tc.id}
-            card={tc.noticeCard!}
-            settledAction={tc.noticeCardAction}
-          />
-        ))}
         {message.isStreaming && <span className="streaming-cursor" />}
 
         {/* Token usage display */}
@@ -541,19 +527,6 @@ export default function MessageBubble({
         {message.toolCalls && message.toolCalls.length > 0 && (
           <ToolCallsGroup toolCalls={message.toolCalls} />
         )}
-        {/* Interactive notice cards attached to tool calls (Module I) —
-            rendered inline after the tool group so the proposal appears
-            in the conversation flow, not only in the Toolbox panel. */}
-        {convId && message.toolCalls?.filter((tc) => tc.noticeCard).map((tc) => (
-          <SkillProposalCard
-            key={tc.id}
-            conversationId={convId}
-            messageId={message.id}
-            toolCallId={tc.id}
-            card={tc.noticeCard!}
-            settledAction={tc.noticeCardAction}
-          />
-        ))}
         {message.isStreaming && <span className="streaming-cursor" />}
 
         {/* Token usage display */}

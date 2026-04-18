@@ -4,6 +4,7 @@ import { TOOL_NAMES } from '@/core/tools/toolNames';
 import type { ExecutionStep } from '@/types/execution';
 import type { WorkflowStep } from '@/utils/workflowExtractor';
 import MessageBubble from './MessageBubble';
+import SkillProposalCard from './SkillProposalCard';
 import TaskBlock from './TaskBlock';
 import MarkdownRenderer from './MarkdownRenderer';
 import FileAttachment, { ImagePreviewCard, ImageThumbnail, isImageFile } from './FileAttachment';
@@ -487,6 +488,29 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
                     />
                   )}
                 </div>
+              );
+            })}
+
+            {/* Interactive notice cards (Module I) — skill proposals etc.
+                MessageBubble's tool-call branch doesn't fire for assistant
+                messages (MessageGroup renders TaskBlock + an actionsOnly
+                MessageBubble), so the card has to be emitted here where
+                `allToolCalls` is aggregated from every assistant message
+                in this group. Rendered between the task workflow and the
+                file outputs so proposals stay colocated with the agent
+                turn that produced them. */}
+            {activeConv?.id && allToolCalls.filter((tc) => tc.noticeCard).map((tc) => {
+              const owningMsg = assistantMsgs.find((m) => m.toolCalls?.some((x) => x.id === tc.id));
+              if (!owningMsg) return null;
+              return (
+                <SkillProposalCard
+                  key={`notice-${tc.id}`}
+                  conversationId={activeConv.id}
+                  messageId={owningMsg.id}
+                  toolCallId={tc.id}
+                  card={tc.noticeCard!}
+                  settledAction={tc.noticeCardAction}
+                />
               );
             })}
 
