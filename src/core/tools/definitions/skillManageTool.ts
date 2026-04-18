@@ -415,7 +415,10 @@ async function createAction(input: Record<string, unknown>): Promise<ActionResul
   return {
     success: true,
     status: 'pending-user-approval',
-    message: `Draft "${name}" created at ${targetPath}. Awaiting user approval in the Skills → Drafts tab.`,
+    message:
+      `Draft "${name}" saved as pending. Path: ${targetPath}. ` +
+      `The draft is on disk only — an interactive review UI is planned (Module G / Task #21) ` +
+      `but not yet built. The user can inspect the file directly until that lands.`,
     path: targetPath,
   };
 }
