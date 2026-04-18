@@ -25,6 +25,7 @@ export const TOOL_NAMES = {
   USE_SKILL: 'use_skill',
   READ_SKILL_FILE: 'read_skill_file',
   SKILL_VIEW: 'skill_view',
+  SKILL_MANAGE: 'skill_manage',
   DELEGATE_TO_AGENT: 'delegate_to_agent',
   REPORT_PLAN: 'report_plan',
   SAVE_SKILL: 'save_skill',
