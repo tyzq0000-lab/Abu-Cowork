@@ -196,6 +196,13 @@ export interface Conversation {
   projectId?: string;  // If set, this conversation belongs to a project
   contextCache?: ContextCache;  // Ephemeral compression cache (not persisted)
   contextWarningLevel?: 0 | 1 | 2 | 3;  // Ephemeral context usage warning level (not persisted)
+  /**
+   * Post-loop proposal nudge, stashed by agentLoop completion when the
+   * last loop was "sink-worthy" (see `proposalSignal.ts`). Read by the
+   * next turn's orchestrator and cleared immediately — single-shot, not
+   * persisted across sessions.
+   */
+  pendingProposalSignal?: import('../core/agent/proposalSignal').ProposalSignal;
 }
 
 // --- Agent ---

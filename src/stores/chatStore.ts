@@ -155,6 +155,12 @@ interface ChatActions {
    * through to disk via replaceMessageById so reload keeps the state.
    */
   setToolCallNoticeCardAction: (convId: string, messageId: string, toolCallId: string, action: NoticeCardAction) => void;
+  /**
+   * Stash a post-loop proposal signal on the conversation so the next
+   * turn's orchestrator can surface a one-shot <consider_sinking> nudge.
+   * Ephemeral — not persisted. See `proposalSignal.ts`.
+   */
+  setPendingProposalSignal: (convId: string, signal: import('../core/agent/proposalSignal').ProposalSignal | undefined) => void;
 
   // New message operations
   editMessage: (convId: string, messageId: string, newContent: string) => void;
@@ -542,6 +548,13 @@ export const useChatStore = create<ChatStore>()(
             replaceMessageById(convId, updatedMsg).catch(() => {});
           });
         }
+      },
+
+      setPendingProposalSignal: (convId, signal) => {
+        set((state) => {
+          const conv = state.conversations[convId];
+          if (conv) conv.pendingProposalSignal = signal;
+        });
       },
 
       setToolCallNoticeCardAction: (convId, messageId, toolCallId, action) => {

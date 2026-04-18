@@ -1464,6 +1464,28 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
             extractMemoriesFromConversation(conversationId, wsPath)
           ).catch(() => {});
         }
+
+        // Post-loop proposal signal — if this loop was "sink-worthy",
+        // stash a one-shot nudge so next turn's system prompt tells
+        // the agent to consider skill_manage(agent_proposed=true). This
+        // is the self-evolution activation mechanism — without it,
+        // agent only proposes when user explicitly says "save this".
+        if (exitReason === 'completed') {
+          try {
+            const { computeProposalSignal } = await import('./proposalSignal');
+            const { useSettingsStore } = await import('../../stores/settingsStore');
+            const proactivity =
+              useSettingsStore.getState().soul?.proactivity ?? 'companion';
+            const conv = chatStore.conversations[conversationId];
+            const loopMsgs = (conv?.messages ?? []).filter((m) => m.loopId === loopId);
+            const signal = computeProposalSignal(loopMsgs, proactivity);
+            if (signal) {
+              chatStore.setPendingProposalSignal(conversationId, signal);
+            }
+          } catch (err) {
+            logger.warn('[proposalSignal] compute failed', { err: err instanceof Error ? err.message : String(err) });
+          }
+        }
         const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
         notifyTaskCompleted(convTitle);
       }
