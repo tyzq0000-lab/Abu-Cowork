@@ -152,6 +152,60 @@ describe('conversationStorage', () => {
       expect(loaded).toEqual([]);
     });
 
+    it('concurrent appendMessage + replaceMessageById do not race', async () => {
+      // Seed: two messages on disk
+      const seed1 = makeMsg({ id: 'seed-1', content: 'seed one' });
+      const seed2 = makeMsg({ id: 'seed-2', content: 'seed two' });
+      await storage.appendMessage('race-conv', seed1);
+      await storage.appendMessage('race-conv', seed2);
+      await storage.flushWrites();
+
+      // Fire concurrent ops: append 3 new messages while replacing seed-1.
+      // Before the mutex, two of these would read overlapping snapshots and
+      // produce either lost messages or corrupt JSONL fragments on disk.
+      const append1 = storage.appendMessage(
+        'race-conv',
+        makeMsg({ id: 'new-1', content: 'after race' }),
+      );
+      const replace = storage.replaceMessageById(
+        'race-conv',
+        makeMsg({ id: 'seed-1', content: 'REPLACED' }),
+      );
+      const append2 = storage.appendMessage(
+        'race-conv',
+        makeMsg({ id: 'new-2', content: 'another after race' }),
+      );
+
+      await Promise.all([append1, replace, append2]);
+      await storage.flushWrites();
+
+      const loaded = await storage.loadMessages('race-conv');
+      // Every message should exist — no lost appends, no duplicate lines
+      const ids = loaded.map((m) => m.id).sort();
+      expect(ids).toEqual(['new-1', 'new-2', 'seed-1', 'seed-2'].sort());
+      // seed-1 should carry the replacement content
+      const seed1Loaded = loaded.find((m) => m.id === 'seed-1');
+      expect(seed1Loaded?.content).toBe('REPLACED');
+    });
+
+    it('concurrent writes to different conversations run in parallel', async () => {
+      // Different paths use different locks — throughput should not suffer.
+      const writes = Array.from({ length: 5 }, (_, i) =>
+        storage.appendMessage(
+          `parallel-conv-${i}`,
+          makeMsg({ id: `p-${i}`, content: `msg ${i}` }),
+        ),
+      );
+      await Promise.all(writes);
+      await storage.flushWrites();
+
+      for (let i = 0; i < 5; i++) {
+        const loaded = await storage.loadMessages(`parallel-conv-${i}`);
+        expect(loaded).toHaveLength(1);
+        expect(loaded[0].content).toBe(`msg ${i}`);
+      }
+    });
+
     it('does not put corrupt messages in the dedup cache', async () => {
       const good = JSON.stringify(makeMsg({ id: 'kept', content: 'original' }));
       const corrupt = '{broken line';

@@ -80,6 +80,54 @@ function indexFilePath(): string {
 }
 
 // ════════════════════════════════════════════════════════════
+// Per-file mutex — serializes read-modify-write against same path
+// ════════════════════════════════════════════════════════════
+//
+// Three call sites do non-atomic read-modify-write on messages.jsonl:
+//   - appendToFile (from drain)
+//   - replaceMessageById (flush each agent turn)
+//   - updateLastMessage (on stream completion)
+//
+// Without serialization two of these concurrent on the same file can
+// interleave — one reads a stale snapshot and later overwrites changes
+// the other just committed. Worse, if a writeTextFile's buffer crosses
+// the OS write-syscall boundary, two concurrent writes can literally
+// splice bytes mid-serialization, producing broken JSONL lines that
+// loadMessages has to skip. Observed rate: ~12% of lines in heavy
+// tool-call conversations (see Task follow-up to #15 in commit log).
+//
+// The fix is a FIFO promise chain per file path — every caller awaits
+// the previous queued op before starting its own, so all ops on the
+// same file run strictly sequentially. Different files run in parallel
+// (each has its own chain), so throughput is preserved.
+
+const fileLocks = new Map<string, Promise<void>>();
+
+/**
+ * Serialize a file-mutating operation on `filePath`. Concurrent callers on
+ * the same path form a FIFO queue; different paths run in parallel.
+ */
+async function withFileLock<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+  const prev = fileLocks.get(filePath) ?? Promise.resolve();
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  fileLocks.set(filePath, next);
+  try {
+    await prev;
+    return await fn();
+  } finally {
+    release();
+    // Avoid unbounded map growth: if no newer waiter has queued behind us
+    // (the map still points at this entry), drop it.
+    if (fileLocks.get(filePath) === next) {
+      fileLocks.delete(filePath);
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
 // Write Queue — batches writes per file, 100ms debounce
 // ════════════════════════════════════════════════════════════
 
@@ -131,36 +179,40 @@ async function drainAll(): Promise<void> {
  * Append data to a file. Creates parent directory on first write.
  * Tauri's writeTextFile doesn't support native append, so we
  * read + append + write. For typical conversation files (<1MB) this is fine.
+ *
+ * Serialized against concurrent mutations on the same path via `withFileLock`.
  */
 async function appendToFile(filePath: string, data: string): Promise<void> {
-  try {
-    if (await exists(filePath)) {
-      const current = await readTextFile(filePath);
-      await writeTextFile(filePath, current + data);
-    } else {
-      // Ensure directory exists on first write
-      const dir = filePath.substring(0, filePath.lastIndexOf('/'));
-      if (dir && !(await exists(dir))) {
-        await mkdir(dir, { recursive: true });
-      }
-      await writeTextFile(filePath, data);
-    }
-  } catch {
-    // Retry: ensure directory exists, then re-read existing content to preserve it.
-    // Previous implementation wrote only `data` here, which would overwrite the
-    // entire file and destroy all existing messages — a catastrophic data loss bug.
-    const dir = filePath.substring(0, filePath.lastIndexOf('/'));
-    if (dir) await mkdir(dir, { recursive: true });
-    let existing = '';
+  return withFileLock(filePath, async () => {
     try {
       if (await exists(filePath)) {
-        existing = await readTextFile(filePath);
+        const current = await readTextFile(filePath);
+        await writeTextFile(filePath, current + data);
+      } else {
+        // Ensure directory exists on first write
+        const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+        if (dir && !(await exists(dir))) {
+          await mkdir(dir, { recursive: true });
+        }
+        await writeTextFile(filePath, data);
       }
     } catch {
-      // If we still can't read, at least don't destroy what's there — let it throw
+      // Retry: ensure directory exists, then re-read existing content to preserve it.
+      // Previous implementation wrote only `data` here, which would overwrite the
+      // entire file and destroy all existing messages — a catastrophic data loss bug.
+      const dir = filePath.substring(0, filePath.lastIndexOf('/'));
+      if (dir) await mkdir(dir, { recursive: true });
+      let existing = '';
+      try {
+        if (await exists(filePath)) {
+          existing = await readTextFile(filePath);
+        }
+      } catch {
+        // If we still can't read, at least don't destroy what's there — let it throw
+      }
+      await writeTextFile(filePath, existing + data);
     }
-    await writeTextFile(filePath, existing + data);
-  }
+  });
 }
 
 /**
@@ -327,38 +379,38 @@ export async function replaceMessageById(
   const path = messagesPath(convId);
   if (!(await exists(path))) return;
 
-  try {
-    // Flush pending writes for this file first to avoid races
-    const pending = writeQueues.get(path);
-    if (pending && pending.length > 0) {
-      await flushWrites();
-    }
-
-    const raw = await readTextFile(path);
-    const lines = raw.trimEnd().split('\n');
-    let replaced = false;
-    for (let i = 0; i < lines.length; i++) {
-      // Cheap pre-check: only parse lines that contain the id substring
-      if (!lines[i].includes(`"${message.id}"`)) continue;
-      try {
-        const parsed = JSON.parse(lines[i]) as Message;
-        if (parsed.id === message.id) {
-          lines[i] = JSON.stringify(stripForDisk(message));
-          replaced = true;
-          break;
+  // Serialize with concurrent drain / updateLastMessage on the same path.
+  // We intentionally do NOT pre-flush via flushWrites(): drain would try
+  // to re-acquire the same lock and deadlock. The lock itself guarantees
+  // any queued drain runs before-or-after us, never mid-operation.
+  return withFileLock(path, async () => {
+    try {
+      const raw = await readTextFile(path);
+      const lines = raw.trimEnd().split('\n');
+      let replaced = false;
+      for (let i = 0; i < lines.length; i++) {
+        // Cheap pre-check: only parse lines that contain the id substring
+        if (!lines[i].includes(`"${message.id}"`)) continue;
+        try {
+          const parsed = JSON.parse(lines[i]) as Message;
+          if (parsed.id === message.id) {
+            lines[i] = JSON.stringify(stripForDisk(message));
+            replaced = true;
+            break;
+          }
+        } catch {
+          // Skip corrupt line
         }
-      } catch {
-        // Skip corrupt line
       }
-    }
 
-    if (replaced) {
-      await writeTextFile(path, lines.join('\n') + '\n');
-      writtenIds.add(message.id);
+      if (replaced) {
+        await writeTextFile(path, lines.join('\n') + '\n');
+        writtenIds.add(message.id);
+      }
+    } catch {
+      // Non-critical: leave the file as-is. Worst case the message disk state lags behind memory.
     }
-  } catch {
-    // Non-critical: leave the file as-is. Worst case the message disk state lags behind memory.
-  }
+  });
 }
 
 /**
@@ -373,22 +425,25 @@ export async function updateLastMessage(
   const path = messagesPath(convId);
   if (!(await exists(path))) return;
 
+  // Serialize with concurrent drain / replaceMessageById on the same path.
+  // Like replaceMessageById, we do not pre-flush — the lock does the job
+  // without the deadlock risk of flushWrites re-acquiring.
+  let updated = false;
   try {
-    // Flush pending writes for this file first
-    const pending = writeQueues.get(path);
-    if (pending && pending.length > 0) {
-      await flushWrites();
-    }
-
-    const raw = await readTextFile(path);
-    const lines = raw.trimEnd().split('\n');
-    lines[lines.length - 1] = JSON.stringify(stripForDisk(message));
-    await writeTextFile(path, lines.join('\n') + '\n');
-
-    // Update dedup cache
-    writtenIds.add(message.id);
+    await withFileLock(path, async () => {
+      const raw = await readTextFile(path);
+      const lines = raw.trimEnd().split('\n');
+      lines[lines.length - 1] = JSON.stringify(stripForDisk(message));
+      await writeTextFile(path, lines.join('\n') + '\n');
+      writtenIds.add(message.id);
+      updated = true;
+    });
   } catch {
-    // If update fails, append instead (safer fallback)
+    // Swallow: fall through to append-fallback below
+  }
+  if (!updated) {
+    // If the in-lock update failed, appendMessage is a safer recovery — it
+    // re-uses the same lock internally so ordering is still preserved.
     writtenIds.delete(message.id);
     await appendMessage(convId, message);
   }
