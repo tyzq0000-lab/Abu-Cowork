@@ -681,6 +681,7 @@ const zhCN: TranslationDict = {
     skillSourceUser: '用户创建',
     skillSourceStandard: '全局安装',
     skillSourceProject: '项目',
+    skillSourceWorkspaceAuto: '项目自治',
     installAgentSkills: '安装 Agent Skills',
     installAgentSkillsPlaceholder: '输入 GitHub 仓库名，如 larksuite/cli',
     installAgentSkillsHint: '等同于运行 npx skills add <仓库名> -g',

@@ -24,6 +24,31 @@ import type { Skill } from '@/types';
 import MarkdownRenderer from '@/components/chat/MarkdownRenderer';
 
 // Build a set of system skill names from marketplace templates
+/**
+ * Map a skill source to its visual badge (Task #22). User-scope skills
+ * get no badge — that's the "my skills" default and adding a pill there
+ * would be pure noise. Only surface sources where the distinction matters:
+ *   - builtin         → "内置" (comes with Abu)
+ *   - workspace-auto  → "本项目自治" (agent-written, accepted via card)
+ *   - project*        → "项目" (workspace's own .abu/skills git-tracked)
+ *   - standard        → "标准" (~/.agents/skills cross-client)
+ */
+type SourceBadge = { labelKey: 'skillSourceBuiltin' | 'skillSourceWorkspaceAuto' | 'skillSourceProject' | 'skillSourceStandard'; tone: 'neutral' | 'clay' | 'blue' | 'slate' } | null;
+function sourceBadge(skill: Skill): SourceBadge {
+  if (skill.source === 'builtin') return { labelKey: 'skillSourceBuiltin', tone: 'neutral' };
+  if (skill.source === 'workspace-auto') return { labelKey: 'skillSourceWorkspaceAuto', tone: 'clay' };
+  if (skill.source === 'project' || skill.source === 'project-standard') return { labelKey: 'skillSourceProject', tone: 'blue' };
+  if (skill.source === 'standard') return { labelKey: 'skillSourceStandard', tone: 'slate' };
+  return null;  // 'user' — default, no badge
+}
+
+const SOURCE_BADGE_TONE: Record<'neutral' | 'clay' | 'blue' | 'slate', string> = {
+  neutral: 'bg-[var(--abu-bg-muted)] text-[var(--abu-text-muted)]',
+  clay: 'bg-[var(--abu-clay-tint)] text-[var(--abu-clay)]',
+  blue: 'bg-blue-50 text-blue-600',
+  slate: 'bg-slate-100 text-slate-600',
+};
+
 const systemSkillNames = new Set(
   skillTemplates.filter((t) => t.isBuiltin).map((t) => t.name)
 );
@@ -431,6 +456,17 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
           }`}>
             {skill.name}
           </span>
+          {(() => {
+            const badge = sourceBadge(skill);
+            if (!badge) return null;
+            return (
+              <span
+                className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${SOURCE_BADGE_TONE[badge.tone]}`}
+              >
+                {t.toolbox[badge.labelKey]}
+              </span>
+            );
+          })()}
           <div className="p-0.5 text-[var(--abu-text-muted)]">
             {isExpanded
               ? <ChevronDown className="h-3.5 w-3.5" />

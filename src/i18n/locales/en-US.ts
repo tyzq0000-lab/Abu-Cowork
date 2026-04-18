@@ -681,6 +681,7 @@ const enUS: TranslationDict = {
     skillSourceUser: 'User',
     skillSourceStandard: 'Installed',
     skillSourceProject: 'Project',
+    skillSourceWorkspaceAuto: 'Auto',
     installAgentSkills: 'Install Agent Skills',
     installAgentSkillsPlaceholder: 'GitHub repo, e.g. larksuite/cli',
     installAgentSkillsHint: 'Runs npx skills add <repo> -g',

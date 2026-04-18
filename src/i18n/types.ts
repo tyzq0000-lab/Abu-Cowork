@@ -657,6 +657,7 @@ export interface TranslationDict {
     skillSourceUser: string;
     skillSourceStandard: string;
     skillSourceProject: string;
+    skillSourceWorkspaceAuto: string;
     installAgentSkills: string;
     installAgentSkillsPlaceholder: string;
     installAgentSkillsHint: string;
