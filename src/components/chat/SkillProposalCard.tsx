@@ -21,7 +21,6 @@ import { Sparkles, Check, X, Ban, ChevronDown, ChevronRight, Loader2 } from 'luc
 import { useI18n } from '@/i18n';
 import { useChatStore } from '@/stores/chatStore';
 import { useSkillDraftsStore } from '@/stores/skillDraftsStore';
-import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useToastStore } from '@/stores/toastStore';
 import { writeMemory } from '@/core/memdir/write';
 import { cn } from '@/lib/utils';
@@ -61,9 +60,16 @@ export default function SkillProposalCard({
     setAction(conversationId, messageId, toolCallId, action);
   };
 
+  // Pass the workspace captured at proposal time, not the live global store.
+  // The global store can have drifted — e.g. user restarts Abu and reopens
+  // this conversation; chatStore.setActiveConversation clears the workspace
+  // if conv.workspacePath was never bound. Card-local workspace ensures
+  // accept / reject still succeed.
+  const cardWorkspace = proposal.workspacePath;
+
   const handleAccept = async () => {
     setProcessing(true);
-    const r = await acceptDraft(proposal.skillName);
+    const r = await acceptDraft(proposal.skillName, cardWorkspace);
     setProcessing(false);
     if (!r.ok) {
       addToast({ type: 'error', title: t.toolbox.draftsAcceptError, message: r.error });
@@ -74,7 +80,7 @@ export default function SkillProposalCard({
 
   const handleReject = async () => {
     setProcessing(true);
-    const r = await rejectDraft(proposal.skillName);
+    const r = await rejectDraft(proposal.skillName, undefined, cardWorkspace);
     setProcessing(false);
     if (!r.ok) {
       addToast({ type: 'error', title: t.toolbox.draftsRejectError, message: r.error });
@@ -88,14 +94,13 @@ export default function SkillProposalCard({
     // Reject the draft first, then write a feedback memory so future
     // companion/butler-level prompts pick it up (Module F's "create 前
     // 扫 feedback memory" guardrail).
-    const r = await rejectDraft(proposal.skillName);
+    const r = await rejectDraft(proposal.skillName, undefined, cardWorkspace);
     if (!r.ok) {
       setProcessing(false);
       addToast({ type: 'error', title: t.toolbox.draftsRejectError, message: r.error });
       return;
     }
     try {
-      const wp = useWorkspaceStore.getState().currentPath;
       await writeMemory({
         name: `不要主动为类似 "${proposal.skillName}" 的任务建议 skill`,
         description: `用户拒绝了 skill 提议 "${proposal.skillName}"，并选择「这类别再提议」。`,
@@ -108,7 +113,7 @@ export default function SkillProposalCard({
           '**How to apply:** 识别到类似模式时，直接完成任务，不提议创建 skill。用户若真需要再明说。',
         ].join('\n'),
         source: 'agent_explicit',
-        workspacePath: wp ?? null,
+        workspacePath: cardWorkspace,
       });
     } catch (err) {
       // Memory write is best-effort — even if it fails, the draft is already

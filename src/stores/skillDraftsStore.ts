@@ -46,10 +46,21 @@ interface SkillDraftsState {
 
 interface SkillDraftsActions {
   refresh: () => Promise<void>;
-  acceptDraft: (name: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /**
+   * Promote a draft to workspace-auto. `workspaceOverride` is used by
+   * in-chat proposal cards (see `InteractiveNoticeCard`) to bypass the
+   * global workspaceStore — cards carry the workspace captured at
+   * proposal time, so clicks work after restart / conversation switch
+   * even if the global store has drifted.
+   */
+  acceptDraft: (
+    name: string,
+    workspaceOverride?: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   rejectDraft: (
     name: string,
     reason?: string,
+    workspaceOverride?: string,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   cleanExpired: () => Promise<number>;
   cleanTrash: () => Promise<number>;
@@ -81,8 +92,8 @@ export const useSkillDraftsStore = create<SkillDraftsStore>()((set, get) => ({
     }
   },
 
-  acceptDraft: async (name) => {
-    const wp = useWorkspaceStore.getState().currentPath;
+  acceptDraft: async (name, workspaceOverride) => {
+    const wp = workspaceOverride ?? useWorkspaceStore.getState().currentPath;
     if (!wp) return { ok: false, error: 'no active workspace' };
     try {
       await acceptDraftFs(name, wp);
@@ -101,8 +112,8 @@ export const useSkillDraftsStore = create<SkillDraftsStore>()((set, get) => ({
     }
   },
 
-  rejectDraft: async (name, reason) => {
-    const wp = useWorkspaceStore.getState().currentPath;
+  rejectDraft: async (name, reason, workspaceOverride) => {
+    const wp = workspaceOverride ?? useWorkspaceStore.getState().currentPath;
     if (!wp) return { ok: false, error: 'no active workspace' };
     try {
       await rejectDraftFs(name, wp, reason);

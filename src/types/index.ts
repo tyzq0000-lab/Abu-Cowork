@@ -29,6 +29,13 @@ export interface SkillProposalPayload {
   draftPath: string;
   /** Full SKILL.md content for the expand-to-preview UI. */
   fullContent: string;
+  /**
+   * Workspace captured at proposal time. Carried on the card so accept /
+   * reject clicks work even after the global workspaceStore has drifted
+   * (e.g. user reopened an old conversation whose conv.workspacePath was
+   * never bound, and chatStore.setActiveConversation cleared the store).
+   */
+  workspacePath: string;
 }
 
 /**

@@ -486,6 +486,7 @@ async function createAction(input: Record<string, unknown>, context?: ToolExecut
         triggerReason,
         draftPath: record.skillMdPath,
         fullContent: serialized,
+        workspacePath,
       },
     };
 

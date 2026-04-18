@@ -154,6 +154,9 @@ describe('skill_manage · create', () => {
         triggerReason: '3 步成功任务',
         draftPath: expect.stringContaining('/drafts/proposal-card/SKILL.md'),
         fullContent: expect.stringContaining('# Proposal body'),
+        // workspacePath is captured at proposal time so card clicks work
+        // even if the global store has drifted after restart.
+        workspacePath: '/workspace/myapp',
       }),
     );
   });

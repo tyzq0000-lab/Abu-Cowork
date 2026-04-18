@@ -118,6 +118,19 @@ describe('skillDraftsStore · acceptDraft', () => {
     expect(mockAcceptDraft).not.toHaveBeenCalled();
   });
 
+  it('workspaceOverride succeeds when global store is null', async () => {
+    // Regression guard for "card click after restart / conv switch":
+    // notice cards carry their original workspace, so accept must honor
+    // it even when useWorkspaceStore has been cleared.
+    useWorkspaceStore.setState({ currentPath: null });
+    mockListDrafts.mockClear();
+
+    const result = await useSkillDraftsStore.getState().acceptDraft('from-card', '/captured/ws');
+
+    expect(result).toEqual({ ok: true });
+    expect(mockAcceptDraft).toHaveBeenCalledWith('from-card', '/captured/ws');
+  });
+
   it('captures filesystem errors without crashing', async () => {
     mockAcceptDraft.mockRejectedValueOnce(new Error('already exists'));
 
