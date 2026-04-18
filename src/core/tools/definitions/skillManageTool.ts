@@ -59,6 +59,7 @@ import {
 } from '../../safety/contentGuard';
 import { skillLoader, serializeSkillMd } from '../../skill/loader';
 import { fuzzyFindAndReplace } from '../../skill/fuzzyPatch';
+import { writeDraft } from '../../skill/drafts';
 import { joinPath, normalizeSeparators } from '../../../utils/pathUtils';
 import { sanitizePath } from '../../memdir/paths';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
@@ -85,12 +86,6 @@ async function getWorkspaceAutoSkillsDir(workspacePath: string): Promise<string>
   const home = await homeDir();
   const key = sanitizePath(normalizeSeparators(workspacePath));
   return joinPath(home, '.abu/projects', key, 'skills');
-}
-
-async function getDraftSkillsDir(workspacePath: string): Promise<string> {
-  // Visible "drafts" (not ".drafts") so Tauri $HOME/** globs traverse it.
-  // See loader.ts comment on why hidden-prefix was rejected.
-  return joinPath(await getWorkspaceAutoSkillsDir(workspacePath), 'drafts');
 }
 
 /** Require an active workspace for any write — no writes to global dirs without one. */
@@ -390,24 +385,54 @@ async function createAction(input: Record<string, unknown>): Promise<ActionResul
     };
   }
 
-  const draftsDir = await getDraftSkillsDir(workspacePath);
-  const targetDir = joinPath(draftsDir, name);
-  const targetPath = joinPath(targetDir, 'SKILL.md');
-
   const serialized = serializeSkillMd(frontmatter, content);
 
-  // Write atomically with backup (in case there's a stale draft at this path).
-  let backupPath: string | null = null;
-  try {
-    const result = await atomicWriteWithBackup(targetPath, serialized);
-    backupPath = result.backupPath;
-  } catch (e) {
-    return { success: false, error: `write failed: ${e instanceof Error ? e.message : String(e)}` };
+  // Pre-write scan: for create there is no pre-existing file to roll back
+  // to, so we just refuse to write if the content trips the guard. Matches
+  // scanOrRollback's verdict semantics (kill switch + bypass honored).
+  const safety = useSettingsStore.getState().safety;
+  if (safety.enableContentGuard) {
+    const scan = scanContent(serialized, { bypass: new Set(safety.bypass) });
+    if (evaluate(scan, 'skill-create') === 'block') {
+      return {
+        success: false,
+        error: 'Content blocked by safety scanner. Rewrite without the matched patterns and retry.',
+        scan: {
+          verdict: scan.verdict,
+          findings: scan.findings.map((f: Finding) => ({
+            pattern_id: f.patternId,
+            severity: f.severity,
+            category: f.category,
+            line: f.line,
+            match: f.match,
+            description: f.description,
+          })),
+        },
+      };
+    }
   }
 
-  // Post-write scan
-  const blocked = await scanOrRollback(serialized, 'skill-create', targetPath, backupPath);
-  if (blocked) return blocked;
+  // Delegate the write to drafts.ts so one module owns the draft filesystem
+  // layout (SKILL.md + sidecar + trash). TTL is chosen from the caller's
+  // current proactivity preset.
+  const proactivity =
+    useSettingsStore.getState().soul?.proactivity ?? 'companion';
+  const triggerReason =
+    typeof input.trigger_reason === 'string' ? input.trigger_reason : '';
+  let record: Awaited<ReturnType<typeof writeDraft>>;
+  try {
+    record = await writeDraft(
+      name,
+      serialized,
+      { action: 'create', proactivity, triggerReason },
+      workspacePath,
+    );
+  } catch (e) {
+    return {
+      success: false,
+      error: `write failed: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
 
   // Refresh loader so the draft shows up on the next getSkill() call.
   await skillLoader.discoverSkills(workspacePath).catch(() => {
@@ -418,10 +443,10 @@ async function createAction(input: Record<string, unknown>): Promise<ActionResul
     success: true,
     status: 'pending-user-approval',
     message:
-      `Draft "${name}" saved as pending. Path: ${targetPath}. ` +
+      `Draft "${name}" saved as pending. Path: ${record.skillMdPath}. ` +
       `The draft is on disk only — an interactive review UI is planned (Module G / Task #21) ` +
       `but not yet built. The user can inspect the file directly until that lands.`,
-    path: targetPath,
+    path: record.skillMdPath,
   };
 }
 
@@ -717,6 +742,11 @@ export const skillManageTool: ToolDefinition = {
       file_content: {
         type: 'string',
         description: '[write_file] 文件内容',
+      },
+      trigger_reason: {
+        type: 'string',
+        description:
+          '[create] 可选。用一句话说明为什么在此刻提议这个 skill，例如"6 步数据导出任务成功"。用户在草稿面板审核时会看到。',
       },
     },
     required: ['action', 'name'],

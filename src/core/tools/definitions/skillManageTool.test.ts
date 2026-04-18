@@ -15,12 +15,18 @@ vi.mock('../../../utils/atomicFs', () => ({
 }));
 
 // Import the mocked versions so tests can assert on them
-import { atomicWriteWithBackup, restoreFromBackup } from '../../../utils/atomicFs';
+import { atomicWrite, atomicWriteWithBackup, restoreFromBackup } from '../../../utils/atomicFs';
 
 const mockReadTextFile = vi.mocked(readTextFile);
 const mockExists = vi.mocked(exists);
+const mockAtomicWrite = vi.mocked(atomicWrite);
 const mockAtomicWriteWithBackup = vi.mocked(atomicWriteWithBackup);
 const mockRestoreFromBackup = vi.mocked(restoreFromBackup);
+
+/** Return paths+contents written through the plain atomicWrite mock. */
+function writtenByAtomicWrite(): Array<{ path: string; content: string }> {
+  return mockAtomicWrite.mock.calls.map(([p, c]) => ({ path: p, content: c }));
+}
 
 const makeSkill = (name: string, extras: Partial<Skill> = {}): Skill => ({
   name,
@@ -86,12 +92,15 @@ describe('skill_manage · create', () => {
     expect(result.status).toBe('pending-user-approval');
     expect(result.path).toContain('drafts/weekly-report/SKILL.md');
 
-    // Actually called atomicWriteWithBackup
-    expect(mockAtomicWriteWithBackup).toHaveBeenCalledOnce();
-    const [writtenPath, writtenContent] = mockAtomicWriteWithBackup.mock.calls[0];
-    expect(writtenPath).toContain('drafts/weekly-report/SKILL.md');
-    expect(writtenContent).toContain('name: weekly-report');
-    expect(writtenContent).toContain('# Procedure');
+    // create now goes through drafts.writeDraft, which writes SKILL.md plus
+    // the sidecar — both via plain atomicWrite.
+    const writes = writtenByAtomicWrite();
+    const skillMd = writes.find((w) => w.path.endsWith('SKILL.md'));
+    const sidecar = writes.find((w) => w.path.endsWith('.abu-draft-meta.json'));
+    expect(skillMd?.path).toContain('drafts/weekly-report/SKILL.md');
+    expect(skillMd?.content).toContain('name: weekly-report');
+    expect(skillMd?.content).toContain('# Procedure');
+    expect(sidecar).toBeDefined();
   });
 
   it('accepts flat description when LLM flattens the schema', async () => {
@@ -106,8 +115,8 @@ describe('skill_manage · create', () => {
     });
     const result = JSON.parse((await skillManageTool.execute(input, {})) as string);
     expect(result.success).toBe(true);
-    const [, writtenContent] = mockAtomicWriteWithBackup.mock.calls[0];
-    expect(writtenContent).toContain('description: from flat description field');
+    const skillMd = writtenByAtomicWrite().find((w) => w.path.endsWith('SKILL.md'));
+    expect(skillMd?.content).toContain('description: from flat description field');
   });
 
   it('rejects invalid names', async () => {
@@ -149,10 +158,8 @@ describe('skill_manage · create', () => {
     expect(result.error).toMatch(/already exists/);
   });
 
-  it('blocks dangerous content via contentGuard and rolls back', async () => {
+  it('blocks dangerous content via contentGuard before any write happens', async () => {
     vi.spyOn(skillLoader, 'getSkill').mockReturnValue(undefined);
-    // Backup path returned so rollback path is exercised
-    mockAtomicWriteWithBackup.mockResolvedValueOnce({ wrote: true, backupPath: '/mock/backup.tmp' });
 
     const result = JSON.parse(
       (await skillManageTool.execute(
@@ -170,7 +177,9 @@ describe('skill_manage · create', () => {
     expect(result.scan).toBeDefined();
     expect(result.scan.verdict).toBe('dangerous');
     expect(result.scan.findings.some((f: { pattern_id: string }) => f.pattern_id === 'prompt_injection_ignore')).toBe(true);
-    expect(mockRestoreFromBackup).toHaveBeenCalledOnce();
+    // Pre-scan refuses the write — no disk side effects, no rollback needed.
+    expect(mockAtomicWrite).not.toHaveBeenCalled();
+    expect(mockRestoreFromBackup).not.toHaveBeenCalled();
   });
 });
 
