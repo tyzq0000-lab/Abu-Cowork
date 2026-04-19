@@ -1160,6 +1160,31 @@ fn update_tray_menu(app: AppHandle, im_channels: Vec<IMTrayStatus>, trigger_coun
     }
 }
 
+/// Update the tray icon title (macOS: text next to icon) and tooltip
+/// to reflect the current pending notice count.
+#[tauri::command]
+fn update_tray_notice_count(app: AppHandle, count: u32) {
+    let tray = match app.tray_by_id("main") {
+        Some(t) => t,
+        None => return,
+    };
+
+    // macOS: set_title shows text next to the tray icon
+    let title = if count > 0 {
+        format!("{}", count)
+    } else {
+        String::new()
+    };
+    let _ = tray.set_title(Some(&title));
+
+    let tooltip = if count > 0 {
+        format!("Abu — {} pending", count)
+    } else {
+        "Abu".to_string()
+    };
+    let _ = tray.set_tooltip(Some(&tooltip));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1281,6 +1306,7 @@ pub fn run() {
             feishu_ws::stop_feishu_ws,
             feishu_ws::get_feishu_ws_status,
             update_tray_menu,
+            update_tray_notice_count,
             secret_get,
             secret_set,
             secret_delete,

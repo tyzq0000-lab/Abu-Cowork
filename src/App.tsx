@@ -34,6 +34,7 @@ import { isMacOS } from '@/utils/platform';
 import { cn } from '@/lib/utils';
 import { initNotifications, clearDockBadge } from '@/utils/notifications';
 import { initSidebarBadgeChannel } from '@/stores/noticeBadgeStore';
+import { initMenubarChannel } from '@/stores/noticeMenubarStore';
 import { schedulerEngine } from '@/core/scheduler/scheduler';
 import { triggerEngine } from '@/core/trigger/triggerEngine';
 import { imChannelRouter } from '@/core/im/channelRouter';
@@ -137,6 +138,7 @@ function App() {
 
     // Register Notice System channel handlers
     initSidebarBadgeChannel();
+    initMenubarChannel();
 
     // Initialize file watchers
     initFileWatchers().catch((err) => {
