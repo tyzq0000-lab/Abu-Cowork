@@ -161,6 +161,72 @@ describe('skill_manage · create', () => {
     );
   });
 
+  it('accepts stringified frontmatter (GLM-5 / some providers serialize nested objects)', async () => {
+    // Regression: GLM-5 sent `frontmatter` as a JSON string, not an object.
+    // Our schema checker ran on the string and reported
+    // "frontmatter.description is required" even though the agent did
+    // include description — because the string wasn't parsed.
+    vi.spyOn(skillLoader, 'getSkill').mockReturnValue(undefined);
+    const input = Object.freeze({
+      action: 'create',
+      name: 'from-stringified',
+      frontmatter: JSON.stringify({ description: '字符串化的 frontmatter' }),
+      content: '# body',
+    });
+    const result = JSON.parse((await skillManageTool.execute(input, {})) as string);
+    expect(result.success).toBe(true);
+    const skillMd = writtenByAtomicWrite().find((w) => w.path.endsWith('SKILL.md'));
+    expect(skillMd?.content).toContain('description: 字符串化的 frontmatter');
+  });
+
+  it('coerces agent_proposed truthy strings (provider quirks)', async () => {
+    // Some providers serialize booleans as "true" / "True" / 1. Tool must
+    // route these to the drafts branch, not silently fall to direct write.
+    vi.spyOn(skillLoader, 'getSkill').mockReturnValue(undefined);
+    const cases: Array<{ label: string; flag: unknown }> = [
+      { label: 'str-lower', flag: 'true' },
+      { label: 'str-mixed', flag: 'True' },
+      { label: 'str-one', flag: '1' },
+      { label: 'num-one', flag: 1 },
+    ];
+    for (const { label, flag } of cases) {
+      mockAtomicWrite.mockClear();
+      const result = JSON.parse(
+        (await skillManageTool.execute(
+          {
+            action: 'create',
+            name: `coerce-${label}`,
+            agent_proposed: flag,
+            frontmatter: { name: `coerce-${label}`, description: 'x' },
+            content: '# body',
+          },
+          {},
+        )) as string,
+      );
+      expect(result.success).toBe(true);
+      expect(result.status).toBe('pending-user-approval');
+      expect(result.path).toContain('/drafts/');
+    }
+  });
+
+  it('treats agent_proposed="false" / missing as direct write (default)', async () => {
+    vi.spyOn(skillLoader, 'getSkill').mockReturnValue(undefined);
+    const result = JSON.parse(
+      (await skillManageTool.execute(
+        {
+          action: 'create',
+          name: 'stays-direct',
+          agent_proposed: 'false',
+          frontmatter: { description: 'x' },
+          content: '# body',
+        },
+        {},
+      )) as string,
+    );
+    expect(result.status).toBe('applied');
+    expect(result.path).not.toContain('/drafts/');
+  });
+
   it('default direct-write path does NOT emit a notice card', async () => {
     // User explicitly asked → live skill → nothing to review, no card.
     vi.spyOn(skillLoader, 'getSkill').mockReturnValue(undefined);

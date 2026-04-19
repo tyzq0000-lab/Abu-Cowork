@@ -364,11 +364,21 @@ async function createAction(input: Record<string, unknown>, context?: ToolExecut
     return { success: false, error: 'create requires content (the SKILL.md body)' };
   }
 
-  // Accept two input shapes: the strict schema with `frontmatter: {...}`, or
-  // a flattened shape where description/trigger/etc live at the top level.
-  // LLMs occasionally flatten the schema despite the docstring, so we copy
-  // into a fresh object (tool input is frozen — mutating it throws).
-  const rawFrontmatter = input.frontmatter as Partial<SkillMetadata> | undefined;
+  // Accept multiple input shapes seen in the wild across providers:
+  //   1. strict nested object: frontmatter: { description: "..." }
+  //   2. stringified JSON: frontmatter: '{"description": "..."}'
+  //      (GLM-5 / some Volcengine models serialize objects as JSON strings)
+  //   3. flattened top-level: description: "...", trigger: "..."
+  //      (model dropped the nesting entirely)
+  // Copy into a fresh object since tool input is frozen and mutation throws.
+  let rawFrontmatter = input.frontmatter as Partial<SkillMetadata> | string | undefined;
+  if (typeof rawFrontmatter === 'string') {
+    try {
+      rawFrontmatter = JSON.parse(rawFrontmatter) as Partial<SkillMetadata>;
+    } catch {
+      rawFrontmatter = undefined; // malformed JSON — fall back to top-level fields
+    }
+  }
   const frontmatter: Partial<SkillMetadata> = rawFrontmatter
     ? { ...rawFrontmatter }
     : {};
@@ -436,7 +446,19 @@ async function createAction(input: Record<string, unknown>, context?: ToolExecut
   // Agent must actively claim `agent_proposed=true` when it's自发 — the
   // asymmetric default keeps drafts as a review queue for agent autonomy,
   // not a mandatory gate for every create.
-  const agentProposed = input.agent_proposed === true;
+  // Providers are inconsistent about boolean serialization — some send
+  // the raw boolean, others stringify to "true" / "True", or use 1 / "1".
+  // Treat anything truthy-ish as explicit opt-in; anything missing or
+  // "false" / 0 falls through to the safer direct-write default.
+  const agentProposed = (() => {
+    const v = input.agent_proposed;
+    if (v === true || v === 1) return true;
+    if (typeof v === 'string') {
+      const s = v.trim().toLowerCase();
+      return s === 'true' || s === '1' || s === 'yes';
+    }
+    return false;
+  })();
   const proactivity =
     useSettingsStore.getState().soul?.proactivity ?? 'companion';
 
@@ -549,7 +571,16 @@ async function patchAction(input: Record<string, unknown>, context?: ToolExecuti
   const name = input.name as string;
   const oldString = input.old_string as string;
   const newString = input.new_string as string;
-  const replaceAll = (input.replace_all as boolean) ?? false;
+  // Coerce provider quirks (string "true", 1) — same treatment as agent_proposed.
+  const replaceAll = (() => {
+    const v = input.replace_all;
+    if (v === true || v === 1) return true;
+    if (typeof v === 'string') {
+      const s = v.trim().toLowerCase();
+      return s === 'true' || s === '1' || s === 'yes';
+    }
+    return false;
+  })();
   const filePath = input.file_path as string | undefined;
 
   const nameErr = validateName(name);
