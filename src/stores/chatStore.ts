@@ -261,8 +261,12 @@ export const useChatStore = create<ChatStore>()(
         set((state) => {
           state.activeConversationId = null;
         });
-        // Clear global workspace so welcome page starts clean
-        useWorkspaceStore.getState().clearWorkspace();
+        // Do NOT clear global workspace — it's a UI-level "current working
+        // project" context, not a per-conversation property. Clearing on
+        // "new task" made users lose workspace binding and caused cascading
+        // tool failures (skill_manage no-workspace errors); when they hit
+        // Send on the welcome page, createConversation reads the still-set
+        // workspacePath and the new conv auto-inherits it. See Task #34.
       },
 
       switchConversation: async (id) => {
@@ -286,7 +290,10 @@ export const useChatStore = create<ChatStore>()(
         // so the target conversation is protected from eviction
         get().unloadOldConversations();
 
-        // Sync workspace
+        // Sync workspace ONLY if the target conversation has an explicit
+        // binding. If not, keep whatever the user was just working in —
+        // clearing here caused a chain of bugs (see 4ba56d3 / b2b69c6 /
+        // ffeb7cb) where tools lost workspace mid-session. See Task #34.
         const ws = useWorkspaceStore.getState();
         const conv = get().conversations[id];
         if (conv?.workspacePath) {
@@ -294,7 +301,7 @@ export const useChatStore = create<ChatStore>()(
         } else {
           const meta = get().conversationIndex[id];
           if (meta?.workspacePath) ws.setWorkspace(meta.workspacePath);
-          else ws.clearWorkspace();
+          // else: leave global workspace as-is
         }
       },
 

@@ -1,12 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useChatStore, flushTokenBuffer } from './chatStore';
 
-// Mock workspaceStore to avoid cross-store side effects
+// Stable workspace store mock — Task #34 regression tests need to assert
+// that clearWorkspace is NOT called on start/switch flows, so the fn
+// instances must persist across getState() calls.
+const mockSetWorkspace = vi.fn();
+const mockClearWorkspace = vi.fn();
 vi.mock('./workspaceStore', () => ({
   useWorkspaceStore: {
     getState: () => ({
-      setWorkspace: vi.fn(),
-      clearWorkspace: vi.fn(),
+      setWorkspace: mockSetWorkspace,
+      clearWorkspace: mockClearWorkspace,
     }),
     subscribe: vi.fn(),
   },
@@ -14,6 +18,8 @@ vi.mock('./workspaceStore', () => ({
 
 describe('chatStore', () => {
   beforeEach(() => {
+    mockSetWorkspace.mockClear();
+    mockClearWorkspace.mockClear();
     useChatStore.setState({
       conversations: {},
       activeConversationId: null,
@@ -48,6 +54,14 @@ describe('chatStore', () => {
       useChatStore.getState().startNewConversation();
       expect(useChatStore.getState().activeConversationId).toBeNull();
     });
+
+    it('does NOT clear the global workspace (Task #34 regression)', () => {
+      // User has been working in some workspace; clicking "新建任务" should
+      // keep that context so the next message auto-binds to it.
+      useChatStore.getState().createConversation();
+      useChatStore.getState().startNewConversation();
+      expect(mockClearWorkspace).not.toHaveBeenCalled();
+    });
   });
 
   // ── switchConversation ──
@@ -57,6 +71,21 @@ describe('chatStore', () => {
       useChatStore.getState().createConversation();
       await useChatStore.getState().switchConversation(id1);
       expect(useChatStore.getState().activeConversationId).toBe(id1);
+    });
+
+    it('applies target conv workspace when bound', async () => {
+      const id = useChatStore.getState().createConversation('/Users/test/bound');
+      await useChatStore.getState().switchConversation(id);
+      expect(mockSetWorkspace).toHaveBeenCalledWith('/Users/test/bound');
+    });
+
+    it('does NOT clear workspace when target conv has no binding (Task #34)', async () => {
+      // Scenario that used to break self-evolution E2E:
+      // user has workspace set, switches to an unbound conv,
+      // old code cleared workspace → skill_manage fails with "no workspace".
+      const id = useChatStore.getState().createConversation(); // no workspace arg
+      await useChatStore.getState().switchConversation(id);
+      expect(mockClearWorkspace).not.toHaveBeenCalled();
     });
   });
 
