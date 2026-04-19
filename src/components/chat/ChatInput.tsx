@@ -22,6 +22,7 @@ import type { ImageAttachment } from '@/types';
 import { generateAttachmentId, readFileAsBase64, SUPPORTED_IMAGE_TYPES } from '@/utils/imageUtils';
 import PermissionDialog from '@/components/common/PermissionDialog';
 import FolderSelector from '@/components/common/FolderSelector';
+import PromoteToProjectHint from '@/components/chat/PromoteToProjectHint';
 
 interface ChatInputProps {
   variant: 'welcome' | 'chat';
@@ -808,6 +809,12 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
             </div>
           )}
         </div>
+
+        {/* Promote-to-project hint: shown only on welcome when the bound
+            workspace isn't already a project AND the user hasn't dismissed
+            it. Component self-gates its own visibility; we just always
+            mount it on welcome and let it decide. */}
+        {isWelcome && <PromoteToProjectHint workspacePath={localWorkspace} />}
       </div>
     </>
   );

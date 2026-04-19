@@ -18,9 +18,24 @@ type CreateMode = 'scratch' | 'existing-folder';
 interface CreateProjectDialogProps {
   open: boolean;
   onClose: () => void;
+  /**
+   * Skip the mode-picker step and go straight into a pre-filled form.
+   * Used by the "promote to project" hint on the welcome screen — user
+   * already picked a folder via FolderSelector, so there's nothing to
+   * choose; we want them landing on the name field.
+   */
+  presetMode?: CreateMode;
+  presetFolder?: string;
+  presetName?: string;
 }
 
-export default function CreateProjectDialog({ open, onClose }: CreateProjectDialogProps) {
+export default function CreateProjectDialog({
+  open,
+  onClose,
+  presetMode,
+  presetFolder,
+  presetName,
+}: CreateProjectDialogProps) {
   const { t } = useI18n();
   const createProject = useProjectStore((s) => s.createProject);
   const getProjectByWorkspace = useProjectStore((s) => s.getProjectByWorkspace);
@@ -46,17 +61,19 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
     }).catch(() => {});
   }, []);
 
-  // Reset on open
+  // Reset on open. When preset values are supplied (promote-to-project
+  // hint path), skip mode selection and prefill the form so the user
+  // only has to confirm the name.
   useEffect(() => {
     if (!open) return;
-    setMode(null);
-    setProjectName('');
+    setMode(presetMode ?? null);
+    setProjectName(presetName ?? '');
     setProjectDesc('');
     setInstructions('');
-    setSelectedFolder(null);
+    setSelectedFolder(presetFolder ?? null);
     setHasAbuConfig(false);
     setConflictProject(null);
-  }, [open]);
+  }, [open, presetMode, presetFolder, presetName]);
 
   // Check folder for config and conflicts
   useEffect(() => {
@@ -160,7 +177,7 @@ export default function CreateProjectDialog({ open, onClose }: CreateProjectDial
       <div className="bg-white rounded-2xl shadow-xl w-[480px] max-h-[80vh] overflow-y-auto animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 pt-6 pb-2">
-          {mode !== null && (
+          {mode !== null && !presetMode && (
             <button
               onClick={() => setMode(null)}
               className="p-1 text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-lg"

@@ -1364,6 +1364,10 @@ export interface TranslationDict {
     defaultSkillsPlaceholder: string;
     defaultMCPLabel: string;
     defaultMCPPlaceholder: string;
+    /** Welcome-screen hint: "Promote {name} to a project?" */
+    hintPromote: string;
+    hintPromoteAction: string;
+    hintPromoteDismiss: string;
     modelOverrideLabel: string;
     modelOverrideNone: string;
     detectedConfig: string;
