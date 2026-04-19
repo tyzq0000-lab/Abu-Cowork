@@ -165,13 +165,13 @@ export default function RightPanel() {
     >
       {/* Full-screen overlay during drag — blocks iframe from stealing mouse events */}
       {isDragging && (
-        <div className="fixed inset-0 z-50 cursor-col-resize" />
+        <div className="fixed inset-0 z-50 cursor-col-resize select-none" />
       )}
       {/* Drag handle on left edge */}
       <div
         onMouseDown={handleDragStart}
         className={cn(
-          'absolute left-0 top-0 bottom-0 w-[5px] cursor-col-resize z-20',
+          'absolute left-0 top-0 bottom-0 w-[5px] cursor-col-resize z-20 select-none',
           'hover:bg-[var(--abu-clay-20)] transition-colors',
           isDragging && 'bg-[var(--abu-clay-40)]'
         )}

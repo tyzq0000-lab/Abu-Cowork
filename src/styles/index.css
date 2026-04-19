@@ -16,8 +16,6 @@
     -moz-osx-font-smoothing: grayscale;
     font-size: 15px;
     line-height: 1.6;
-    user-select: none;
-    -webkit-user-select: none;
   }
 
 }
