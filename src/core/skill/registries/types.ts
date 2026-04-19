@@ -62,6 +62,17 @@ export interface RegistryAdapter {
   readonly description?: string;
   readonly capabilities: RegistryCapabilities;
   /**
+   * External browse URL. When set, the UI treats this adapter as
+   * "browser-handoff only" — clicking the row opens this URL in the
+   * system browser instead of launching an in-app registry browse
+   * view. Used for registries that don't expose a machine-readable
+   * API (e.g. Clawhub as of v0.14): users download a `.askill` file
+   * from the website and import it via the existing drag/import path.
+   *
+   * When unset, the UI opens its in-app browse view (future work).
+   */
+  readonly externalBrowseUrl?: string;
+  /**
    * Is this registry usable right now? Typical checks:
    * - required binary on PATH (for CLI-backed adapters)
    * - token set in settings (for authenticated adapters)

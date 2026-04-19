@@ -10,6 +10,11 @@ import {
 } from '@/core/skill/registries';
 
 const mockAddToast = vi.fn();
+const mockOpenExternal = vi.fn();
+
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  open: (url: string) => mockOpenExternal(url),
+}));
 
 vi.mock('@/stores/toastStore', () => ({
   useToastStore: (selector: (s: { addToast: typeof mockAddToast }) => unknown) =>
@@ -33,6 +38,7 @@ const onClose = vi.fn();
 beforeEach(() => {
   __resetAdaptersForTests();
   mockAddToast.mockReset();
+  mockOpenExternal.mockReset().mockResolvedValue(undefined);
   onClose.mockReset();
 });
 
@@ -90,6 +96,34 @@ describe('RegistryBrowserModal', () => {
     });
   });
 
+  it('clicking an externalBrowseUrl adapter opens the URL in the system browser', async () => {
+    // Clawhub-style adapter: no API, UI should hand off to the user's
+    // browser rather than try to fetch anything.
+    registerAdapter(
+      makeAdapter('clawhub', {
+        isAvailable: async () => true,
+        externalBrowseUrl: 'https://clawhub.ai',
+      }),
+    );
+    const user = userEvent.setup();
+    render(<RegistryBrowserModal onClose={onClose} />);
+
+    await user.click(await screen.findByRole('button', { name: /clawhub Market/i }));
+
+    await waitFor(() => {
+      expect(mockOpenExternal).toHaveBeenCalledWith('https://clawhub.ai');
+    });
+    // Toast tells the user what to do after the browser opens so the
+    // "why did a browser open?" moment doesn't happen.
+    expect(mockAddToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'info',
+        title: 'clawhub Market',
+        message: expect.stringContaining('Import'),
+      }),
+    );
+  });
+
   it('clicking an unavailable adapter does nothing (no toast, no navigation)', async () => {
     // Regression guard: unavailable rows are disabled buttons; they
     // must not trigger the browse handler or the user gets confused
@@ -102,6 +136,7 @@ describe('RegistryBrowserModal', () => {
     await user.click(row);
 
     expect(mockAddToast).not.toHaveBeenCalled();
+    expect(mockOpenExternal).not.toHaveBeenCalled();
   });
 
   it('backdrop click closes the modal', async () => {

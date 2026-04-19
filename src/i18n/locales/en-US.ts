@@ -701,6 +701,7 @@ const enUS: TranslationDict = {
     registryStatusUnavailable: 'Not configured',
     registryRequiresAuth: 'Login required',
     registryBrowseComingSoon: 'Browsing will ship soon',
+    registryExternalBrowseHint: 'Opened the registry in your browser. Download the .askill file and use Toolbox → Import .askill to install it.',
     categoryBuiltin: 'Built-in',
     skillSourceBuiltin: 'Built-in',
     skillSourceUser: 'User',

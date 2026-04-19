@@ -701,6 +701,7 @@ const zhCN: TranslationDict = {
     registryStatusUnavailable: '未配置',
     registryRequiresAuth: '需登录',
     registryBrowseComingSoon: '浏览能力即将接入',
+    registryExternalBrowseHint: '已在浏览器打开市场。下载 .askill 后通过 Toolbox 的"导入技能包"装入。',
     categoryBuiltin: '内置',
     skillSourceBuiltin: '内置',
     skillSourceUser: '用户创建',

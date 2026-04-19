@@ -151,6 +151,19 @@ function App() {
       console.warn('[App] Drafts store init error:', err);
     });
 
+    // Register third-party skill registry adapters. Only Clawhub for
+    // now; SkillsHub is on hold (internal, not in open-source repo).
+    // The registry is a module-scoped singleton so registration at
+    // bootstrap time is enough — no teardown needed.
+    void Promise.all([
+      import('@/core/skill/registries'),
+      import('@/core/skill/registries/clawhub'),
+    ]).then(([{ registerAdapter }, { clawhubAdapter }]) => {
+      registerAdapter(clawhubAdapter);
+    }).catch((err) => {
+      console.warn('[App] Registry adapter init error:', err);
+    });
+
     return () => {
       cleanupMCPStoreSync();
       stopAllWatchers();

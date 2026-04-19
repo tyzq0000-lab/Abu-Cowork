@@ -683,7 +683,8 @@ export interface TranslationDict {
     registryStatusAvailable: string;     // "可用"
     registryStatusUnavailable: string;   // "未配置"
     registryRequiresAuth: string;        // "需登录"
-    registryBrowseComingSoon: string;    // toast when clicking an adapter row (D-UI placeholder)
+    registryBrowseComingSoon: string;    // toast when clicking an in-app adapter row (placeholder)
+    registryExternalBrowseHint: string;  // toast after opening an externalBrowseUrl adapter
     categoryBuiltin: string;           // "内置"
     skillSourceBuiltin: string;
     skillSourceUser: string;

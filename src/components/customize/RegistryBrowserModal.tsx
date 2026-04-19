@@ -23,7 +23,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { X, Package, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Package, CheckCircle, AlertCircle, Loader2, ExternalLink } from 'lucide-react';
+import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { useI18n } from '@/i18n';
 import { useToastStore } from '@/stores/toastStore';
 import { listAdapters, type RegistryAdapter } from '@/core/skill/registries';
@@ -61,15 +62,37 @@ export default function RegistryBrowserModal({ onClose }: Props) {
     void loadRows();
   }, [loadRows]);
 
-  const handleBrowse = (row: AdapterRow) => {
+  const handleBrowse = async (row: AdapterRow) => {
     if (!row.available) return;
-    // D-UI placeholder: the actual browse/search/install flow is the
-    // next slice. Surfacing a toast makes the "clickable but
-    // not-yet-wired" state legible instead of silently doing nothing.
+    const { adapter } = row;
+    if (adapter.externalBrowseUrl) {
+      // Browser-handoff: open the registry's website in the system
+      // browser. Users download a .askill file there and re-import
+      // via Toolbox → Import (Task #25 B). A short-lived info toast
+      // reminds them of this flow so the "why did it open a browser?"
+      // question doesn't come up.
+      try {
+        await openExternal(adapter.externalBrowseUrl);
+        addToast({
+          type: 'info',
+          title: adapter.displayName,
+          message: t.toolbox.registryExternalBrowseHint,
+        });
+      } catch (err) {
+        addToast({
+          type: 'error',
+          title: adapter.displayName,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+      return;
+    }
+    // In-app browse flow hasn't shipped yet. Surface a toast so the
+    // row feels clickable but the unfinished path is legible.
     addToast({
       type: 'info',
       title: t.toolbox.registryBrowseComingSoon,
-      message: row.adapter.displayName,
+      message: adapter.displayName,
     });
   };
 
@@ -134,6 +157,7 @@ export default function RegistryBrowserModal({ onClose }: Props) {
 function AdapterRowView({ row, onClick }: { row: AdapterRow; onClick: () => void }) {
   const { t } = useI18n();
   const { adapter, available } = row;
+  const isExternal = !!adapter.externalBrowseUrl;
   return (
     <li>
       <button
@@ -164,6 +188,12 @@ function AdapterRowView({ row, onClick }: { row: AdapterRow; onClick: () => void
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">
               {t.toolbox.registryRequiresAuth}
             </span>
+          )}
+          {isExternal && available && (
+            // Signals "clicking opens your browser, not an in-app
+            // view" — important UX affordance since these rows behave
+            // differently from future in-app registry browsers.
+            <ExternalLink className="h-3 w-3 text-[var(--abu-text-muted)] ml-auto" />
           )}
         </div>
         {adapter.description && (
