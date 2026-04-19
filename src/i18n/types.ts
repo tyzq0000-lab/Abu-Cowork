@@ -1359,8 +1359,11 @@ export interface TranslationDict {
     iconLabel: string;
     descLabel: string;
     descPlaceholder: string;
+    defaultsSection: string;
     defaultSkillsLabel: string;
+    defaultSkillsPlaceholder: string;
     defaultMCPLabel: string;
+    defaultMCPPlaceholder: string;
     modelOverrideLabel: string;
     modelOverrideNone: string;
     detectedConfig: string;
