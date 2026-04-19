@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { escalateMaxOutputTokens, isInteractiveDesktop } from './agentLoop';
+import {
+  escalateMaxOutputTokens,
+  isInteractiveDesktop,
+  shouldComputeProposalSignal,
+} from './agentLoop';
 
 describe('escalateMaxOutputTokens', () => {
   it('does not escalate when recoveryCount is 0', () => {
@@ -82,6 +86,60 @@ describe('isInteractiveDesktop', () => {
       isInteractiveDesktop(
         { imContext: { channelId: 'c', platform: 'dchat', workspacePath: '/ws' } },
         { scheduledTaskId: 'x', triggerId: 'y' },
+      ),
+    ).toBe(false);
+  });
+});
+
+// Task #51 · Stricter gate for post-loop proposal signal. Adds a
+// workspace-bound check on top of isInteractiveDesktop — without a
+// workspace, skill_manage can't write, AND the next turn's system
+// prompt will already carry a workspace-hint telling the agent "don't
+// call skill_manage, call request_workspace first". Stacking the
+// proposal-signal on top gives contradictory instructions.
+describe('shouldComputeProposalSignal (Task #51 gate)', () => {
+  const desktopOpts = {};
+  const desktopConv = {};
+
+  it('fires on desktop + workspace bound (baseline)', () => {
+    expect(shouldComputeProposalSignal(desktopOpts, desktopConv, '/workspace/myapp')).toBe(true);
+  });
+
+  it('blocks when no workspace is bound (the Task #51 fix)', () => {
+    // Regression guard for the workspace-hint ↔ proposal-signal
+    // conflict: without a workspace, the signal would stack on top
+    // of the "call request_workspace first" prompt.
+    expect(shouldComputeProposalSignal(desktopOpts, desktopConv, null)).toBe(false);
+    expect(shouldComputeProposalSignal(desktopOpts, desktopConv, undefined)).toBe(false);
+    expect(shouldComputeProposalSignal(desktopOpts, desktopConv, '')).toBe(false);
+  });
+
+  it('inherits isInteractiveDesktop blockers — IM context blocks even with workspace', () => {
+    expect(
+      shouldComputeProposalSignal(
+        { imContext: { platform: 'dchat', workspacePath: '/ws' } },
+        desktopConv,
+        '/workspace/myapp',
+      ),
+    ).toBe(false);
+  });
+
+  it('inherits isInteractiveDesktop blockers — scheduled task + workspace still blocked', () => {
+    expect(
+      shouldComputeProposalSignal(
+        desktopOpts,
+        { scheduledTaskId: 'task-1' },
+        '/workspace/myapp',
+      ),
+    ).toBe(false);
+  });
+
+  it('inherits isInteractiveDesktop blockers — trigger + workspace still blocked', () => {
+    expect(
+      shouldComputeProposalSignal(
+        desktopOpts,
+        { triggerId: 'trigger-1' },
+        '/workspace/myapp',
       ),
     ).toBe(false);
   });

@@ -449,6 +449,32 @@ export function isInteractiveDesktop(
 }
 
 /**
+ * Should this completed loop produce a post-loop proposal signal?
+ *
+ * Stricter than `isInteractiveDesktop` — adds a workspace-bound
+ * requirement (Task #51). `skill_manage(create)` writes to the
+ * workspace-auto dir, so a user without a workspace bound simply
+ * can't act on the nudge; worse, the next turn's system prompt would
+ * already carry a `workspace-hint` section saying "don't call
+ * skill_manage, call request_workspace first" — stacking the proposal
+ * signal on top gives the agent contradictory instructions.
+ *
+ * Memory extraction (the other isInteractiveDesktop consumer) is
+ * intentionally NOT gated this way: memdir works without a workspace
+ * (global `~/.abu/memory/`), so extraction stays useful even before
+ * the user picks a project.
+ *
+ * Pure function, exported for testing.
+ */
+export function shouldComputeProposalSignal(
+  options: Pick<AgentLoopOptions, 'imContext'> | undefined,
+  conversation: { scheduledTaskId?: string; triggerId?: string } | undefined,
+  workspacePath: string | null | undefined,
+): boolean {
+  return isInteractiveDesktop(options, conversation) && !!workspacePath;
+}
+
+/**
  * Calculate escalated maxOutputTokens after a max_tokens hit.
  * Doubles the limit (capped by context window) on first recovery attempt.
  * Pure function, exported for testing.
@@ -1498,7 +1524,15 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // the agent to consider skill_manage(agent_proposed=true). This
         // is the self-evolution activation mechanism — without it,
         // agent only proposes when user explicitly says "save this".
-        if (exitReason === 'completed' && interactiveDesktop) {
+        //
+        // The gate logic (interactiveDesktop + workspace bound) lives
+        // in `shouldComputeProposalSignal` so it's unit-testable. Full
+        // rationale in that function's docstring (Task #49 + #51).
+        const wsPath = useWorkspaceStore.getState().currentPath;
+        if (
+          exitReason === 'completed' &&
+          shouldComputeProposalSignal(options, convRecord, wsPath)
+        ) {
           try {
             const { computeProposalSignal } = await import('./proposalSignal');
             const { useSettingsStore } = await import('../../stores/settingsStore');
