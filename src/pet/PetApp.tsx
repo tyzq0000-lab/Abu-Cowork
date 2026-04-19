@@ -1,25 +1,36 @@
 import abuAvatar from '@/assets/abu-avatar.png';
+import StatusLight from './StatusLight';
+import { useStatusLight } from './useStatusLight';
+import { usePetDrag } from './usePetDrag';
 
 /**
- * Desktop pet root (Phase A).
+ * Desktop pet root (Phase B).
  *
- * Renders the abu-avatar PNG as-is inside an 80×80 transparent window.
- * The PNG already ships with a rounded-rect card + soft shadow baked in,
- * so no further clipping needed — the window is transparent and only
- * the designed avatar shape shows on the desktop.
+ * - Transparent 80×80 window renders the avatar PNG (designed shape).
+ * - mousedown drags the window via Tauri's native startDragging.
+ * - Edge-snap + position persistence handled inside usePetDrag.
+ * - StatusLight ring reflects agent status aggregated from main window
+ *   via Tauri event 'pet-status-update'.
  *
- * Interactions (drag, click, status light, mini input) land in Phase B/C.
+ * Interactions (click → mini input, double-click, right-click menu)
+ * land in Phase C.
  */
 export default function PetApp() {
+  const dragRef = usePetDrag<HTMLDivElement>();
+  const status = useStatusLight();
+
   return (
     <div
+      ref={dragRef}
       style={{
+        position: 'relative',
         width: '100%',
         height: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         background: 'transparent',
+        cursor: 'grab',
       }}
     >
       <img
@@ -33,6 +44,7 @@ export default function PetApp() {
           pointerEvents: 'none',
         }}
       />
+      <StatusLight status={status} />
     </div>
   );
 }

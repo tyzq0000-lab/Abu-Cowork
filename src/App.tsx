@@ -38,6 +38,7 @@ import { initMenubarChannel, useNoticeMenubarStore } from '@/stores/noticeMenuba
 import { initNoticeChannelHandlers } from '@/core/notice/channels';
 import { setContextProvider } from '@/core/notice/pipeline';
 import { cachedContextProvider, primeContextCaches } from '@/core/notice/contextProvider';
+import { startPetStatusBridge, resyncPetStatus } from '@/core/pet/petStatusBridge';
 import { schedulerEngine } from '@/core/scheduler/scheduler';
 import { triggerEngine } from '@/core/trigger/triggerEngine';
 import { imChannelRouter } from '@/core/im/channelRouter';
@@ -100,6 +101,22 @@ function App() {
     };
   }, []);
 
+  // Pet window asks for status resync when it (re)opens
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    let cancelled = false;
+    listen('pet-resync-request', () => {
+      resyncPetStatus();
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlistenFn = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlistenFn?.();
+    };
+  }, []);
+
   // Listen for window close-requested event from Rust
   useEffect(() => {
     let unlistenFn: (() => void) | null = null;
@@ -148,6 +165,10 @@ function App() {
     initMenubarChannel();
     initNoticeChannelHandlers();
     primeContextCaches().catch(() => {});
+
+    // Pet status bridge: aggregate chatStore conversation statuses and
+    // push to pet window via Tauri event. Idempotent.
+    startPetStatusBridge();
 
     // Initialize file watchers
     initFileWatchers().catch((err) => {
