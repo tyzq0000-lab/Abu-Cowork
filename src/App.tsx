@@ -166,6 +166,19 @@ function App() {
       console.warn('[App] Drafts store init error:', err);
     });
 
+    // One-shot backfill: older conversations bound to a workspace that now
+    // has a project fall through createConversation's auto-associate hook
+    // (which only fires at creation time) and CreateProjectDialog's
+    // per-project backfill (which only sees the conversations matching at
+    // the moment the project is created). This pass catches the "I chatted
+    // in this folder last week, made the project today" case. Idempotent.
+    import('@/utils/projectMigration').then(({ backfillProjectIds }) => {
+      const n = backfillProjectIds();
+      if (n > 0) console.log(`[App] Backfilled projectId for ${n} conversation(s)`);
+    }).catch((err) => {
+      console.warn('[App] Project backfill error:', err);
+    });
+
     return () => {
       cleanupMCPStoreSync();
       stopAllWatchers();
