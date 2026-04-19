@@ -1,8 +1,8 @@
 /**
  * Registry adapter interface — the contract any third-party skill
- * source (CLAWhub, DiDi internal SkillsHub, future registries)
- * implements. Adapters are pluggable so adding a new registry is
- * a single new file + one call to `registerAdapter()`.
+ * source (CLAWhub for now, future registries later) implements.
+ * Adapters are pluggable so adding a new registry is a single new
+ * file + one call to `registerAdapter()`.
  *
  * Design choices worth knowing
  * ----------------------------

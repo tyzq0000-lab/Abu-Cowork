@@ -46,17 +46,17 @@ describe('RegistryBrowserModal', () => {
     // The placeholder explains what will land here later — don't
     // render a confusing "empty list" with no context.
     expect(await screen.findByText(/No registries connected yet/)).toBeInTheDocument();
-    expect(screen.getByText(/CLAWhub.*SkillsHub/)).toBeInTheDocument();
+    expect(screen.getByText(/CLAWhub/)).toBeInTheDocument();
   });
 
   it('renders each registered adapter with availability status', async () => {
-    registerAdapter(makeAdapter('skillshub', { isAvailable: async () => true }));
-    registerAdapter(makeAdapter('clawhub', { isAvailable: async () => false }));
+    registerAdapter(makeAdapter('clawhub', { isAvailable: async () => true }));
+    registerAdapter(makeAdapter('other', { isAvailable: async () => false }));
 
     render(<RegistryBrowserModal onClose={onClose} />);
 
-    expect(await screen.findByText('skillshub Market')).toBeInTheDocument();
-    expect(screen.getByText('clawhub Market')).toBeInTheDocument();
+    expect(await screen.findByText('clawhub Market')).toBeInTheDocument();
+    expect(screen.getByText('other Market')).toBeInTheDocument();
     // Availability badges differ per row.
     expect(screen.getByText(/Available/)).toBeInTheDocument();
     expect(screen.getByText(/Not configured/)).toBeInTheDocument();
@@ -73,18 +73,18 @@ describe('RegistryBrowserModal', () => {
   });
 
   it('clicking an available adapter surfaces the "coming soon" toast (D-UI placeholder)', async () => {
-    registerAdapter(makeAdapter('skillshub', { isAvailable: async () => true }));
+    registerAdapter(makeAdapter('clawhub', { isAvailable: async () => true }));
     const user = userEvent.setup();
     render(<RegistryBrowserModal onClose={onClose} />);
 
-    await user.click(await screen.findByRole('button', { name: /skillshub Market/i }));
+    await user.click(await screen.findByRole('button', { name: /clawhub Market/i }));
 
     await waitFor(() => {
       expect(mockAddToast).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'info',
           title: expect.stringContaining('ship soon'),
-          message: 'skillshub Market',
+          message: 'clawhub Market',
         }),
       );
     });

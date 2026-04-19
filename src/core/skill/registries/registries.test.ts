@@ -41,12 +41,12 @@ describe('registry · registerAdapter / listAdapters', () => {
   it('replaces an existing adapter when registering the same id again', () => {
     // Useful for tests that want to swap mocks; also keeps hot-reload
     // sane (no "already registered" errors on dev restart).
-    const first = makeAdapter('skillshub', { displayName: 'v1' });
-    const second = makeAdapter('skillshub', { displayName: 'v2' });
+    const first = makeAdapter('clawhub', { displayName: 'v1' });
+    const second = makeAdapter('clawhub', { displayName: 'v2' });
     registerAdapter(first);
     registerAdapter(second);
     expect(listAdapters()).toHaveLength(1);
-    expect(getAdapter('skillshub')?.displayName).toBe('v2');
+    expect(getAdapter('clawhub')?.displayName).toBe('v2');
   });
 });
 

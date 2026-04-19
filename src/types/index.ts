@@ -395,7 +395,7 @@ export type SkillSource =
   | 'project-standard'
   | 'workspace-auto'
   | 'draft'
-  | 'third-party';     // Installed from a registry (CLAWhub / SkillsHub / …)
+  | 'third-party';     // Installed from a registry (CLAWhub etc.)
 
 /**
  * User-facing skill categories surfaced in the Toolbox. This is a

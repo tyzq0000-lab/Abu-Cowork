@@ -797,8 +797,8 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
 
               {/* Category · Third-party — empty for now, but shown as a
                   placeholder so users learn the feature exists. When
-                  CLAWhub / SkillsHub adapters ship, skills populate here
-                  with 0 UI changes. The "浏览第三方市场" button opens
+                  the CLAWhub adapter ships, skills populate here with
+                  0 UI changes. The "浏览第三方市场" button opens
                   RegistryBrowserModal (Task #25 D-UI) regardless of
                   whether any skill has actually been installed yet. */}
               <div>

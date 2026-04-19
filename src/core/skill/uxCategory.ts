@@ -8,8 +8,8 @@
  *   - **agent-evolved** — workspace-auto + draft. Everything Abu's
  *     self-evolution produced. Kept separate from `mine` so users
  *     can tell "I made this" from "Abu made this".
- *   - **third-party** — installed from a registry (CLAWhub, the
- *     internal SkillsHub, …). Empty in MVP; reserved for v0.14+.
+ *   - **third-party** — installed from a registry (CLAWhub, future
+ *     sources). Empty in MVP; reserved for v0.14+.
  *   - **builtin** — bundled with the app binary.
  *
  * All Toolbox grouping goes through this function, so the enum-to-

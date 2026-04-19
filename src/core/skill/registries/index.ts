@@ -9,7 +9,7 @@
  * Separation of concerns:
  *   - `types.ts`     — what an adapter looks like
  *   - `index.ts`     — who tracks them (this file)
- *   - `<name>.ts`    — individual adapters (CLAWhub, SkillsHub, …)
+ *   - `<name>.ts`    — individual adapters (CLAWhub, future ones)
  *   - `bootstrap.ts` — which adapters this build ships with
  *
  * We deliberately don't export a `getAdapter()` by id that throws —
