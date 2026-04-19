@@ -1456,9 +1456,22 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         }
         chatStore.setConversationStatus(conversationId, maxTokensRecoveryExhausted ? 'error' : 'completed');
   
-        // Auto-extract memories from desktop conversations (non-blocking)
-        // IM conversations have their own extraction in channelRouter.ts
-        if (!options?.imContext) {
+        // Interactive-desktop gate: user-visible conversations only.
+        // IM conversations, scheduled tasks, triggers run headless — the
+        // user can't see skill proposal cards / review memory extractions,
+        // so any autonomous write from these contexts would silently
+        // pollute the workspace. Both memory extraction AND self-evolution
+        // proposals share this gate (they're two sides of the same
+        // "agent writes stuff only when user can review" invariant).
+        const convRecord = chatStore.conversations[conversationId];
+        const isInteractiveDesktop =
+          !options?.imContext &&
+          !convRecord?.scheduledTaskId &&
+          !convRecord?.triggerId;
+
+        // Auto-extract memories from desktop conversations (non-blocking).
+        // IM conversations have their own extraction in channelRouter.ts.
+        if (isInteractiveDesktop) {
           const wsPath = useWorkspaceStore.getState().currentPath;
           import('../memdir/extractor').then(({ extractMemoriesFromConversation }) =>
             extractMemoriesFromConversation(conversationId, wsPath)
@@ -1470,14 +1483,13 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // the agent to consider skill_manage(agent_proposed=true). This
         // is the self-evolution activation mechanism — without it,
         // agent only proposes when user explicitly says "save this".
-        if (exitReason === 'completed') {
+        if (exitReason === 'completed' && isInteractiveDesktop) {
           try {
             const { computeProposalSignal } = await import('./proposalSignal');
             const { useSettingsStore } = await import('../../stores/settingsStore');
             const proactivity =
               useSettingsStore.getState().soul?.proactivity ?? 'companion';
-            const conv = chatStore.conversations[conversationId];
-            const loopMsgs = (conv?.messages ?? []).filter((m) => m.loopId === loopId);
+            const loopMsgs = (convRecord?.messages ?? []).filter((m) => m.loopId === loopId);
             const signal = computeProposalSignal(loopMsgs, proactivity);
             if (signal) {
               chatStore.setPendingProposalSignal(conversationId, signal);
