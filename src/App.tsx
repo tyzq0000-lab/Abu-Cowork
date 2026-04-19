@@ -34,7 +34,7 @@ import { isMacOS } from '@/utils/platform';
 import { cn } from '@/lib/utils';
 import { initNotifications, clearDockBadge } from '@/utils/notifications';
 import { initSidebarBadgeChannel } from '@/stores/noticeBadgeStore';
-import { initMenubarChannel } from '@/stores/noticeMenubarStore';
+import { initMenubarChannel, useNoticeMenubarStore } from '@/stores/noticeMenubarStore';
 import { initNoticeChannelHandlers } from '@/core/notice/channels';
 import { setContextProvider } from '@/core/notice/pipeline';
 import { cachedContextProvider, primeContextCaches } from '@/core/notice/contextProvider';
@@ -85,7 +85,10 @@ function App() {
     let cancelled = false;
     getCurrentWindow()
       .onFocusChanged(({ payload: focused }) => {
-        if (focused) clearDockBadge();
+        if (focused) {
+          clearDockBadge();
+          useNoticeMenubarStore.getState().dismissAll();
+        }
       })
       .then((fn) => {
         if (cancelled) fn();

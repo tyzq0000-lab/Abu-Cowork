@@ -714,7 +714,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       chatStore.setConversationStatus(conversationId, 'completed');
 
       const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
-      notifyTaskCompleted(convTitle);
+      notifyTaskCompleted(convTitle, conversationId);
     } catch (err) {
       subagentCleanup();
       chatStore.removeActiveAgent(delegateAgent.name);
@@ -746,7 +746,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       persistExecutionSnapshot(conversationId, loopId);
       chatStore.setConversationStatus(conversationId, 'error');
       const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
-      notifyTaskError(convTitle);
+      notifyTaskError(convTitle, conversationId);
       return { reason: 'error', error: errorMessage };
     }
     return { reason: 'completed' };
@@ -1548,7 +1548,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
           }
         }
         const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
-        notifyTaskCompleted(convTitle);
+        notifyTaskCompleted(convTitle, conversationId);
       }
     } catch (err) {
       // Handle abort errors gracefully.
@@ -1641,7 +1641,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       chatStore.setConversationStatus(conversationId, 'error');
 
       const convTitle = useChatStore.getState().conversationIndex[conversationId]?.title ?? '任务';
-      notifyTaskError(convTitle);
+      notifyTaskError(convTitle, conversationId);
       exitReason = 'error';
       exitError = errorMessage;
       continueLoop = false;

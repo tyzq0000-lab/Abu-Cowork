@@ -1251,6 +1251,7 @@ pub fn run() {
             // Create tray icon with known ID for update_tray_menu
             TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().expect("default window icon must be set in tauri.conf.json").clone())
+                .tooltip("Abu")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {

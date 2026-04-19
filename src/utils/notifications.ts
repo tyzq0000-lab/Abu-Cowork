@@ -48,11 +48,11 @@ export const clearDockBadge = clearDockBadgeCount;
 /**
  * Send a task completion notification.
  */
-export async function notifyTaskCompleted(conversationTitle: string): Promise<void> {
+export async function notifyTaskCompleted(conversationTitle: string, conversationId?: string): Promise<void> {
   publish({
     type: 'task_complete',
     source: 'agent',
-    payload: { conversationTitle },
+    payload: { conversationTitle, conversationId },
     dedupKey: `task_complete:${conversationTitle}:${Date.now()}`,
   });
 }
@@ -127,11 +127,11 @@ export async function notifyDraftProposal(
 /**
  * Send an error notification.
  */
-export async function notifyTaskError(conversationTitle: string): Promise<void> {
+export async function notifyTaskError(conversationTitle: string, conversationId?: string): Promise<void> {
   publish({
     type: 'agent_error',
     source: 'agent',
-    payload: { conversationTitle },
+    payload: { conversationTitle, conversationId },
     dedupKey: `agent_error:${conversationTitle}:${Date.now()}`,
   });
 }
