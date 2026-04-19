@@ -1,65 +1,40 @@
+/**
+ * Notification facade — producer-side API for the Notice System.
+ *
+ * All existing callers (agentLoop, scheduler, triggerEngine, skillManage)
+ * continue to use these functions unchanged. Internally they now publish
+ * through the Notice Bus, which routes to system_notification / menubar /
+ * sidebar_badge via the Gate → Router pipeline.
+ *
+ * Permission init + dock badge clearing are still handled here (exported
+ * for App.tsx focus handler).
+ */
+
 import {
   isPermissionGranted,
   requestPermission,
-  sendNotification,
 } from '@tauri-apps/plugin-notification';
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { isMacOS } from './platform';
+import { publish } from '@/core/notice/bus';
+import {
+  setNotificationPermission,
+  clearDockBadgeCount,
+} from '@/core/notice/channels';
 
 let permissionGranted = false;
-let unreadCount = 0;
-
-async function shouldBadge(): Promise<boolean> {
-  try {
-    const focused = await getCurrentWindow().isFocused();
-    return !focused;
-  } catch {
-    return false;
-  }
-}
-
-async function bumpDockBadge(): Promise<void> {
-  if (!isMacOS()) return;
-  try {
-    unreadCount += 1;
-    await getCurrentWindow().setBadgeCount(unreadCount);
-  } catch (err) {
-    console.warn('[Notification] Failed to set dock badge:', err);
-  }
-}
-
-export async function clearDockBadge(): Promise<void> {
-  if (unreadCount === 0) return;
-  if (!isMacOS()) return;
-  try {
-    unreadCount = 0;
-    await getCurrentWindow().setBadgeCount(undefined);
-  } catch (err) {
-    console.warn('[Notification] Failed to clear dock badge:', err);
-  }
-}
-
-async function maybeBadge(): Promise<void> {
-  if (await shouldBadge()) await bumpDockBadge();
-}
 
 /**
- * Initialize notification permissions on app startup
+ * Initialize notification permissions on app startup.
  */
 export async function initNotifications(): Promise<boolean> {
   try {
-    console.log('[Notification] Checking permission...');
     permissionGranted = await isPermissionGranted();
-    console.log('[Notification] Permission granted:', permissionGranted);
 
     if (!permissionGranted) {
-      console.log('[Notification] Requesting permission...');
       const permission = await requestPermission();
-      console.log('[Notification] Permission result:', permission);
       permissionGranted = permission === 'granted';
     }
 
-    console.log('[Notification] Final permission state:', permissionGranted);
+    setNotificationPermission(permissionGranted);
     return permissionGranted;
   } catch (err) {
     console.warn('[Notification] Failed to initialize:', err);
@@ -67,103 +42,72 @@ export async function initNotifications(): Promise<boolean> {
   }
 }
 
+/** Clear dock badge (called on window focus). */
+export const clearDockBadge = clearDockBadgeCount;
+
 /**
- * Send a task completion notification
+ * Send a task completion notification.
  */
 export async function notifyTaskCompleted(conversationTitle: string): Promise<void> {
-  console.log('[Notification] Attempting to send completion notification, permission:', permissionGranted);
-
-  if (!permissionGranted) {
-    console.log('[Notification] Skipping - no permission');
-    return;
-  }
-
-  try {
-    console.log('[Notification] Sending notification for:', conversationTitle);
-    await sendNotification({
-      title: '阿布完成啦！',
-      body: `「${conversationTitle}」已完成 ✨`,
-    });
-    console.log('[Notification] Notification sent successfully');
-    await maybeBadge();
-  } catch (err) {
-    console.warn('[Notification] Failed to send:', err);
-  }
+  publish({
+    type: 'task_complete',
+    source: 'agent',
+    payload: { conversationTitle },
+    dedupKey: `task_complete:${conversationTitle}:${Date.now()}`,
+  });
 }
 
 /**
- * Send a scheduled task completion notification
+ * Send a scheduled task completion notification.
  */
 export async function notifyScheduledTaskCompleted(taskName: string): Promise<void> {
-  if (!permissionGranted) return;
-  try {
-    await sendNotification({
-      title: '定时任务完成',
-      body: `「${taskName}」已执行完成 ✨`,
-    });
-    await maybeBadge();
-  } catch (err) {
-    console.warn('[Notification] Failed to send:', err);
-  }
+  publish({
+    type: 'schedule_fired',
+    source: 'scheduler',
+    payload: { title: taskName, outcome: 'completed' },
+    dedupKey: `schedule_complete:${taskName}:${Date.now()}`,
+  });
 }
 
 /**
- * Send a scheduled task error notification
+ * Send a scheduled task error notification.
  */
 export async function notifyScheduledTaskError(taskName: string): Promise<void> {
-  if (!permissionGranted) return;
-  try {
-    await sendNotification({
-      title: '定时任务出错',
-      body: `「${taskName}」执行出错了 😢`,
-    });
-    await maybeBadge();
-  } catch (err) {
-    console.warn('[Notification] Failed to send:', err);
-  }
+  publish({
+    type: 'agent_error',
+    source: 'scheduler',
+    payload: { title: taskName, outcome: 'error' },
+    dedupKey: `schedule_error:${taskName}:${Date.now()}`,
+  });
 }
 
 /**
- * Send a trigger task completion notification
+ * Send a trigger task completion notification.
  */
 export async function notifyTriggerCompleted(triggerName: string): Promise<void> {
-  if (!permissionGranted) return;
-  try {
-    await sendNotification({
-      title: '触发器执行完成',
-      body: `「${triggerName}」已处理完成`,
-    });
-    await maybeBadge();
-  } catch (err) {
-    console.warn('[Notification] Failed to send:', err);
-  }
+  publish({
+    type: 'task_complete',
+    source: 'core',
+    payload: { title: triggerName, outcome: 'completed' },
+    dedupKey: `trigger_complete:${triggerName}:${Date.now()}`,
+  });
 }
 
 /**
- * Send a trigger task error notification
+ * Send a trigger task error notification.
  */
 export async function notifyTriggerError(triggerName: string): Promise<void> {
-  if (!permissionGranted) return;
-  try {
-    await sendNotification({
-      title: '触发器执行出错',
-      body: `「${triggerName}」执行出错了`,
-    });
-    await maybeBadge();
-  } catch (err) {
-    console.warn('[Notification] Failed to send:', err);
-  }
+  publish({
+    type: 'agent_error',
+    source: 'core',
+    payload: { title: triggerName, outcome: 'error' },
+    dedupKey: `trigger_error:${triggerName}:${Date.now()}`,
+  });
 }
 
 /**
- * Notify the user that the agent has proposed a new skill draft. Routing
- * follows the proactivity preset (PRD §G):
- *   - shy      → nothing (agent shouldn't propose at all; silent no-op for safety)
- *   - companion → dock badge only, window-unfocused gate still applies
- *   - butler   → system notification + dock badge
- *
- * This is intentionally distinct from `notifyTaskCompleted` etc. — draft
- * proposals are quieter and shouldn't compete with task-completion UX.
+ * Notify the user that the agent has proposed a new skill draft.
+ * Proactivity levels: shy (no-op), companion (badge only), butler (full notification).
  */
 export async function notifyDraftProposal(
   draftName: string,
@@ -171,35 +115,23 @@ export async function notifyDraftProposal(
 ): Promise<void> {
   if (proactivity === 'shy') return;
 
-  await maybeBadge();
-
-  if (proactivity === 'butler' && permissionGranted) {
-    try {
-      await sendNotification({
-        title: '阿布想存一个技能',
-        body: `「${draftName}」已落入草稿区，等你审核 ✨`,
-      });
-    } catch (err) {
-      console.warn('[Notification] Failed to send draft proposal:', err);
-    }
-  }
+  publish({
+    type: 'skill_proposal_offer',
+    source: 'self_evolving',
+    payload: { name: draftName, proactivity },
+    dedupKey: `skill_proposal:${draftName}`,
+    tier: proactivity === 'butler' ? 'L2' : 'L3',
+  });
 }
 
 /**
- * Send an error notification
+ * Send an error notification.
  */
 export async function notifyTaskError(conversationTitle: string): Promise<void> {
-  if (!permissionGranted) {
-    return;
-  }
-
-  try {
-    await sendNotification({
-      title: '哎呀出错了',
-      body: `「${conversationTitle}」执行出错了 😢`,
-    });
-    await maybeBadge();
-  } catch (err) {
-    console.warn('[Notification] Failed to send:', err);
-  }
+  publish({
+    type: 'agent_error',
+    source: 'agent',
+    payload: { conversationTitle },
+    dedupKey: `agent_error:${conversationTitle}:${Date.now()}`,
+  });
 }

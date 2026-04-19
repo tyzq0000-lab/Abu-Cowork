@@ -35,6 +35,9 @@ import { cn } from '@/lib/utils';
 import { initNotifications, clearDockBadge } from '@/utils/notifications';
 import { initSidebarBadgeChannel } from '@/stores/noticeBadgeStore';
 import { initMenubarChannel } from '@/stores/noticeMenubarStore';
+import { initNoticeChannelHandlers } from '@/core/notice/channels';
+import { setContextProvider } from '@/core/notice/pipeline';
+import { cachedContextProvider, primeContextCaches } from '@/core/notice/contextProvider';
 import { schedulerEngine } from '@/core/scheduler/scheduler';
 import { triggerEngine } from '@/core/trigger/triggerEngine';
 import { imChannelRouter } from '@/core/im/channelRouter';
@@ -136,9 +139,12 @@ function App() {
       console.error('[App] Notification init error:', err);
     });
 
-    // Register Notice System channel handlers
+    // Register Notice System channel handlers + wire real context
+    setContextProvider(cachedContextProvider);
     initSidebarBadgeChannel();
     initMenubarChannel();
+    initNoticeChannelHandlers();
+    primeContextCaches().catch(() => {});
 
     // Initialize file watchers
     initFileWatchers().catch((err) => {
