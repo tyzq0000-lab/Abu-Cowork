@@ -20,9 +20,25 @@ const mockOpenToolbox = vi.fn();
 const mockSetToolboxSearchQuery = vi.fn();
 const mockWriteMemory = vi.fn().mockResolvedValue('memo.md');
 
+// Drafts store state is controlled per-test via this mutable object.
+// Defaults mimic "draft is live, store has initialized" so existing
+// accept/reject/active tests still see buttons.
+const draftsStoreState: {
+  drafts: { skillName: string }[];
+  isLoading: boolean;
+  lastRefreshedAt: number | null;
+  acceptDraft: typeof mockAcceptDraft;
+  rejectDraft: typeof mockRejectDraft;
+} = {
+  drafts: [{ skillName: 'weekly-digest' }],
+  isLoading: false,
+  lastRefreshedAt: Date.now(),
+  acceptDraft: mockAcceptDraft,
+  rejectDraft: mockRejectDraft,
+};
+
 vi.mock('@/stores/skillDraftsStore', () => ({
-  useSkillDraftsStore: (selector: (s: unknown) => unknown) =>
-    selector({ acceptDraft: mockAcceptDraft, rejectDraft: mockRejectDraft }),
+  useSkillDraftsStore: (selector: (s: unknown) => unknown) => selector(draftsStoreState),
 }));
 
 vi.mock('@/stores/chatStore', () => ({
@@ -87,6 +103,10 @@ beforeEach(() => {
   mockAcceptDraft.mockReset().mockResolvedValue({ ok: true });
   mockRejectDraft.mockReset().mockResolvedValue({ ok: true });
   mockWriteMemory.mockReset().mockResolvedValue('memo.md');
+  // Reset drafts state to "live draft, store initialized" baseline.
+  draftsStoreState.drafts = [{ skillName: 'weekly-digest' }];
+  draftsStoreState.isLoading = false;
+  draftsStoreState.lastRefreshedAt = Date.now();
 });
 
 // @testing-library/react's auto-cleanup doesn't always fire with
@@ -265,5 +285,52 @@ describe('SkillProposalCard · settled state', () => {
   it('rejected-category pill shows the "this kind will not be proposed" variant', () => {
     renderCard({ settledAction: 'rejected-category' });
     expect(screen.getByText(/this kind will not be proposed/)).toBeInTheDocument();
+  });
+});
+
+describe('SkillProposalCard · zombie-card detection (Task #40)', () => {
+  it('shows "draft no longer exists" when draft is absent from store', () => {
+    // Simulate user accepting draft via the Toolbox panel (or 72h TTL
+    // sweeping it to trash) — draft is gone, but the chat card is still
+    // mounted. Previously this left live buttons that would error on click.
+    draftsStoreState.drafts = [];
+
+    renderCard();
+
+    expect(screen.getByText(/Draft no longer exists/)).toBeInTheDocument();
+    // Action buttons must NOT render — card is read-only in missing state.
+    expect(screen.queryByRole('button', { name: /^Accept$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Reject$/ })).not.toBeInTheDocument();
+  });
+
+  it('settled state takes priority over missing — user action trace is preserved', () => {
+    // Edge case: user clicked accept in the card, then separately deleted
+    // the skill via Toolbox (draft gone from drafts list, skill also gone
+    // from workspace-auto). Card should still honor the "accepted" trace
+    // to match the user's own history.
+    draftsStoreState.drafts = [];
+
+    renderCard({ settledAction: 'accepted' });
+
+    expect(screen.getByText(/✓ Accepted/)).toBeInTheDocument();
+    // Deep-link from Task #33 still rendered.
+    expect(screen.getByText(/→ Open skills panel/)).toBeInTheDocument();
+    // Missing message should NOT appear — settled wins.
+    expect(screen.queryByText(/Draft no longer exists/)).not.toBeInTheDocument();
+  });
+
+  it('suppresses "missing" flash on initial mount before store hydrates', () => {
+    // First render may happen before listDrafts has finished populating.
+    // We track lastRefreshedAt === null as "not yet initialized" and fall
+    // through to the active state so the user doesn't see a false
+    // "missing" state flash that then reverts to buttons a tick later.
+    draftsStoreState.drafts = [];
+    draftsStoreState.lastRefreshedAt = null;
+
+    renderCard();
+
+    // Active state: buttons rendered.
+    expect(screen.getByRole('button', { name: /^Accept$/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Draft no longer exists/)).not.toBeInTheDocument();
   });
 });

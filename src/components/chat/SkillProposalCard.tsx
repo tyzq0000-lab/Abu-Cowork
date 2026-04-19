@@ -51,6 +51,17 @@ export default function SkillProposalCard({
   const setAction = useChatStore((s) => s.setToolCallNoticeCardAction);
   const acceptDraft = useSkillDraftsStore((s) => s.acceptDraft);
   const rejectDraft = useSkillDraftsStore((s) => s.rejectDraft);
+  // Task #40: detect zombie cards — draft was accepted elsewhere / expired
+  // into trash / manually deleted. We subscribe to drafts list so if the
+  // user's card is no longer live, we fall back to a muted "missing" state
+  // instead of showing clickable buttons that would then error out.
+  // `isLoading` guard prevents false-positive on initial mount before
+  // listDrafts has had a chance to populate.
+  const draftExists = useSkillDraftsStore((s) =>
+    s.drafts.some((d) => d.skillName === card.skillProposal?.skillName),
+  );
+  const draftsLoading = useSkillDraftsStore((s) => s.isLoading);
+  const draftsInitialized = useSkillDraftsStore((s) => s.lastRefreshedAt !== null);
 
   // Module I MVP only supports skill-proposal. Other card types will
   // branch here once they're added.
@@ -165,6 +176,24 @@ export default function SkillProposalCard({
       </button>
     ) : (
       <div className={baseClass}>{content}</div>
+    );
+  }
+
+  // ── Missing-draft state: draft was accepted via panel / expired into
+  //    trash / manually deleted. Render a muted read-only pill instead of
+  //    clickable buttons that would error with "draft not found".
+  //
+  //    Settled state takes priority over missing — if the user already
+  //    clicked a button, honor that UX trace regardless of current draft
+  //    presence. We only fall here when !settledAction.
+  //
+  //    Guarded by draftsInitialized so the first render (before listDrafts
+  //    has populated) doesn't flash a false "missing" state. ──────────
+  if (draftsInitialized && !draftsLoading && !draftExists) {
+    return (
+      <div className="my-2 px-3 py-2 rounded-lg border border-[var(--abu-border-subtle)] bg-[var(--abu-bg-muted)] text-xs text-[var(--abu-text-tertiary)]">
+        <span className="font-medium">{proposal.skillName}</span> — {t.toolbox.skillProposalCardMissing}
+      </div>
     );
   }
 
