@@ -57,7 +57,7 @@ beforeEach(() => {
 // ── Workspace enforcement ──────────────────────────────────────────────
 
 describe('skill_manage · workspace requirement', () => {
-  it('fails when no workspace is active', async () => {
+  it('fails when no workspace is active and hints at request_workspace (Task #37)', async () => {
     useWorkspaceStore.setState({ currentPath: null });
     const result = JSON.parse(
       (await skillManageTool.execute(
@@ -67,6 +67,10 @@ describe('skill_manage · workspace requirement', () => {
     );
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/workspace/i);
+    // Error must point the LLM at the right recovery path instead of
+    // just saying "open a project" — agents can't open projects on
+    // their own, but they CAN call request_workspace.
+    expect(result.error).toMatch(/request_workspace/);
   });
 });
 

@@ -101,7 +101,11 @@ function requireWorkspace(context?: ToolExecutionContext): string {
   const wp = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
   if (!wp) {
     throw new Error(
-      'skill_manage requires an active workspace. Open a project first, then retry.',
+      'skill_manage needs an active workspace. Call `request_workspace` first ' +
+        "to let the user pick a project directory (e.g. folder_hint=\"下载\" / " +
+        '"桌面" if the user mentioned one), then retry this skill_manage call. ' +
+        'Do NOT ask the user in plain text — the request_workspace tool shows ' +
+        'a native folder picker.',
     );
   }
   return wp;

@@ -389,12 +389,17 @@ export async function buildSystemPromptSections(
       sections.push({ name: 'workspace-hint', text: `\n## 工作区提醒
 当前没有设置工作区。
 
-当用户的请求涉及文件或目录操作时（如整理文件、查看桌面、操作文档等），
-直接调用 request_workspace 工具让用户选择工作目录，不要用文字回复让用户自己去选。
+**需要工作区的操作**（调用前必须先让用户选工作区，不要先调再看错误）：
+- 文件 / 目录操作：整理、复制、读取、查看桌面等
+- Skill 管理：\`skill_manage\` 的 create / patch / write_file（workspace-auto 作用域）
+- Memory 写入：项目级 memory 写到 \`~/.abu/projects/<key>/memory/\`
+- Copy-on-Modify 触发的任何跨作用域 skill 修改
+
+遇到这些场景时，**直接调用 request_workspace 工具让用户选择工作目录**，不要用文字回复让用户自己去选，也不要先调会失败的工具再看错误。
 如果用户提到了具体文件夹（如"下载文件夹"、"桌面"、"文档"），在 folder_hint 参数中传入文件夹名称。
 
-不涉及文件操作的请求（闲聊、知识问答、搜索信息、写作、翻译、计算等）直接回复即可。
-如果用户拒绝选择工作区，友好告知需要先选择工作目录才能操作文件。
+**不需要工作区**的请求（闲聊、知识问答、搜索信息、写作、翻译、计算、user 作用域的全局 memory 等）直接回复即可。
+如果用户拒绝选择工作区，友好告知需要先选择工作目录才能执行相关操作。
 
 生成的文件（非用户指定路径）保存到：${outputDir}`, cacheable: true });
     }

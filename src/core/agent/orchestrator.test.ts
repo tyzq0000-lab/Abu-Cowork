@@ -173,6 +173,23 @@ describe('buildSystemPrompt - structure', () => {
     expect(prompt).toContain('/test/workspace');
   });
 
+  it('injects request_workspace hint + skill_manage/memory scenarios when workspace is null (Task #37)', async () => {
+    // Flip global workspace to null — prompt should now contain the
+    // extended "workspace missing" guidance covering not just file ops
+    // but also skill_manage and memdir writes.
+    const { useWorkspaceStore } = await import('../../stores/workspaceStore');
+    vi.mocked(useWorkspaceStore.getState).mockReturnValueOnce({ currentPath: null } as ReturnType<typeof useWorkspaceStore.getState>);
+
+    const prompt = await buildSystemPrompt(generalRoute, basePrompt, 'test-conv');
+
+    expect(prompt).toContain('工作区提醒');
+    expect(prompt).toContain('request_workspace');
+    // The extended scenarios must be listed so the agent doesn't assume
+    // "no workspace = only blocks file ops" — skill_manage / memory too.
+    expect(prompt).toContain('skill_manage');
+    expect(prompt).toContain('Memory 写入');
+  });
+
   it('uses Chinese headings for skills and agents sections', async () => {
     const prompt = await buildSystemPrompt(generalRoute, basePrompt, 'test-conv');
     // Should NOT contain English headings
