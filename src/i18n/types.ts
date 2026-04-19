@@ -620,6 +620,13 @@ export interface TranslationDict {
     exportSkill: string;
     exportSuccess: string;
     exportFailed: string;
+    // Import .askill (Task #25 part B)
+    importSkill: string;             // menu label
+    importSuccess: string;           // toast title
+    importFailed: string;            // toast title
+    importConflictTitle: string;     // confirm dialog
+    importConflictMessage: string;   // "{name} 已存在，是否覆盖？"
+    importConflictOverwrite: string; // "覆盖"
     manualAdd: string;
     // Skill detail & editor
     skillDetail: string;

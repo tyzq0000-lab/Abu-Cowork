@@ -14,9 +14,10 @@ import { Toggle } from '@/components/ui/toggle';
 import { Trash2, FileText, Folder, ChevronDown, ChevronRight, Pencil, MoreHorizontal, Eye, Code, Info, MessageCircle, Search, Plus, X, Wand2, PenLine, Upload, Download, Package, Loader2, Check, AlertCircle, Globe, Clock } from 'lucide-react';
 import { remove } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
-import { save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { writeFile } from '@tauri-apps/plugin-fs';
-import { packSkill } from '@/core/skill/packager';
+import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
+import { writeFile, readFile } from '@tauri-apps/plugin-fs';
+import { homeDir } from '@tauri-apps/api/path';
+import { packSkill, unpackSkill, validateArchive, ConflictError } from '@/core/skill/packager';
 import { installSkillFromNpm, NpmInstallError } from '@/core/skill/npmInstaller';
 import type { InstallStep } from '@/core/skill/npmInstaller';
 import { useToastStore } from '@/stores/toastStore';
@@ -26,6 +27,7 @@ import { format } from '@/i18n';
 import type { Skill, SkillUXCategory } from '@/types';
 import { sourceToUXCategory } from '@/core/skill/uxCategory';
 import MarkdownRenderer from '@/components/chat/MarkdownRenderer';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 
 // Build a set of system skill names from marketplace templates
 /**
@@ -285,6 +287,95 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
       await refresh();
     } catch (err) {
       console.error('Failed to delete skill:', err);
+    }
+  };
+
+  // Confirm dialog for overwriting an existing skill during import.
+  // State lives here (rather than inline) so the confirm flow can
+  // survive React's render cycle between "user picks file" and "user
+  // confirms overwrite".
+  const [importConflict, setImportConflict] = useState<{
+    bytes: Uint8Array;
+    baseDir: string;
+    skillName: string;
+  } | null>(null);
+  const [importInProgress, setImportInProgress] = useState(false);
+
+  // Import a .askill package → unpack into user scope (~/.abu/skills/).
+  // Reuses the existing packager's validation + unpack pipeline. On
+  // name conflict we stash state and pop a ConfirmDialog; everything
+  // else surfaces as a toast.
+  const handleImport = async () => {
+    const addToast = useToastStore.getState().addToast;
+    try {
+      setShowCreateMenu(false);
+      const picked = await openDialog({
+        filters: [{ name: 'Skill Package', extensions: ['askill', 'zip'] }],
+        multiple: false,
+      });
+      if (!picked || typeof picked !== 'string') return;
+
+      setImportInProgress(true);
+      const bytes = await readFile(picked);
+      const archiveBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+      const validationError = validateArchive(archiveBytes);
+      if (validationError) {
+        addToast({ type: 'error', title: t.toolbox.importFailed, message: validationError.message });
+        return;
+      }
+
+      // user scope: global skills live under ~/.abu/skills/, which is
+      // where hand-imported skills naturally belong. The app's own
+      // SkillLoader picks this path up automatically.
+      const home = await homeDir();
+      const baseDir = `${home}/.abu/skills`;
+
+      try {
+        const result = await unpackSkill(archiveBytes, baseDir);
+        addToast({
+          type: 'success',
+          title: t.toolbox.importSuccess,
+          message: `"${result.name}"`,
+        });
+        await refresh();
+      } catch (err) {
+        if (err instanceof ConflictError) {
+          setImportConflict({ bytes: archiveBytes, baseDir, skillName: err.skillName });
+          return; // ConfirmDialog takes over from here
+        }
+        throw err;
+      }
+    } catch (err) {
+      console.error('Import skill failed:', err);
+      addToast({
+        type: 'error',
+        title: t.toolbox.importFailed,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setImportInProgress(false);
+    }
+  };
+
+  // Overwrite branch from the ConflictError confirmation above.
+  const handleImportOverwrite = async () => {
+    if (!importConflict) return;
+    const addToast = useToastStore.getState().addToast;
+    setImportInProgress(true);
+    try {
+      const result = await unpackSkill(importConflict.bytes, importConflict.baseDir, { overwrite: true });
+      addToast({ type: 'success', title: t.toolbox.importSuccess, message: `"${result.name}"` });
+      await refresh();
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: t.toolbox.importFailed,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setImportConflict(null);
+      setImportInProgress(false);
     }
   };
 
@@ -592,6 +683,14 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                           <span>{t.toolbox.uploadFile}</span>
                         </button>
                       )}
+                      <button
+                        onClick={handleImport}
+                        disabled={importInProgress}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-active)] transition-colors disabled:opacity-50"
+                      >
+                        <Upload className="h-3.5 w-3.5 text-[var(--abu-text-muted)]" />
+                        <span>{t.toolbox.importSkill}</span>
+                      </button>
                       <button
                         onClick={() => { setShowCreateMenu(false); setShowNpmInstall(true); }}
                         className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-active)] transition-colors"
@@ -1104,6 +1203,22 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
           onClose={() => setHistorySkill(null)}
         />
       )}
+
+      {/* Import conflict confirm — pops when `.askill` import finds an
+          existing skill with the same name. User can overwrite (which
+          wipes the old skillDir and unpacks the new archive) or cancel. */}
+      <ConfirmDialog
+        open={!!importConflict}
+        title={t.toolbox.importConflictTitle}
+        message={importConflict
+          ? format(t.toolbox.importConflictMessage, { name: importConflict.skillName })
+          : ''}
+        confirmText={t.toolbox.importConflictOverwrite}
+        cancelText={t.common.cancel}
+        variant="danger"
+        onConfirm={handleImportOverwrite}
+        onCancel={() => setImportConflict(null)}
+      />
     </div>
   );
 }

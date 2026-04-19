@@ -643,6 +643,12 @@ const zhCN: TranslationDict = {
     exportSkill: '导出技能包',
     exportSuccess: '导出成功',
     exportFailed: '导出失败',
+    importSkill: '导入技能包 (.askill)',
+    importSuccess: '导入成功',
+    importFailed: '导入失败',
+    importConflictTitle: '技能已存在',
+    importConflictMessage: '当前已有同名技能 "{name}"。覆盖会替换掉现有内容。',
+    importConflictOverwrite: '覆盖',
     manualAdd: '手动配置',
     // Skill detail & editor
     skillDetail: '技能详情',
