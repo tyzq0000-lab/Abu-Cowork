@@ -1,19 +1,14 @@
 /**
  * Notice Bus — the pub/sub core of the Notice System.
  *
- * Producers call `publish` to raise an event. Subscribers register a
- * handler per delivery channel. Dedup is enforced inside publish (same
- * dedupKey within 2h is dropped and returns null).
+ * Producers call `publish` to raise an event. The Bus handles dedup,
+ * builds the Notice object, and hands it to the pipeline (Gate → Router
+ * → targeted channel dispatch).
  *
- * This module deliberately does NOT include Gate filtering or Router
- * dispatch — those are separate layers wired in later milestones (see
- * PRD-01 core 时序). The Bus is pure pub/sub so it's testable in
- * isolation and so the eventual Gate/Router can be swapped independently.
- *
- * Until Gate/Router land, `dispatch` fans out every notice to every
- * subscribed handler regardless of channel. Handlers are expected to
- * filter themselves; once the Router is in place this file will change
- * so only the targeted channels receive each notice.
+ * Legacy subscribers (registered via `subscribe`) still receive blanket
+ * fan-out for backward compatibility during the migration window.
+ * New code should use `registerChannel` from pipeline.ts to receive
+ * only notices routed to a specific channel.
  *
  * Dispatch is synchronous within the event loop; handlers MUST handle
  * their own async work and error boundaries. Errors thrown by one
@@ -29,6 +24,7 @@ import {
   NoticeSchema,
 } from './types';
 import { checkDedup, recordDedup } from './dedup';
+import { processNotice, type PipelineResult } from './pipeline';
 
 // ── Delivery channels ───────────────────────────────────────────────────
 
@@ -81,8 +77,22 @@ export function publish(input: PublishInput): string | null {
   NoticeSchema.parse(notice);
 
   recordDedup(input.dedupKey, notice.id, now);
+
+  // Run full pipeline (Gate → Router → targeted channel dispatch)
+  const result = processNotice(notice);
+  lastPipelineResult = result;
+
+  // Legacy blanket fan-out for backward compat during migration
   dispatch(notice);
+
   return notice.id;
+}
+
+/** Last pipeline result — exposed for testing and future audit integration. */
+let lastPipelineResult: PipelineResult | null = null;
+
+export function getLastPipelineResultForTest(): PipelineResult | null {
+  return lastPipelineResult;
 }
 
 /** Subscribe a handler to a delivery channel. Returns an unsubscribe fn. */
