@@ -16,6 +16,7 @@ mod feishu_ws;
 mod window_info;
 mod computer_use;
 mod overlay;
+mod pet;
 mod secrets;
 mod atomic_write;
 mod notice;
@@ -1316,6 +1317,9 @@ pub fn run() {
             overlay::show_screen_border,
             overlay::hide_screen_border,
             overlay::get_overlay_window_id,
+            pet::pet_show,
+            pet::pet_hide,
+            pet::pet_toggle,
             trigger_server::start_trigger_server,
             trigger_server::get_trigger_server_port,
             get_local_ip,
