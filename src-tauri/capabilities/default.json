@@ -78,11 +78,15 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/**/.trash" },
+        { "path": "$HOME/.abu/**/.trash/**" },
         { "path": "$RESOURCE/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
         { "path": "/Volumes/**/.abu/**" },
+        { "path": "/Volumes/**/.abu/**/.trash" },
+        { "path": "/Volumes/**/.abu/**/.trash/**" },
         { "path": "$TEMP/**" },
         { "path": "/Applications" },
         { "path": "/Applications/**" }
@@ -110,15 +114,20 @@
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/**/.trash" },
+        { "path": "$HOME/.abu/**/.trash/**" },
         { "path": "/Volumes/**/.abu" },
         { "path": "/Volumes/**/.abu/**" },
+        { "path": "/Volumes/**/.abu/**/.trash" },
+        { "path": "/Volumes/**/.abu/**/.trash/**" },
         { "path": "$TEMP/**" }
       ]
     },
     {
       "identifier": "fs:allow-remove",
       "allow": [
-        { "path": "$HOME/.abu/**" }
+        { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/**/.trash/**" }
       ]
     },
     {
@@ -153,10 +162,12 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/**/.trash/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
         { "path": "/Volumes/**/.abu/**" },
+        { "path": "/Volumes/**/.abu/**/.trash/**" },
         { "path": "$TEMP/**" }
       ]
     },
