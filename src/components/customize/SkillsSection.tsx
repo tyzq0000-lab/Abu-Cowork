@@ -8,8 +8,9 @@ import { skillLoader } from '@/core/skill/loader';
 import SkillEditor from './SkillEditor';
 import SkillDraftsPanel from './SkillDraftsPanel';
 import SkillCategoryBlocksPanel from './SkillCategoryBlocksPanel';
+import SkillHistoryModal from './SkillHistoryModal';
 import { Toggle } from '@/components/ui/toggle';
-import { Trash2, FileText, Folder, ChevronDown, ChevronRight, Pencil, MoreHorizontal, Eye, Code, Info, MessageCircle, Search, Plus, X, Wand2, PenLine, Upload, Download, Package, Loader2, Check, AlertCircle, Globe } from 'lucide-react';
+import { Trash2, FileText, Folder, ChevronDown, ChevronRight, Pencil, MoreHorizontal, Eye, Code, Info, MessageCircle, Search, Plus, X, Wand2, PenLine, Upload, Download, Package, Loader2, Check, AlertCircle, Globe, Clock } from 'lucide-react';
 import { remove } from '@tauri-apps/plugin-fs';
 import { invoke } from '@tauri-apps/api/core';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
@@ -165,6 +166,7 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
   const [supportingFiles, setSupportingFiles] = useState<Record<string, string[]>>({});
   const [editorSkill, setEditorSkill] = useState<Skill | 'new' | null>(null);
   const [menuSkill, setMenuSkill] = useState<string | null>(null);
+  const [historySkill, setHistorySkill] = useState<Skill | null>(null);
   // Selected file within skill tree: null = show skill detail, string = show file content
   const [selectedFile, setSelectedFile] = useState<{ skillName: string; path: string } | null>(null);
   const [fileContent, setFileContent] = useState<string | null>(null);
@@ -761,6 +763,16 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
                             <Download className="h-3 w-3" />
                             {t.toolbox.exportSkill}
                           </button>
+                          {/* History (Task #24) — available for all skills;
+                              builtin skills typically have no history, so
+                              the modal's empty state explains this. */}
+                          <button
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-muted)] transition-colors"
+                            onClick={() => { setHistorySkill(selected); setMenuSkill(null); }}
+                          >
+                            <Clock className="h-3 w-3" />
+                            {t.toolbox.historyMenuLabel}
+                          </button>
                           {/* Edit & Delete - available for non-builtin skills */}
                           {selected.source !== 'builtin' && !isSystemSkill(selected) && (
                             <>
@@ -1038,6 +1050,15 @@ export default function SkillsSection({ manualCreateTrigger, onAICreate, onManua
             </div>
           </div>
         </div>
+      )}
+
+      {/* Skill history modal (Task #24) — mounted only when opened. */}
+      {historySkill && (
+        <SkillHistoryModal
+          skillDir={historySkill.skillDir}
+          skillName={historySkill.name}
+          onClose={() => setHistorySkill(null)}
+        />
       )}
     </div>
   );

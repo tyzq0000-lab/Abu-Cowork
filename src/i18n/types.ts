@@ -782,6 +782,23 @@ export interface TranslationDict {
     skillDeletedCardLabel: string;      // "Abu 删除了技能"
     skillDeletedCardRescuable: string;  // "可在 7 天内恢复"
     skillDeletedCardPermanent: string;  // "已永久删除"
+    // Skill history modal (Task #24)
+    historyMenuLabel: string;           // "查看历史" menu item
+    historyModalTitle: string;          // "修改历史"
+    historyEmpty: string;               // empty state explainer
+    historyFileCount: string;           // "{count} 个文件"
+    historyRevert: string;              // button label
+    historyRevertSuccess: string;       // toast title
+    historyRevertFailed: string;        // toast title (partial/full fail)
+    historyRevertRestoredFiles: string; // "还原了 {count} 个文件"
+    historyOpEdit: string;              // op badge
+    historyOpPatch: string;
+    historyOpWriteFile: string;
+    historyOpRemoveFile: string;
+    historyOpRevert: string;
+    historyActionModified: string;      // file action badge
+    historyActionCreated: string;
+    historyActionRemoved: string;
     // Category blocks (Task #45 — reject-category undo)
     categoryBlocksTitle: string;        // "已屏蔽的同类提议"
     categoryBlocksCount: string;        // "{count} 条" interpolation
