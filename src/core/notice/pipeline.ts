@@ -19,6 +19,8 @@ import type { Notice } from './types';
 import { filter, type GateContext, type GateDecision } from './gate';
 import { route, type DeliveryTarget } from './router';
 import { consumeL2Quota } from './quota';
+import { recordAudit } from './audit';
+import { queueToInbox } from './inbox';
 
 // ── Context provider ───────────────────────────────────────────────────
 
@@ -88,6 +90,10 @@ export function processNotice(notice: Notice): PipelineResult {
   const decision = filter(notice, ctx);
 
   if (decision.action !== 'allow' && decision.action !== 'degrade_tier') {
+    recordAudit(notice, decision, []);
+    if (decision.action === 'queue_inbox') {
+      queueToInbox(notice);
+    }
     return { decision, targets: [] };
   }
 
@@ -121,6 +127,8 @@ export function processNotice(notice: Notice): PipelineResult {
       }
     }
   }
+
+  recordAudit(routedNotice, decision, targets);
 
   return { decision, targets };
 }

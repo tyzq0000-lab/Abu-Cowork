@@ -19,6 +19,7 @@ mod overlay;
 mod secrets;
 mod atomic_write;
 mod notice;
+mod notice_db;
 
 /// Maximum number of output lines to collect from a shell command.
 /// Prevents OOM when commands produce unbounded output.
@@ -1227,6 +1228,21 @@ pub fn run() {
                 }
             }
 
+            // Initialize Notice System SQLite database
+            let notice_db_path = app
+                .path()
+                .app_data_dir()
+                .map(|dir| dir.join("notice.sqlite"))
+                .unwrap_or_else(|_| std::path::PathBuf::from("notice.sqlite"));
+            match notice_db::NoticeDb::open(&notice_db_path) {
+                Ok(db) => {
+                    app.manage(db);
+                }
+                Err(e) => {
+                    eprintln!("[notice_db] Failed to init: {}. Audit/inbox will be unavailable.", e);
+                }
+            }
+
             // Build tray menu — bilingual labels for cross-locale compatibility
             let show_item = MenuItem::with_id(app, "show", "Show Abu / 显示窗口", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit / 退出", true, None::<&str>)?;
@@ -1307,6 +1323,13 @@ pub fn run() {
             feishu_ws::get_feishu_ws_status,
             update_tray_menu,
             update_tray_notice_count,
+            notice_db::notice_audit_insert,
+            notice_db::notice_audit_query,
+            notice_db::notice_audit_aggregate,
+            notice_db::notice_inbox_insert,
+            notice_db::notice_inbox_pending,
+            notice_db::notice_inbox_mark_delivered,
+            notice_db::notice_inbox_cleanup,
             secret_get,
             secret_set,
             secret_delete,

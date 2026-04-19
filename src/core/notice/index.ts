@@ -20,6 +20,12 @@ export type { GateContext, GateDecision, FeedbackRule, PetState } from './gate';
 
 export { checkL2Quota, consumeL2Quota } from './quota';
 
+export { queryAudit, aggregateDecisions } from './audit';
+export type { AuditEntry } from './audit';
+
+export { queueToInbox, getPendingInbox, markDelivered, cleanupInbox } from './inbox';
+export type { InboxEntry } from './inbox';
+
 export type {
   Notice,
   NoticeTier,
