@@ -431,6 +431,24 @@ export interface AgentLoopResult {
 }
 
 /**
+ * Gate for "only run when the user can actually review the result".
+ * Memory extraction + post-loop proposal signal both live behind this
+ * check — an IM headless session, a scheduled task, or a trigger run
+ * all execute without a visible chat, so autonomous writes from those
+ * contexts would silently pollute the workspace (drafts/ dir, memdir)
+ * with artifacts the user never sees.
+ *
+ * Pure function, exported for testing. Accepts partial shapes so
+ * callers don't need full AgentLoopOptions / Conversation objects.
+ */
+export function isInteractiveDesktop(
+  options: Pick<AgentLoopOptions, 'imContext'> | undefined,
+  conversation: { scheduledTaskId?: string; triggerId?: string } | undefined,
+): boolean {
+  return !options?.imContext && !conversation?.scheduledTaskId && !conversation?.triggerId;
+}
+
+/**
  * Calculate escalated maxOutputTokens after a max_tokens hit.
  * Doubles the limit (capped by context window) on first recovery attempt.
  * Pure function, exported for testing.
@@ -1464,14 +1482,11 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // proposals share this gate (they're two sides of the same
         // "agent writes stuff only when user can review" invariant).
         const convRecord = chatStore.conversations[conversationId];
-        const isInteractiveDesktop =
-          !options?.imContext &&
-          !convRecord?.scheduledTaskId &&
-          !convRecord?.triggerId;
+        const interactiveDesktop = isInteractiveDesktop(options, convRecord);
 
         // Auto-extract memories from desktop conversations (non-blocking).
         // IM conversations have their own extraction in channelRouter.ts.
-        if (isInteractiveDesktop) {
+        if (interactiveDesktop) {
           const wsPath = useWorkspaceStore.getState().currentPath;
           import('../memdir/extractor').then(({ extractMemoriesFromConversation }) =>
             extractMemoriesFromConversation(conversationId, wsPath)
@@ -1483,7 +1498,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // the agent to consider skill_manage(agent_proposed=true). This
         // is the self-evolution activation mechanism — without it,
         // agent only proposes when user explicitly says "save this".
-        if (exitReason === 'completed' && isInteractiveDesktop) {
+        if (exitReason === 'completed' && interactiveDesktop) {
           try {
             const { computeProposalSignal } = await import('./proposalSignal');
             const { useSettingsStore } = await import('../../stores/settingsStore');

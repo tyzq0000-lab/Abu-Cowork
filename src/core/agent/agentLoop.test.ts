@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { escalateMaxOutputTokens } from './agentLoop';
+import { escalateMaxOutputTokens, isInteractiveDesktop } from './agentLoop';
 
 describe('escalateMaxOutputTokens', () => {
   it('does not escalate when recoveryCount is 0', () => {
@@ -32,5 +32,57 @@ describe('escalateMaxOutputTokens', () => {
   it('works with large context windows', () => {
     const result = escalateMaxOutputTokens(32768, 1000000, 2, false);
     expect(result).toEqual({ maxOutputTokens: 65536, changed: true });
+  });
+});
+
+// Task #49 · Gate that protects memory extraction + post-loop proposal
+// signal from firing in headless contexts. Regression-critical because
+// the bug mode is silent: failing gates leak skill drafts and memories
+// into user-invisible directories.
+describe('isInteractiveDesktop', () => {
+  it('desktop conversation (no imContext, no scheduledTaskId, no triggerId) → true', () => {
+    expect(isInteractiveDesktop(undefined, {})).toBe(true);
+    expect(isInteractiveDesktop({}, undefined)).toBe(true);
+    expect(isInteractiveDesktop({}, {})).toBe(true);
+  });
+
+  it('IM headless conversation (imContext set) → false', () => {
+    expect(
+      isInteractiveDesktop(
+        { imContext: { platform: 'dchat', workspacePath: '/ws' } },
+        {},
+      ),
+    ).toBe(false);
+  });
+
+  it('scheduled-task conversation → false', () => {
+    expect(isInteractiveDesktop({}, { scheduledTaskId: 'task-42' })).toBe(false);
+  });
+
+  it('trigger-run conversation → false', () => {
+    expect(isInteractiveDesktop({}, { triggerId: 'trigger-7' })).toBe(false);
+  });
+
+  it('absent conversation record (shouldn’t happen, defensive) → falls through to options-only check', () => {
+    // convRecord may be absent if the conversation was deleted mid-run.
+    // The gate should not crash and should rely on options to decide.
+    expect(isInteractiveDesktop(undefined, undefined)).toBe(true);
+    expect(
+      isInteractiveDesktop(
+        { imContext: { platform: 'dchat', workspacePath: '/ws' } },
+        undefined,
+      ),
+    ).toBe(false);
+  });
+
+  it('any single headless marker is enough to lock the gate', () => {
+    // Pathological combo shouldn't accidentally re-open the gate — each
+    // marker is an independent "headless" condition.
+    expect(
+      isInteractiveDesktop(
+        { imContext: { channelId: 'c', platform: 'dchat', workspacePath: '/ws' } },
+        { scheduledTaskId: 'x', triggerId: 'y' },
+      ),
+    ).toBe(false);
   });
 });
