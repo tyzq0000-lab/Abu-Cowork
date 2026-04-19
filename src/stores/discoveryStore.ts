@@ -12,7 +12,20 @@ interface DiscoveryState {
 }
 
 interface DiscoveryActions {
-  refresh: () => Promise<void>;
+  /**
+   * Re-scan installed skills + agents.
+   *
+   * @param workspaceOverride — scan a specific workspace instead of
+   *   the globally active one. Lets callers refresh for a workspace
+   *   without having to flip the global `workspaceStore.currentPath`
+   *   first (Task #44 — fixes the silent workspace-switch bug in
+   *   skillDraftsStore's accept/reject when the user clicks a card
+   *   from a different project's conversation).
+   *   - omit / pass `undefined` → use the global current workspace
+   *   - pass `null` explicitly → scan with no workspace (global scan)
+   *   - pass a string → scan that workspace
+   */
+  refresh: (workspaceOverride?: string | null) => Promise<void>;
 }
 
 export type DiscoveryStore = DiscoveryState & DiscoveryActions;
@@ -22,12 +35,15 @@ export const useDiscoveryStore = create<DiscoveryStore>()((set) => ({
   agents: [],
   isLoading: false,
 
-  refresh: async () => {
+  refresh: async (workspaceOverride) => {
     set({ isLoading: true });
     try {
-      // Pass current workspace to the loader so project-scoped and
-      // agent-written skills are included in the discovery.
-      const wp = useWorkspaceStore.getState().currentPath;
+      // Prefer the explicit override when provided (including `null`
+      // for "no workspace" — `undefined` falls back to the global).
+      const wp =
+        workspaceOverride !== undefined
+          ? workspaceOverride
+          : useWorkspaceStore.getState().currentPath;
       const [skills, agents] = await Promise.all([
         skillLoader.discoverSkills(wp),
         agentRegistry.discoverAgents(),

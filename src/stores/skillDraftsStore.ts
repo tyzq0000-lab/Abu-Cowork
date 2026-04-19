@@ -97,7 +97,17 @@ export interface RejectDraftOptions {
 }
 
 interface SkillDraftsActions {
-  refresh: () => Promise<void>;
+  /**
+   * Rebuild the drafts list from disk.
+   *
+   * @param workspaceOverride — scan a specific workspace instead of
+   *   the global current path. Accept/reject pass their target
+   *   workspace here so the list reflects the mutation's workspace
+   *   (Task #44) without mutating the user's global workspace
+   *   selection as a side effect. Omit / pass undefined to use the
+   *   global current path (default behavior for UI-triggered refresh).
+   */
+  refresh: (workspaceOverride?: string) => Promise<void>;
   /**
    * Promote a draft to workspace-auto. `workspaceOverride` is used by
    * in-chat proposal cards (see `InteractiveNoticeCard`) to bypass the
@@ -131,8 +141,8 @@ export const useSkillDraftsStore = create<SkillDraftsStore>()((set, get) => ({
   lastRefreshedAt: null,
   lastError: null,
 
-  refresh: async () => {
-    const wp = useWorkspaceStore.getState().currentPath;
+  refresh: async (workspaceOverride) => {
+    const wp = workspaceOverride ?? useWorkspaceStore.getState().currentPath;
     if (!wp) {
       set({ drafts: [], isLoading: false, lastError: null });
       return;
@@ -155,24 +165,18 @@ export const useSkillDraftsStore = create<SkillDraftsStore>()((set, get) => ({
     try {
       await acceptDraftFs(name, wp);
 
-      // Align the global workspaceStore to the workspace the skill was
-      // just written to, so discoveryStore.refresh (which reads the
-      // global store) scans the right project. Without this, accepting
-      // from an old conversation whose conv.workspacePath was never
-      // bound leaves currentPath=null, and the promoted skill stays
-      // invisible in the Toolbox even though it's on disk.
-      const globalWp = useWorkspaceStore.getState().currentPath;
-      if (globalWp !== wp) {
-        useWorkspaceStore.getState().setWorkspace(wp);
-      }
-
-      // Accepted skills need to show up in the main skills list — refresh the
-      // loader so discoveryStore picks them up on its next read.
+      // Accepted skills need to show up in the main skills list.
+      // discoveryStore.refresh used to silently read `currentPath`,
+      // which forced us to call setWorkspace(wp) first to "steer" it —
+      // but that mutated the user's global workspace state as a side
+      // effect (Task #44). Now we pass wp explicitly instead, so
+      // accept only affects the in-memory skills list for the target
+      // workspace, never the user's current workspace selection.
       await skillLoader.discoverSkills(wp).catch(() => {
         /* loader failure shouldn't abort the accept */
       });
-      await useDiscoveryStore.getState().refresh();
-      await get().refresh();
+      await useDiscoveryStore.getState().refresh(wp);
+      await get().refresh(wp);
       settleCardsForSkill(name, 'accepted');
       return { ok: true };
     } catch (err) {
@@ -196,14 +200,9 @@ export const useSkillDraftsStore = create<SkillDraftsStore>()((set, get) => ({
     if (!wp) return { ok: false, error: 'no active workspace' };
     try {
       await rejectDraftFs(name, wp, opts.reason);
-      // Mirror the acceptDraft sync: if override is steering us, bring the
-      // global store along so the drafts panel (which reads globalStore in
-      // its own refresh) doesn't fall back to an empty "no workspace" view.
-      const globalWp = useWorkspaceStore.getState().currentPath;
-      if (globalWp !== wp) {
-        useWorkspaceStore.getState().setWorkspace(wp);
-      }
-      await get().refresh();
+      // Same as acceptDraft — refresh explicitly against the target
+      // workspace, never flip the user's global selection (Task #44).
+      await get().refresh(wp);
       settleCardsForSkill(name, opts.category ? 'rejected-category' : 'rejected');
       return { ok: true };
     } catch (err) {

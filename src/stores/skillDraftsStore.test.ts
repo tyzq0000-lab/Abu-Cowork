@@ -5,6 +5,7 @@ import { useChatStore } from './chatStore';
 import * as drafts from '../core/skill/drafts';
 import type { DraftRecord } from '../core/skill/drafts';
 import type { Conversation, ToolCall } from '../types';
+import { skillLoader } from '../core/skill/loader';
 
 // The store imports these stores at module init; they're real zustand so we
 // just manipulate state via setState. Drafts module is mocked — we're testing
@@ -133,16 +134,40 @@ describe('skillDraftsStore · acceptDraft', () => {
     expect(mockAcceptDraft).toHaveBeenCalledWith('from-card', '/captured/ws');
   });
 
-  it('acceptDraft syncs global workspaceStore to the override', async () => {
-    // Regression guard for "accepted skill invisible in Toolbox":
-    // discoveryStore.refresh reads the live global workspace. If accept
-    // leaves the global at null while writing the skill under the override
-    // workspace, the skill never appears in the main list.
-    useWorkspaceStore.setState({ currentPath: null });
+  it('acceptDraft does NOT mutate the global workspace (Task #44)', async () => {
+    // Regression guard for the silent-workspace-switch bug: when a
+    // user clicks accept on a card from a *different* project's
+    // conversation, Abu used to flip useWorkspaceStore.currentPath
+    // to the card's workspace as a side effect, so discoveryStore
+    // could scan the right project. That mutated the user's global
+    // context without asking. The fix threads the workspace through
+    // discoveryStore.refresh(wp) instead — accept must leave global
+    // state alone.
+    useWorkspaceStore.setState({ currentPath: '/original/ws' });
 
     await useSkillDraftsStore.getState().acceptDraft('any', '/captured/ws');
 
-    expect(useWorkspaceStore.getState().currentPath).toBe('/captured/ws');
+    // Global workspace untouched.
+    expect(useWorkspaceStore.getState().currentPath).toBe('/original/ws');
+  });
+
+  it('acceptDraft still refreshes the target workspace even when global is null', async () => {
+    // Regression guard for "accepted skill invisible in Toolbox":
+    // the fix must still make the newly-promoted skill discoverable
+    // under the target workspace — not by stealing the global, but
+    // by passing wp explicitly to discoveryStore.refresh.
+    useWorkspaceStore.setState({ currentPath: null });
+
+    const result = await useSkillDraftsStore
+      .getState()
+      .acceptDraft('any', '/captured/ws');
+
+    expect(result).toEqual({ ok: true });
+    // Global stays null — we don't side-effect onto it.
+    expect(useWorkspaceStore.getState().currentPath).toBeNull();
+    // skillLoader got the target workspace so the promoted skill
+    // is discoverable on next read.
+    expect(skillLoader.discoverSkills).toHaveBeenCalledWith('/captured/ws');
   });
 
   it('captures filesystem errors without crashing', async () => {
@@ -168,6 +193,19 @@ describe('skillDraftsStore · rejectDraft', () => {
     useWorkspaceStore.setState({ currentPath: null });
     const result = await useSkillDraftsStore.getState().rejectDraft('x');
     expect(result.ok).toBe(false);
+  });
+
+  it('rejectDraft does NOT mutate the global workspace (Task #44)', async () => {
+    // Same regression guard as acceptDraft's Task #44 case — reject
+    // against a card's captured workspace must not steal the user's
+    // global selection.
+    useWorkspaceStore.setState({ currentPath: '/original/ws' });
+
+    await useSkillDraftsStore.getState().rejectDraft('x', {
+      workspaceOverride: '/captured/ws',
+    });
+
+    expect(useWorkspaceStore.getState().currentPath).toBe('/original/ws');
   });
 
   it('accepts new options object form with workspaceOverride', async () => {
