@@ -39,15 +39,40 @@ export interface SkillProposalPayload {
 }
 
 /**
- * Base card shape. Extend by adding new `type` values + the matching
- * type-specific payload field. Keeping one union in one file avoids
- * scattered ad-hoc card shapes across the codebase.
+ * Payload for an "agent silently patched a skill" notice. Not
+ * interactive — just a visibility surface so users don't find their
+ * skill behavior mutated without a trace. Future Task #24 can hang a
+ * "view diff" button off this payload without schema changes.
  */
+export interface SkillPatchedPayload {
+  skillName: string;
+  /** Absolute path to the file that got patched (usually SKILL.md). */
+  filePath: string;
+  /** One-line summary of what changed ("replaced step 3", "added guard"). */
+  summary?: string;
+  /** Workspace captured at patch time — same rationale as proposal card. */
+  workspacePath: string;
+}
+
+/**
+ * Discriminated union of card types. Extend by adding a new `type`
+ * literal + matching payload field (optional so narrowing by `type`
+ * tells TS which payload to read).
+ */
+export type NoticeCardType = 'skill-proposal' | 'skill-patched';
+
 export interface InteractiveNoticeCard {
-  type: 'skill-proposal';
-  /** Stable ID per card — currently the skill name for skill-proposal cards. */
+  type: NoticeCardType;
+  /**
+   * Stable ID per card. For skill-proposal this equals the skill name
+   * (used by settleCardsForSkill to find peer cards). For skill-patched
+   * it's `${skillName}@${timestamp}` — patch cards don't need peer
+   * settling, but do need unique IDs so rapid successive patches don't
+   * collapse visually.
+   */
   id: string;
   skillProposal?: SkillProposalPayload;
+  skillPatched?: SkillPatchedPayload;
 }
 
 export interface ToolCall {

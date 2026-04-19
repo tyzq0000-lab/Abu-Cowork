@@ -771,6 +771,8 @@ export interface TranslationDict {
     skillProposalCardRejectedCategory: string;
     skillProposalCardMissing: string;   // draft file gone (accepted/expired elsewhere)
     skillProposalCardJump: string;      // "→ 打开技能面板" link label
+    // Interactive notice card · skill patched (Task #41)
+    skillPatchedCardLabel: string;      // "Abu 修正了技能" / "Abu patched skill"
   };
 
   // Permission Dialog

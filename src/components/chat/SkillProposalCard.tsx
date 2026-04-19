@@ -63,8 +63,29 @@ export default function SkillProposalCard({
   const draftsLoading = useSkillDraftsStore((s) => s.isLoading);
   const draftsInitialized = useSkillDraftsStore((s) => s.lastRefreshedAt !== null);
 
-  // Module I MVP only supports skill-proposal. Other card types will
-  // branch here once they're added.
+  // ── Skill-patched notice (Task #41) ─────────────────────────────
+  // Lightweight read-only pill for "agent silently modified a skill".
+  // No buttons, no settled state — just a visibility surface so the
+  // user sees when Abu self-edits a skill. Future Task #24 can hang
+  // a "view diff" button off this payload without schema changes.
+  if (card.type === 'skill-patched' && card.skillPatched) {
+    const p = card.skillPatched;
+    return (
+      <div className="my-2 px-3 py-2 rounded-lg border border-[var(--abu-border-subtle)] bg-[var(--abu-bg-muted)] text-xs text-[var(--abu-text-tertiary)] flex items-start gap-2">
+        <Sparkles className="h-3.5 w-3.5 text-[var(--abu-clay)] flex-shrink-0 mt-0.5" />
+        <div className="min-w-0">
+          <span>{t.toolbox.skillPatchedCardLabel} </span>
+          <span className="font-medium text-[var(--abu-text-primary)]">{p.skillName}</span>
+          {p.summary && (
+            <span className="text-[var(--abu-text-muted)]"> — {p.summary}</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Module I MVP originally only supported skill-proposal. Beyond that
+  // type, branch above and return early.
   if (card.type !== 'skill-proposal' || !card.skillProposal) return null;
   const proposal = card.skillProposal;
 

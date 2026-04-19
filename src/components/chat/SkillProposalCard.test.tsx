@@ -344,3 +344,55 @@ describe('SkillProposalCard · zombie-card detection (Task #40)', () => {
     expect(screen.queryByText(/Draft no longer exists/)).not.toBeInTheDocument();
   });
 });
+
+// Task #41 · Agent silent patch notification. The card has no buttons
+// and no settled state — it's a one-shot visibility surface so users
+// see when Abu self-edits a skill instead of having to expand the
+// tool call to notice.
+describe('SkillProposalCard · skill-patched notice (Task #41)', () => {
+  const PATCHED_CARD: InteractiveNoticeCard = {
+    type: 'skill-patched',
+    id: 'weekly-digest@1700000000000',
+    skillPatched: {
+      skillName: 'weekly-digest',
+      filePath: '/abu/projects/ws/skills/weekly-digest/SKILL.md',
+      summary: 'replace step 3 with fuzzy-match',
+      workspacePath: '/Users/test/myproj',
+    },
+  };
+
+  function renderPatched(card = PATCHED_CARD) {
+    return render(
+      <SkillProposalCard
+        conversationId="conv-1"
+        messageId="msg-1"
+        toolCallId="tc-1"
+        card={card}
+      />,
+    );
+  }
+
+  it('renders a muted pill with the skill name and summary, no buttons', () => {
+    renderPatched();
+
+    expect(screen.getByText('Abu patched skill')).toBeInTheDocument();
+    expect(screen.getByText('weekly-digest')).toBeInTheDocument();
+    expect(screen.getByText(/replace step 3 with fuzzy-match/)).toBeInTheDocument();
+    // Read-only: no accept / reject / category buttons on patch cards.
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('omits the summary span when payload has no summary', () => {
+    const { skillPatched, ...rest } = PATCHED_CARD;
+    const noSummary: InteractiveNoticeCard = {
+      ...rest,
+      skillPatched: { ...skillPatched!, summary: undefined },
+    };
+    renderPatched(noSummary);
+
+    expect(screen.getByText('Abu patched skill')).toBeInTheDocument();
+    expect(screen.getByText('weekly-digest')).toBeInTheDocument();
+    // No em-dash summary separator when summary is absent.
+    expect(screen.queryByText(/—/)).not.toBeInTheDocument();
+  });
+});

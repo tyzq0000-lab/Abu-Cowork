@@ -679,6 +679,28 @@ async function patchAction(input: Record<string, unknown>, context?: ToolExecuti
 
   await skillLoader.discoverSkills(workspacePath).catch(() => {});
 
+  // Build a user-visible summary — short preview of what changed, so
+  // users glancing at the chat see the intent without opening the tool
+  // call. Trim to the first non-empty line of new_string, max ~80 chars.
+  const firstLine = newString
+    .split('\n')
+    .map((s) => s.trim())
+    .find((s) => s.length > 0) ?? '';
+  const summary = firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
+
+  const noticeCard: InteractiveNoticeCard = {
+    type: 'skill-patched',
+    // Timestamp disambiguator — rapid successive patches of the same
+    // skill each get their own card in the chat stream.
+    id: `${name}@${Date.now()}`,
+    skillPatched: {
+      skillName: name,
+      filePath: targetPath,
+      summary: summary || undefined,
+      workspacePath,
+    },
+  };
+
   return {
     success: true,
     status: 'applied',
@@ -686,6 +708,7 @@ async function patchAction(input: Record<string, unknown>, context?: ToolExecuti
     path: targetPath,
     strategy: fuzzy.strategy ?? undefined,
     match_count: fuzzy.matchCount,
+    notice_card: noticeCard,
   };
 }
 

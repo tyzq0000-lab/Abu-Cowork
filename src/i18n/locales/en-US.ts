@@ -794,6 +794,7 @@ const enUS: TranslationDict = {
     skillProposalCardRejectedCategory: 'Rejected · this kind will not be proposed',
     skillProposalCardMissing: 'Draft no longer exists (may have been processed via the drafts panel or expired)',
     skillProposalCardJump: '→ Open skills panel',
+    skillPatchedCardLabel: 'Abu patched skill',
   },
 
   permission: {

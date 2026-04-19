@@ -388,6 +388,43 @@ describe('skill_manage · patch', () => {
     expect(writtenContent).not.toContain('oc_old');
   });
 
+  it('emits a skill-patched notice_card so users see silent patches (Task #41)', async () => {
+    const skill = makeSkill('visible-patch', {
+      source: 'workspace-auto',
+      skillDir: '/ws/skills/visible-patch',
+    });
+    vi.spyOn(skillLoader, 'getSkill').mockReturnValue(skill);
+
+    mockReadTextFile.mockResolvedValue(
+      '---\nname: visible-patch\ndescription: x\n---\n\nold body text\n',
+    );
+
+    const result = JSON.parse(
+      (await skillManageTool.execute(
+        {
+          action: 'patch',
+          name: 'visible-patch',
+          old_string: 'old body text',
+          new_string: 'new body text',
+        },
+        {},
+      )) as string,
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.notice_card).toBeDefined();
+    expect(result.notice_card.type).toBe('skill-patched');
+    expect(result.notice_card.id).toMatch(/^visible-patch@\d+$/);
+    expect(result.notice_card.skillPatched).toMatchObject({
+      skillName: 'visible-patch',
+      // summary preview — first non-empty line of new_string, trimmed.
+      summary: 'new body text',
+    });
+    // workspacePath is captured at patch time; exact value depends on
+    // requireWorkspace() resolution, just verify it's set to a string.
+    expect(typeof result.notice_card.skillPatched.workspacePath).toBe('string');
+  });
+
   it('rejects scope=user (MVP limitation)', async () => {
     vi.spyOn(skillLoader, 'getSkill').mockReturnValue(makeSkill('some-skill'));
     const result = JSON.parse(
