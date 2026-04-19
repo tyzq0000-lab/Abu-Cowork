@@ -795,6 +795,12 @@ const enUS: TranslationDict = {
     skillProposalCardMissing: 'Draft no longer exists (may have been processed via the drafts panel or expired)',
     skillProposalCardJump: '→ Open skills panel',
     skillPatchedCardLabel: 'Abu patched skill',
+    categoryBlocksTitle: 'Blocked proposal categories',
+    categoryBlocksCount: '{count} blocked',
+    categoryBlocksEmpty: 'No blocked categories',
+    categoryBlocksUnblock: 'Unblock',
+    categoryBlocksUnblockError: 'Unblock failed',
+    categoryBlocksHint: 'Skills you marked "don\'t propose this kind". Unblock to let Abu suggest them again.',
   },
 
   permission: {

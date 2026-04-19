@@ -796,6 +796,12 @@ const zhCN: TranslationDict = {
     skillProposalCardMissing: '草稿已不存在（可能已通过草稿面板处理或已过期）',
     skillProposalCardJump: '→ 打开技能面板',
     skillPatchedCardLabel: 'Abu 修正了技能',
+    categoryBlocksTitle: '已屏蔽的同类提议',
+    categoryBlocksCount: '{count} 条',
+    categoryBlocksEmpty: '没有已屏蔽的类别',
+    categoryBlocksUnblock: '解除屏蔽',
+    categoryBlocksUnblockError: '解除屏蔽失败',
+    categoryBlocksHint: '你点过"这类别再提议"的技能。解除后阿布可以重新提议。',
   },
 
   permission: {

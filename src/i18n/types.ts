@@ -773,6 +773,13 @@ export interface TranslationDict {
     skillProposalCardJump: string;      // "→ 打开技能面板" link label
     // Interactive notice card · skill patched (Task #41)
     skillPatchedCardLabel: string;      // "Abu 修正了技能" / "Abu patched skill"
+    // Category blocks (Task #45 — reject-category undo)
+    categoryBlocksTitle: string;        // "已屏蔽的同类提议"
+    categoryBlocksCount: string;        // "{count} 条" interpolation
+    categoryBlocksEmpty: string;        // (unused when hidden; kept for a11y)
+    categoryBlocksUnblock: string;      // button label
+    categoryBlocksUnblockError: string; // toast title on delete failure
+    categoryBlocksHint: string;         // subtitle describing what these are
   };
 
   // Permission Dialog
