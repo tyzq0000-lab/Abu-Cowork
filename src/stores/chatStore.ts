@@ -4,6 +4,7 @@ import { immer } from 'zustand/middleware/immer';
 import type { Message, Conversation, AgentStatus, TokenUsage, ConversationStatus, ToolCallForContext, ToolResultContent, ToolCall, NoticeCardAction } from '../types';
 import type { ExecutionStepSnapshot } from '../types/execution';
 import { useWorkspaceStore } from './workspaceStore';
+import { useProjectStore } from './projectStore';
 import { useTaskExecutionStore } from './taskExecutionStore';
 import { clearTodos } from '../core/agent/todoManager';
 import { clearInputQueue } from '../core/agent/userInputQueue';
@@ -223,6 +224,15 @@ export const useChatStore = create<ChatStore>()(
       createConversation: (workspacePath, options) => {
         const id = generateId();
         const now = Date.now();
+        // Auto-associate with a project when workspace matches. Covers the
+        // welcome-page "create project → type first message" flow where the
+        // caller never has a projectId to pass. Explicit options.projectId
+        // still wins (schedule / trigger / IM can override).
+        let resolvedProjectId = options?.projectId;
+        if (!resolvedProjectId && workspacePath) {
+          const project = useProjectStore.getState().getProjectByWorkspace(workspacePath);
+          if (project) resolvedProjectId = project.id;
+        }
         const meta: ConversationMeta = {
           id,
           title: DEFAULT_CONV_TITLE,
@@ -233,7 +243,7 @@ export const useChatStore = create<ChatStore>()(
           ...(options?.scheduledTaskId ? { scheduledTaskId: options.scheduledTaskId } : {}),
           ...(options?.triggerId ? { triggerId: options.triggerId } : {}),
           ...(options?.imChannelId ? { imChannelId: options.imChannelId, imPlatform: options.imPlatform } : {}),
-          ...(options?.projectId ? { projectId: options.projectId } : {}),
+          ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
         };
         set((state) => {
           state.conversations[id] = {

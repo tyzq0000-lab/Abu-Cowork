@@ -16,10 +16,22 @@ vi.mock('./workspaceStore', () => ({
   },
 }));
 
+// Project store mock — createConversation auto-associates the new conv
+// with any project whose workspacePath matches (regression for welcome-
+// page "create project → first message lands in 最近 instead of project").
+const mockGetProjectByWorkspace = vi.fn<(ws: string) => { id: string; name: string } | undefined>();
+vi.mock('./projectStore', () => ({
+  useProjectStore: {
+    getState: () => ({ getProjectByWorkspace: mockGetProjectByWorkspace }),
+  },
+}));
+
 describe('chatStore', () => {
   beforeEach(() => {
     mockSetWorkspace.mockClear();
     mockClearWorkspace.mockClear();
+    mockGetProjectByWorkspace.mockReset();
+    mockGetProjectByWorkspace.mockReturnValue(undefined);
     useChatStore.setState({
       conversations: {},
       activeConversationId: null,
@@ -44,6 +56,41 @@ describe('chatStore', () => {
     it('creates conversation with workspace path', () => {
       const id = useChatStore.getState().createConversation('/Users/test/project');
       expect(useChatStore.getState().conversations[id].workspacePath).toBe('/Users/test/project');
+    });
+
+    it('auto-associates projectId when workspace matches a project', () => {
+      // Regression: welcome-page flow after "create project → first message"
+      // used to land the conversation in 最近 because createConversation was
+      // called with only a workspace path. The lookup now runs inside
+      // createConversation so every entry point (ChatView, schedule, IM)
+      // benefits without plumbing projectId through each caller.
+      mockGetProjectByWorkspace.mockReturnValue({ id: 'proj-123', name: 'DA' });
+      const id = useChatStore.getState().createConversation('/Users/test/da');
+      expect(mockGetProjectByWorkspace).toHaveBeenCalledWith('/Users/test/da');
+      expect(useChatStore.getState().conversations[id].projectId).toBe('proj-123');
+    });
+
+    it('leaves projectId undefined when no project matches', () => {
+      mockGetProjectByWorkspace.mockReturnValue(undefined);
+      const id = useChatStore.getState().createConversation('/Users/test/orphan');
+      expect(useChatStore.getState().conversations[id].projectId).toBeUndefined();
+    });
+
+    it('respects explicit options.projectId over auto-lookup', () => {
+      mockGetProjectByWorkspace.mockReturnValue({ id: 'proj-auto', name: 'A' });
+      const id = useChatStore.getState().createConversation('/Users/test/x', {
+        projectId: 'proj-explicit',
+      });
+      // Auto-lookup must not run when caller already knows the project.
+      // Schedule/trigger/IM invocations pass projectId explicitly and
+      // expect their value to win even if the workspace happens to match
+      // a different project entry.
+      expect(useChatStore.getState().conversations[id].projectId).toBe('proj-explicit');
+    });
+
+    it('skips project lookup when workspace is null', () => {
+      useChatStore.getState().createConversation(null);
+      expect(mockGetProjectByWorkspace).not.toHaveBeenCalled();
     });
   });
 
