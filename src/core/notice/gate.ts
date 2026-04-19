@@ -20,6 +20,7 @@
  */
 
 import type { Notice, NoticeTier } from './types';
+import { checkL2Quota } from './quota';
 
 // ── Context ─────────────────────────────────────────────────────────────
 
@@ -102,13 +103,10 @@ export function filter(notice: Notice, ctx: GateContext): GateDecision {
     }
   }
 
-  // L2 per-hour quota — Day 4 wires real sliding-window check. Until
-  // then, the branch is left as a comment anchor so the Day 4 PR is a
-  // targeted uncomment + impl rather than structural surgery.
-  //
-  // if (notice.tier === 'L2' && !hasL2Quota(ctx.recentL2Count, ctx.now)) {
-  //   return { action: 'queue_inbox', reason: 'l2_quota_exceeded' };
-  // }
+  // L2 per-hour sliding-window quota
+  if (notice.tier === 'L2' && !checkL2Quota(ctx.now)) {
+    return { action: 'queue_inbox', reason: 'l2_quota_exceeded' };
+  }
 
   return { action: 'allow' };
 }

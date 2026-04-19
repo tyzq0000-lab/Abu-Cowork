@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   filter,
   type GateContext,
   type FeedbackRule,
 } from './gate';
+import { consumeL2Quota, clearQuotaForTest, L2_QUOTA } from './quota';
 import type { Notice } from './types';
 
 function makeNotice(overrides: Partial<Notice> = {}): Notice {
@@ -158,5 +159,51 @@ describe('Notice Gate · filter', () => {
   it('default allow when nothing triggers', () => {
     const out = filter(makeNotice({ tier: 'L2' }), makeCtx());
     expect(out).toEqual({ action: 'allow' });
+  });
+
+  describe('L2 quota', () => {
+    beforeEach(() => {
+      clearQuotaForTest();
+    });
+
+    it('allows L2 when quota not exhausted', () => {
+      const out = filter(makeNotice({ tier: 'L2' }), makeCtx());
+      expect(out).toEqual({ action: 'allow' });
+    });
+
+    it('queues L2 to inbox when quota exhausted', () => {
+      const now = 1_000_000;
+      for (let i = 0; i < L2_QUOTA; i++) {
+        consumeL2Quota(now + i);
+      }
+      const out = filter(
+        makeNotice({ tier: 'L2' }),
+        makeCtx({ now: now + L2_QUOTA }),
+      );
+      expect(out).toEqual({
+        action: 'queue_inbox',
+        reason: 'l2_quota_exceeded',
+      });
+    });
+
+    it('L1 bypasses quota even when exhausted', () => {
+      const now = 1_000_000;
+      for (let i = 0; i < L2_QUOTA; i++) consumeL2Quota(now + i);
+      const out = filter(
+        makeNotice({ tier: 'L1' }),
+        makeCtx({ now: now + L2_QUOTA }),
+      );
+      expect(out).toEqual({ action: 'allow' });
+    });
+
+    it('L3 is not affected by L2 quota', () => {
+      const now = 1_000_000;
+      for (let i = 0; i < L2_QUOTA; i++) consumeL2Quota(now + i);
+      const out = filter(
+        makeNotice({ tier: 'L3' }),
+        makeCtx({ now: now + L2_QUOTA }),
+      );
+      expect(out).toEqual({ action: 'allow' });
+    });
   });
 });
