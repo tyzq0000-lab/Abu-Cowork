@@ -650,10 +650,17 @@ export const useSettingsStore = create<SettingsStore>()(
 
       addProvider: (config) => {
         const id = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+        // Trim whitespace that users may have accidentally pasted — otherwise
+        // a trailing space in baseUrl produces /%20/v1/... when the URL is
+        // appended with path segments. See urlUtils.normalizeBaseUrl.
+        const cleanBaseUrl = (config.baseUrl ?? '').trim();
+        const cleanApiKey = (config.apiKey ?? '').trim();
         let returnId = id;
         set((s) => {
           const newProvider: ProviderInstance = {
             ...config,
+            baseUrl: cleanBaseUrl,
+            apiKey: cleanApiKey,
             id,
             status: 'unchecked',
             sortOrder: s.providers.length,
@@ -669,19 +676,23 @@ export const useSettingsStore = create<SettingsStore>()(
         });
         returnId = id;
         // Mirror apiKey to encrypted secret store.
-        fafSecret(writeSecretOrDelete(SECRET_KEYS.provider(id), config.apiKey), `addProvider(${id})`);
+        fafSecret(writeSecretOrDelete(SECRET_KEYS.provider(id), cleanApiKey), `addProvider(${id})`);
         return returnId;
       },
 
       updateProvider: (id, patch) => {
+        // Trim whitespace at the store boundary — same rationale as addProvider.
+        const cleanPatch: Partial<ProviderInstance> = { ...patch };
+        if (patch.baseUrl !== undefined) cleanPatch.baseUrl = patch.baseUrl.trim();
+        if (patch.apiKey !== undefined) cleanPatch.apiKey = patch.apiKey.trim();
         set((s) => ({
-          providers: s.providers.map(p => p.id === id ? { ...p, ...patch } : p),
+          providers: s.providers.map(p => p.id === id ? { ...p, ...cleanPatch } : p),
         }));
         // Only touch the secret store when apiKey is actually being updated;
         // other patches (enabled flag, status, model list) must not clobber it.
         if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) {
           fafSecret(
-            writeSecretOrDelete(SECRET_KEYS.provider(id), patch.apiKey ?? ''),
+            writeSecretOrDelete(SECRET_KEYS.provider(id), cleanPatch.apiKey ?? ''),
             `updateProvider(${id})`,
           );
         }
@@ -783,21 +794,29 @@ export const useSettingsStore = create<SettingsStore>()(
       // ── Auxiliary services ──
 
       setAuxiliaryWebSearch: (config) => {
+        // Trim whitespace at the store boundary (same rationale as addProvider).
+        const cleaned = config
+          ? { ...config, apiKey: config.apiKey?.trim() ?? '', baseUrl: config.baseUrl?.trim() ?? '' }
+          : config;
         set((s) => ({
-          auxiliaryServices: { ...s.auxiliaryServices, webSearch: config },
+          auxiliaryServices: { ...s.auxiliaryServices, webSearch: cleaned },
         }));
         fafSecret(
-          writeSecretOrDelete(SECRET_KEYS.auxWebSearch, config?.apiKey ?? ''),
+          writeSecretOrDelete(SECRET_KEYS.auxWebSearch, cleaned?.apiKey ?? ''),
           'setAuxiliaryWebSearch',
         );
       },
 
       setAuxiliaryImageGen: (config) => {
+        // Trim whitespace at the store boundary (same rationale as addProvider).
+        const cleaned = config
+          ? { ...config, apiKey: config.apiKey?.trim() ?? '', baseUrl: config.baseUrl?.trim() ?? '' }
+          : config;
         set((s) => ({
-          auxiliaryServices: { ...s.auxiliaryServices, imageGen: config },
+          auxiliaryServices: { ...s.auxiliaryServices, imageGen: cleaned },
         }));
         fafSecret(
-          writeSecretOrDelete(SECRET_KEYS.auxImageGen, config?.apiKey ?? ''),
+          writeSecretOrDelete(SECRET_KEYS.auxImageGen, cleaned?.apiKey ?? ''),
           'setAuxiliaryImageGen',
         );
       },
@@ -925,7 +944,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'abu-settings',
-      version: 20,
+      version: 21,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>;
 
@@ -945,6 +964,39 @@ export const useSettingsStore = create<SettingsStore>()(
             );
           }
         };
+
+        // ════════════════════════════════════════════════
+        // V21: One-shot trim pass on stored baseUrl/apiKey for providers and
+        // auxiliary services. Existing users who accidentally pasted URLs with
+        // trailing whitespace would otherwise keep hitting 404s — fetch encodes
+        // the space to %20 and corrupts the path (e.g. /%20/v1/chat/completions).
+        // Silent backfill: addProvider/updateProvider/setAuxiliary* now trim on
+        // write, so this branch only cleans up data stored before the fix.
+        // ════════════════════════════════════════════════
+        if (version < 21) step('V21 baseUrl/apiKey trim', () => {
+          if (Array.isArray(state.providers)) {
+            state.providers = (state.providers as Array<Record<string, unknown>>).map((p) => ({
+              ...p,
+              baseUrl: typeof p.baseUrl === 'string' ? p.baseUrl.trim() : p.baseUrl,
+              apiKey: typeof p.apiKey === 'string' ? p.apiKey.trim() : p.apiKey,
+            }));
+          }
+          const aux = state.auxiliaryServices as Record<string, Record<string, unknown> | undefined> | undefined;
+          if (aux?.webSearch) {
+            aux.webSearch = {
+              ...aux.webSearch,
+              baseUrl: typeof aux.webSearch.baseUrl === 'string' ? aux.webSearch.baseUrl.trim() : aux.webSearch.baseUrl,
+              apiKey: typeof aux.webSearch.apiKey === 'string' ? aux.webSearch.apiKey.trim() : aux.webSearch.apiKey,
+            };
+          }
+          if (aux?.imageGen) {
+            aux.imageGen = {
+              ...aux.imageGen,
+              baseUrl: typeof aux.imageGen.baseUrl === 'string' ? aux.imageGen.baseUrl.trim() : aux.imageGen.baseUrl,
+              apiKey: typeof aux.imageGen.apiKey === 'string' ? aux.imageGen.apiKey.trim() : aux.imageGen.apiKey,
+            };
+          }
+        });
 
         // ════════════════════════════════════════════════
         // V20: Drafts onboarding flag — add draftsOnboardingShown to soul

@@ -6,6 +6,7 @@ import { normalizeMessages } from './messageNormalizer';
 import type { PreparedTurn, PreparedContentBlock } from './messageNormalizer';
 import { createHeartbeat } from './heartbeat';
 import { createLogger } from '../logging/logger';
+import { resolveOpenAIBaseUrl } from './urlUtils';
 
 const logger = createLogger('openai-compatible');
 
@@ -202,11 +203,10 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     options: ChatOptions,
     onEvent: (event: StreamEvent) => void
   ): Promise<void> {
-    let baseUrl = (options.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
-    // Auto-append /v1 if not already present
-    if (!baseUrl.match(/\/v\d+$/)) {
-      baseUrl += '/v1';
-    }
+    // Normalize + auto-append /v1 via shared util — keeps UI preview consistent
+    // and defensively trims whitespace users paste in (e.g. trailing space
+    // would otherwise bypass the regex and emit /%20/v1/... to the server).
+    const baseUrl = resolveOpenAIBaseUrl(options.baseUrl);
 
     // Ollama: streaming + tool calling is broken in /v1/chat/completions.
     // When tools are present and endpoint looks like Ollama, use non-streaming.

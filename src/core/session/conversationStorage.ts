@@ -44,6 +44,12 @@ export interface ConversationMeta {
   triggerId?: string;
   projectId?: string;
   totalCost?: number;
+  /** Imported share bundle — conversation is read-only. See Conversation.readOnly. */
+  readOnly?: boolean;
+  importedFrom?: {
+    schemaVersion: number;
+    importedAt: number;
+  };
 }
 
 interface ConversationIndex {
@@ -544,6 +550,8 @@ export function buildMeta(conv: {
   scheduledTaskId?: string;
   triggerId?: string;
   projectId?: string;
+  readOnly?: boolean;
+  importedFrom?: { schemaVersion: number; importedAt: number };
 }): ConversationMeta {
   return {
     id: conv.id,
@@ -557,6 +565,8 @@ export function buildMeta(conv: {
     scheduledTaskId: conv.scheduledTaskId,
     triggerId: conv.triggerId,
     projectId: conv.projectId,
+    readOnly: conv.readOnly,
+    importedFrom: conv.importedFrom,
   };
 }
 

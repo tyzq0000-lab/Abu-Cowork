@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Toggle } from '@/components/ui/toggle';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { checkProviderHealth } from '@/core/llm/healthCheck';
+import { buildFullChatUrl } from '@/core/llm/urlUtils';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import type { ProviderInstance, ModelInfo } from '@/types/provider';
 import { SECRET_KEYS } from '@/utils/secretStore';
@@ -198,6 +199,11 @@ export default function ProviderCard({ provider, isActive }: ProviderCardProps) 
           <label className="text-xs font-medium text-[var(--abu-text-tertiary)]">{t.settings.apiUrl}</label>
           <Input value={formBaseUrl} onChange={(e) => setFormBaseUrl(e.target.value)} />
           <p className="text-[11px] text-[var(--abu-text-muted)]">{t.settings.apiUrlNoChange}</p>
+          {!isOllama && formBaseUrl.trim() && (
+            <p className="text-[11px] font-mono text-[var(--abu-text-muted)] break-all">
+              ↳ {t.settings.apiUrlPreview}: POST {buildFullChatUrl(formBaseUrl, provider.apiFormat)}
+            </p>
+          )}
         </div>
 
         {/* Edit: Models */}

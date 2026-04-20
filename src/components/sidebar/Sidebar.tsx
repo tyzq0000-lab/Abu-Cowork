@@ -14,8 +14,10 @@ import { getPlatformShortLabel } from '@/core/im/platformLabels';
 import type { ConversationStatus } from '@/types';
 import ProjectsSection from '@/components/sidebar/ProjectsSection';
 import abuAvatar from '@/assets/abu-avatar.png';
-import { save as saveDialog, open as openDialog } from '@tauri-apps/plugin-dialog';
-import { writeTextFile, readTextFile } from '@tauri-apps/plugin-fs';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { readTextFile } from '@tauri-apps/plugin-fs';
+import ShareExportDialog from '@/components/share/ShareExportDialog';
+import ImportedBadge from './ImportedBadge';
 import { isMacOS } from '@/utils/platform';
 
 interface StatusIndicatorProps {
@@ -83,6 +85,7 @@ export default function Sidebar() {
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; convId: string } | null>(null);
+  const [shareConvId, setShareConvId] = useState<string | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const moveSubmenuRef = useRef<HTMLDivElement>(null);
   const [showMoveSubmenu, setShowMoveSubmenu] = useState(false);
@@ -216,21 +219,12 @@ export default function Sidebar() {
   };
 
   const handleExport = async (convId: string) => {
-    const json = exportConversation(convId);
-    if (!json) return;
-    const meta = conversationIndex[convId];
-    const defaultName = `abu-conversation-${meta?.title || convId}.json`;
-    try {
-      const filePath = await saveDialog({
-        defaultPath: defaultName,
-        filters: [{ name: 'JSON', extensions: ['json'] }],
-      });
-      if (filePath) {
-        await writeTextFile(filePath, json);
-      }
-    } catch (err) {
-      console.error('Export failed:', err);
-    }
+    // Ensure the conversation is loaded before the dialog reads from it;
+    // the dialog itself will call exportConversationForShare which also
+    // guards with loadConversation, but awaiting here means the dialog
+    // opens straight into the "ready" state when possible.
+    await loadConversation(convId);
+    setShareConvId(convId);
     setContextMenu(null);
   };
 
@@ -389,6 +383,9 @@ export default function Sidebar() {
               >
                 {conv.imPlatform && (
                   <IMPlatformDot platform={conv.imPlatform} />
+                )}
+                {conv.importedFrom && (
+                  <ImportedBadge importedAt={conv.importedFrom.importedAt} />
                 )}
                 {editingId === conv.id ? (
                   <input
@@ -593,6 +590,15 @@ export default function Sidebar() {
 
       {/* Profile edit modal */}
       <ProfileEditModal open={profileOpen} onClose={() => setProfileOpen(false)} />
+
+      {/* Share export preview */}
+      {shareConvId && (
+        <ShareExportDialog
+          convId={shareConvId}
+          defaultFilename={`abu-conversation-${conversationIndex[shareConvId]?.title || shareConvId}.abu.json`}
+          onClose={() => setShareConvId(null)}
+        />
+      )}
 
 
       {/* Undo delete toast */}

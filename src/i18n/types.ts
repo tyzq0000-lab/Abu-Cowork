@@ -202,6 +202,35 @@ export interface TranslationDict {
     maxTurnsReached: string;
   };
 
+  // Share (conversation export / import)
+  share: {
+    exportDialogTitle: string;
+    loading: string;
+    visibleToOthers: string;
+    hiddenFromOthers: string;
+    itemMessages: string;
+    itemToolCalls: string;
+    itemAiGenerated: string;
+    itemUserFiles: string;
+    itemCredentials: string;
+    redactionTitle: string;
+    redactionCount: string;
+    noRedaction: string;
+    previewTitle: string;
+    previewEmpty: string;
+    statsMessages: string;
+    statsAttachments: string;
+    statsSize: string;
+    cancel: string;
+    exportBtn: string;
+    exportError: string;
+    tierStandard: string;
+    tierNote: string;
+    // Sidebar badge shown on imported conversations
+    importedBadge: string;
+    importedBadgeWithDate: string;
+  };
+
   // Status Bar
   status: {
     ready: string;
@@ -443,6 +472,7 @@ export interface TranslationDict {
     apiKeyRequired: string;
     apiKeyOptional: string;
     apiUrlNoChange: string;
+    apiUrlPreview: string;
     fetchModels: string;
     fetchingModels: string;
     fetchModelsError: string;

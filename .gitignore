@@ -28,6 +28,9 @@ _archive/
 # Claude Code agent workspace
 .agent/
 
+# Local test / E2E notes
+.abu/
+
 # Temporary research/reference docs in src-tauri
 src-tauri/*.md
 

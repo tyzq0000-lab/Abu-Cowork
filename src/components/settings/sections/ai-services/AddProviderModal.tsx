@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { checkProviderHealth } from '@/core/llm/healthCheck';
+import { buildFullChatUrl } from '@/core/llm/urlUtils';
 import { useSettingsStore, PROVIDER_CONFIGS } from '@/stores/settingsStore';
 import { PROVIDER_GUIDES } from './providerGuides';
 import type { LLMProvider, ApiFormat } from '@/types';
@@ -613,6 +614,15 @@ export default function AddProviderModal({ open: isOpen, onClose }: AddProviderM
               <p className="text-xs text-[var(--abu-text-tertiary)]">
                 {isOllama ? t.settings.ollamaUrlHint : t.settings.apiUrlNoChange}
               </p>
+
+              {/* Final request URL preview — helps users spot malformed URLs
+                  (stray whitespace, wrong path, missing /v1) before hitting the
+                  validate button. Hidden for Ollama which has its own status UI. */}
+              {!isOllama && baseUrl.trim() && selectedOption && (
+                <p className="text-[11px] font-mono text-[var(--abu-text-muted)] break-all">
+                  ↳ {t.settings.apiUrlPreview}: POST {buildFullChatUrl(baseUrl, selectedOption.format)}
+                </p>
+              )}
 
               {/* Ollama connection status */}
               {isOllama && ollamaStatus !== 'idle' && ollamaStatus !== 'checking' && (

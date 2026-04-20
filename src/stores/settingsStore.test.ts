@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { reconcileActiveProvider } from './settingsStore';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { reconcileActiveProvider, useSettingsStore } from './settingsStore';
 import type { ProviderInstance, ActiveModel } from '@/types/provider';
 
 // ─── Test fixture helpers ─────────────────────────────────────
@@ -331,6 +331,99 @@ describe('reconcileActiveProvider', () => {
       // (The needsSetup banner is now correctly suppressed by the new
       // ChatView predicate because minimax has a key — that's tested
       // separately by ChatView, not here.)
+    });
+  });
+});
+
+// ─── Whitespace trimming at the store boundary ──────────────────
+// Regression coverage for the trailing-space-in-baseUrl bug:
+// users pasting URLs like "http://x.com/ " would hit /%20/v1/... 404s.
+describe('settingsStore whitespace trim', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({
+      providers: [],
+      auxiliaryServices: {},
+    });
+  });
+
+  describe('addProvider', () => {
+    it('trims whitespace from baseUrl and apiKey on create', () => {
+      const id = useSettingsStore.getState().addProvider({
+        source: 'custom',
+        name: 'test',
+        enabled: true,
+        apiFormat: 'openai-compatible',
+        baseUrl: '  http://x.com/ ',
+        apiKey: ' sk-test\n',
+        models: [{ id: 'm1', label: 'M1' }],
+      });
+      const p = useSettingsStore.getState().providers.find((x) => x.id === id);
+      expect(p?.baseUrl).toBe('http://x.com/');
+      expect(p?.apiKey).toBe('sk-test');
+    });
+  });
+
+  describe('updateProvider', () => {
+    it('trims whitespace from baseUrl patch', () => {
+      const id = useSettingsStore.getState().addProvider({
+        source: 'custom',
+        name: 'test',
+        enabled: true,
+        apiFormat: 'openai-compatible',
+        baseUrl: 'http://x.com',
+        apiKey: 'sk-test',
+        models: [{ id: 'm1', label: 'M1' }],
+      });
+      useSettingsStore.getState().updateProvider(id, {
+        baseUrl: '  http://y.com/ ',
+        apiKey: ' sk-new ',
+      });
+      const p = useSettingsStore.getState().providers.find((x) => x.id === id);
+      expect(p?.baseUrl).toBe('http://y.com/');
+      expect(p?.apiKey).toBe('sk-new');
+    });
+
+    it('leaves other fields alone when patch omits baseUrl/apiKey', () => {
+      const id = useSettingsStore.getState().addProvider({
+        source: 'custom',
+        name: 'test',
+        enabled: true,
+        apiFormat: 'openai-compatible',
+        baseUrl: 'http://x.com',
+        apiKey: 'sk-test',
+        models: [{ id: 'm1', label: 'M1' }],
+      });
+      useSettingsStore.getState().updateProvider(id, { enabled: false });
+      const p = useSettingsStore.getState().providers.find((x) => x.id === id);
+      expect(p?.enabled).toBe(false);
+      expect(p?.baseUrl).toBe('http://x.com');
+      expect(p?.apiKey).toBe('sk-test');
+    });
+  });
+
+  describe('setAuxiliaryWebSearch', () => {
+    it('trims whitespace from baseUrl and apiKey', () => {
+      useSettingsStore.getState().setAuxiliaryWebSearch({
+        provider: 'tavily',
+        apiKey: '  key-123 ',
+        baseUrl: ' http://search.example.com/ ',
+      });
+      const cfg = useSettingsStore.getState().auxiliaryServices.webSearch;
+      expect(cfg?.apiKey).toBe('key-123');
+      expect(cfg?.baseUrl).toBe('http://search.example.com/');
+    });
+  });
+
+  describe('setAuxiliaryImageGen', () => {
+    it('trims whitespace from baseUrl and apiKey', () => {
+      useSettingsStore.getState().setAuxiliaryImageGen({
+        apiKey: ' imgkey ',
+        baseUrl: '  http://img.example.com/ ',
+        model: 'dall-e-3',
+      });
+      const cfg = useSettingsStore.getState().auxiliaryServices.imageGen;
+      expect(cfg?.apiKey).toBe('imgkey');
+      expect(cfg?.baseUrl).toBe('http://img.example.com/');
     });
   });
 });

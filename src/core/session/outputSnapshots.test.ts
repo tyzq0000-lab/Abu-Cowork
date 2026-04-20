@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { exists, readTextFile, writeTextFile, mkdir, remove, stat, copyFile, rename } from '@tauri-apps/plugin-fs';
+import { exists, readTextFile, writeTextFile, mkdir, remove, stat, copyFile, rename, writeFile } from '@tauri-apps/plugin-fs';
 
 // Extend the global plugin-fs mock with the symbols outputSnapshots needs
-// (stat, copyFile, rename are not in the default test setup mock).
+// (stat, copyFile, rename, writeFile are not in the default test setup mock).
 vi.mock('@tauri-apps/plugin-fs', async () => {
   const actual = await vi.importActual<typeof import('@tauri-apps/plugin-fs')>('@tauri-apps/plugin-fs');
   return {
@@ -15,6 +15,7 @@ vi.mock('@tauri-apps/plugin-fs', async () => {
     stat: vi.fn(),
     copyFile: vi.fn(),
     rename: vi.fn(),
+    writeFile: vi.fn(),
   };
 });
 
@@ -100,10 +101,22 @@ function createMemoryFs() {
     files.delete(src);
   });
 
+  const mockedWriteFile = writeFile as ReturnType<typeof vi.fn>;
+  mockedWriteFile.mockImplementation(async (path: string, bytes: Uint8Array) => {
+    // Binary payload stored as a hex-y tag — these tests only need to
+    // assert "a write happened with N bytes", not round-trip the content.
+    files.set(path, { content: `[binary:${bytes.length}]`, size: bytes.length, mtime: new Date(), isFile: true });
+    const parts = path.split('/');
+    for (let i = 1; i < parts.length; i++) {
+      dirs.add(parts.slice(0, i).join('/'));
+    }
+  });
+
   return {
     files,
     dirs,
     copyFile: mockedCopyFile,
+    writeFile: mockedWriteFile,
     /** Add a fake user file at the given absolute path */
     addUserFile(path: string, size = 100, content = 'x') {
       files.set(path, { content, size, mtime: new Date(2025, 0, 1), isFile: true });
@@ -512,6 +525,84 @@ describe('outputSnapshots', () => {
 
       const manifest = await mod.__testing.loadManifest(CONV_ID);
       expect(Object.keys(manifest.entries)).toHaveLength(0);
+    });
+  });
+
+  // ──────────────────────────────────────────────────────────────────
+  describe('installSharedAttachments — share import path', () => {
+    // Helpers
+    function makeAttachment(over: Partial<import('./outputSnapshots').ShareAttachmentInput> = {}): import('./outputSnapshots').ShareAttachmentInput {
+      return {
+        basename: 'report.xlsx',
+        originalPath: '~/Desktop/报表/report.xlsx',
+        source: 'tool-output',
+        sizeBytes: 3,
+        data: btoa('abc'),
+        ...over,
+      };
+    }
+
+    it('writes the binary payload and registers a manifest entry with shared-import metadata', async () => {
+      const result = await mod.installSharedAttachments(CONV_ID, {
+        key1: makeAttachment(),
+      });
+
+      expect(result.installed).toBe(1);
+      expect(result.skipped).toBe(0);
+
+      // Manifest should carry the new entry, keyed by expanded+normalized path
+      const manifest = await mod.__testing.loadManifest(CONV_ID);
+      const entries = Object.values(manifest.entries);
+      expect(entries).toHaveLength(1);
+      const e = entries[0];
+      expect(e.originalPath).toBe('/Users/testuser/Desktop/报表/report.xlsx');
+      expect(e.basename).toBe('report.xlsx');
+      expect(e.source).toBe('tool-output');
+      expect(e.refId).toBe('shared-import');
+      expect(e.refKind).toBe('shared');
+      expect(e.snapshotRelPath).toMatch(/^files\/.+\/report\.xlsx$/);
+      // The underlying file was actually written to disk (mocked FS)
+      const writtenPath = `${OUTPUTS_DIR}/${e.snapshotRelPath}`;
+      expect(memFs.files.has(writtenPath)).toBe(true);
+      expect(memFs.files.get(writtenPath)!.size).toBe(3);
+    });
+
+    it('skips entries without a base64 payload (user-upload-excluded / oversized / missing)', async () => {
+      const result = await mod.installSharedAttachments(CONV_ID, {
+        a: makeAttachment({ basename: 'a.xlsx', data: undefined }),
+        b: makeAttachment({ basename: 'b.xlsx', data: btoa('hi') }),
+      });
+
+      expect(result.installed).toBe(1);
+      expect(result.skipped).toBe(1);
+      const manifest = await mod.__testing.loadManifest(CONV_ID);
+      expect(Object.keys(manifest.entries)).toHaveLength(1);
+    });
+
+    it('preserves source kind (tool-output / code-save)', async () => {
+      await mod.installSharedAttachments(CONV_ID, {
+        tool: makeAttachment({ basename: 'tool.xlsx', originalPath: '~/tool.xlsx', source: 'tool-output' }),
+        code: makeAttachment({ basename: 'code.py', originalPath: '~/code.py', source: 'code-save' }),
+      });
+
+      const manifest = await mod.__testing.loadManifest(CONV_ID);
+      const sources = Object.values(manifest.entries).map((e) => e.source).sort();
+      expect(sources).toEqual(['code-save', 'tool-output']);
+    });
+
+    it('counts malformed base64 as a skipped entry without aborting the batch', async () => {
+      const result = await mod.installSharedAttachments(CONV_ID, {
+        good: makeAttachment({ basename: 'good.xlsx', originalPath: '~/good.xlsx' }),
+        bad: makeAttachment({ basename: 'bad.xlsx', originalPath: '~/bad.xlsx', data: '!!!not base64!!!' }),
+      });
+
+      expect(result.installed).toBe(1);
+      expect(result.skipped).toBe(1);
+    });
+
+    it('handles an empty attachments map as a zero-install, zero-skip no-op', async () => {
+      const result = await mod.installSharedAttachments(CONV_ID, {});
+      expect(result).toEqual({ installed: 0, skipped: 0 });
     });
   });
 

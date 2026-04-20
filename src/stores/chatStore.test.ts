@@ -419,6 +419,210 @@ describe('chatStore', () => {
     it('returns null for invalid JSON', () => {
       expect(useChatStore.getState().importConversation('not json')).toBeNull();
     });
+
+    it('round-trips a conversation through exportConversationForShare + importConversation', async () => {
+      const id = useChatStore.getState().createConversation();
+      useChatStore.getState().addMessage(id, {
+        id: 'msg1', role: 'user', content: 'Hello alice', timestamp: Date.now(),
+      });
+      useChatStore.getState().addMessage(id, {
+        id: 'msg2', role: 'assistant', content: 'Hi bob!', timestamp: Date.now(),
+      });
+      const bundle = await useChatStore.getState().exportConversationForShare(id);
+      expect(bundle).not.toBeNull();
+      expect(bundle!.messages).toHaveLength(2);
+
+      const { serializeShareBundle } = await import('@/core/session/shareBundle');
+      const json = serializeShareBundle(bundle!);
+      const newId = useChatStore.getState().importConversation(json);
+      expect(newId).not.toBeNull();
+      expect(newId).not.toBe(id);
+
+      const imported = useChatStore.getState().conversations[newId!];
+      expect(imported.importedFrom?.schemaVersion).toBe(1);
+      expect(imported.messages).toHaveLength(2);
+      expect(imported.messages[0].content).toBe('Hello alice');
+      expect(imported.messages[1].content).toBe('Hi bob!');
+    });
+
+    it('legacy raw-conversation JSON (undo-delete) is NOT treated as a share bundle', () => {
+      // Regression guard: the importConversation dispatcher must route
+      // raw conversation JSON to the legacy path (no importedFrom stamp).
+      const id = useChatStore.getState().createConversation();
+      useChatStore.getState().addMessage(id, {
+        id: 'msg1', role: 'user', content: 'undo me', timestamp: Date.now(),
+      });
+      const json = useChatStore.getState().exportConversation(id)!;
+      const newId = useChatStore.getState().importConversation(json)!;
+      const restored = useChatStore.getState().conversations[newId];
+      expect(restored.importedFrom).toBeUndefined();
+    });
+
+    describe('importConversation · share bundle path', () => {
+      // Minimal share bundle fixture that satisfies the v1 schema check.
+      // Anything inside bundle.conversation that isn't id/title/createdAt/
+      // updatedAt must be ignored — external refs are intentionally not
+      // carried by the bundle shape.
+      const makeBundle = () => ({
+        schema: { abuShareVersion: 1, tier: 'standard', exportedAt: Date.now() },
+        conversation: {
+          id: 'original-conv-id',
+          title: 'Shared from Alice',
+          createdAt: 1_700_000_000_000,
+          updatedAt: 1_700_000_100_000,
+        },
+        messages: [
+          { id: 'msg1', role: 'user', content: 'Hi', timestamp: 1_700_000_000_100 },
+          { id: 'msg2', role: 'assistant', content: 'Hello back', timestamp: 1_700_000_000_200 },
+        ],
+        attachments: {},
+        stats: { redactionCount: 0, attachmentCount: 0, embeddedCount: 0, sizeBytes: 0 },
+      });
+
+      it('creates a conversation with a fresh ID and the bundle messages', () => {
+        const json = JSON.stringify(makeBundle());
+        const newId = useChatStore.getState().importConversation(json);
+        expect(newId).not.toBeNull();
+        expect(newId).not.toBe('original-conv-id');
+        const conv = useChatStore.getState().conversations[newId!];
+        expect(conv.messages).toHaveLength(2);
+        expect(conv.messages[0].content).toBe('Hi');
+      });
+
+      it('stamps importedFrom with the source schema version so the UI can show a badge', () => {
+        const json = JSON.stringify(makeBundle());
+        const newId = useChatStore.getState().importConversation(json)!;
+        const conv = useChatStore.getState().conversations[newId];
+        expect(conv.importedFrom?.schemaVersion).toBe(1);
+        expect(conv.importedFrom?.importedAt).toBeGreaterThan(0);
+      });
+
+      it('mirrors importedFrom into the index meta so the badge survives restart', () => {
+        const json = JSON.stringify(makeBundle());
+        const newId = useChatStore.getState().importConversation(json)!;
+        const meta = useChatStore.getState().conversationIndex[newId];
+        expect(meta.importedFrom?.schemaVersion).toBe(1);
+        expect(meta.importedFrom?.importedAt).toBeGreaterThan(0);
+      });
+
+      it('does not set readOnly — imported conversations remain continuable', () => {
+        const json = JSON.stringify(makeBundle());
+        const newId = useChatStore.getState().importConversation(json)!;
+        const conv = useChatStore.getState().conversations[newId];
+        const meta = useChatStore.getState().conversationIndex[newId];
+        expect(conv.readOnly).toBeUndefined();
+        expect(meta.readOnly).toBeUndefined();
+      });
+
+      it('strips external references even if a misbehaving exporter inlines them', () => {
+        const bundle = makeBundle() as Record<string, unknown>;
+        // Simulate a broken exporter that leaked refs into the bundle root.
+        bundle.scheduledTaskId = 'task-999';
+        bundle.triggerId = 'trig-999';
+        bundle.projectId = 'proj-999';
+        bundle.imChannelId = 'chan-999';
+        bundle.workspacePath = '/Users/stranger/private';
+        bundle.activeSkills = ['leak-skill'];
+        bundle.enabledMCPServers = ['leak-mcp'];
+
+        const json = JSON.stringify(bundle);
+        const newId = useChatStore.getState().importConversation(json)!;
+        const conv = useChatStore.getState().conversations[newId];
+        expect(conv.scheduledTaskId).toBeUndefined();
+        expect(conv.triggerId).toBeUndefined();
+        expect(conv.projectId).toBeUndefined();
+        expect(conv.imChannelId).toBeUndefined();
+        expect(conv.workspacePath).toBeUndefined();
+        expect(conv.activeSkills).toBeUndefined();
+        expect(conv.enabledMCPServers).toBeUndefined();
+      });
+
+      it('clears the workspace so the read-only dialogue is not bound to one', () => {
+        mockClearWorkspace.mockClear();
+        const json = JSON.stringify(makeBundle());
+        useChatStore.getState().importConversation(json);
+        expect(mockClearWorkspace).toHaveBeenCalled();
+      });
+
+      it('rejects a bundle without a messages array', () => {
+        const bundle = makeBundle() as Record<string, unknown>;
+        delete bundle.messages;
+        expect(useChatStore.getState().importConversation(JSON.stringify(bundle))).toBeNull();
+      });
+
+      // Regression: the user-reported bundle (3 msgs, assistant with empty
+      // content + tool_use followed by assistant text) landed in a welcome
+      // page because messages somehow didn't reach the in-memory store.
+      // This test reproduces that exact shape to pin the data contract down.
+      it('imports real-world shape: user + assistant(content="", toolCall) + assistant(text)', () => {
+        const bundle = {
+          schema: { abuShareVersion: 1, tier: 'standard', exportedAt: Date.now() },
+          conversation: {
+            id: 'mo5tgdm8mg7l1b',
+            title: '看看当前文件夹下有什么',
+            createdAt: 1_776_606_190_064,
+            updatedAt: 1_776_609_764_691,
+          },
+          messages: [
+            {
+              id: 'mo5tgdqxo6ew0f',
+              role: 'user',
+              content: '看看当前文件夹下有什么',
+              timestamp: 1_776_606_190_233,
+              loopId: 'mo5tgdmcrrijsc',
+              isStreaming: false,
+            },
+            {
+              id: 'mo5tgdrn099n93',
+              role: 'assistant',
+              content: '',
+              timestamp: 1_776_606_190_259,
+              isStreaming: false,
+              toolCalls: [
+                {
+                  id: 'toolu_bdrk_014nci2UKBs6zEoXDKP4mvGg',
+                  name: 'list_directory',
+                  input: { path: '~/Desktop/表格' },
+                  isExecuting: false,
+                  startTime: 1_776_606_195_248,
+                  result: '[FILE] a.xlsx\n[FILE] b.csv',
+                },
+              ],
+              loopId: 'mo5tgdmcrrijsc',
+              usage: { inputTokens: 1396, outputTokens: 63 },
+              toolCallsForContext: [
+                {
+                  name: 'list_directory',
+                  input: { path: '~/Desktop/表格' },
+                  result: '[FILE] a.xlsx\n[FILE] b.csv',
+                },
+              ],
+            },
+            {
+              id: 'mo5tghnrfxknty',
+              role: 'assistant',
+              content: '当前「表格」文件夹下有 4 个文件：...',
+              timestamp: 1_776_606_195_303,
+              isStreaming: false,
+              toolCalls: [],
+              loopId: 'mo5tgdmcrrijsc',
+              usage: { inputTokens: 1539, outputTokens: 195 },
+            },
+          ],
+          attachments: {},
+          stats: { redactionCount: 2, attachmentCount: 0, embeddedCount: 0, sizeBytes: 1601 },
+        };
+        const newId = useChatStore.getState().importConversation(JSON.stringify(bundle));
+        expect(newId).not.toBeNull();
+        const conv = useChatStore.getState().conversations[newId!];
+        expect(conv, 'imported conv should be in the in-memory store').toBeDefined();
+        expect(conv.messages).toHaveLength(3);
+        expect(conv.messages[0].content).toBe('看看当前文件夹下有什么');
+        expect(conv.messages[1].content).toBe('');
+        expect(conv.messages[1].toolCalls).toHaveLength(1);
+        expect(useChatStore.getState().activeConversationId).toBe(newId);
+      });
+    });
   });
 
   // ── setPendingInput ──

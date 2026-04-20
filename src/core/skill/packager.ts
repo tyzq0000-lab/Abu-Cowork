@@ -17,6 +17,18 @@ import { parse as parseYaml } from 'yaml';
 const MAX_SINGLE_FILE = 10 * 1024 * 1024;   // 10 MB per file
 const MAX_ARCHIVE_SIZE = 50 * 1024 * 1024;   // 50 MB total archive
 
+// .askill is a distribution format — strip VCS/OS noise and anything the
+// Tauri fs scope won't allow (dot-prefixed entries fall outside $HOME/.abu/**).
+const EXCLUDE_FILES = new Set(['Thumbs.db']);
+const EXCLUDE_DIRS = new Set(['node_modules', '__pycache__']);
+
+function shouldSkipEntry(name: string, isDir: boolean): boolean {
+  if (name.startsWith('.')) return true;
+  if (isDir && EXCLUDE_DIRS.has(name)) return true;
+  if (!isDir && EXCLUDE_FILES.has(name)) return true;
+  return false;
+}
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface UnpackResult {
@@ -50,6 +62,7 @@ async function collectFiles(
 ): Promise<void> {
   const entries = await readDir(joinPath(baseDir, prefix || '.'));
   for (const entry of entries) {
+    if (shouldSkipEntry(entry.name, entry.isDirectory)) continue;
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isDirectory) {
       await collectFiles(baseDir, rel, out);
@@ -149,6 +162,16 @@ export async function unpackSkill(
     // Strip prefix and skip directory entries (trailing /)
     const relativePath = prefix ? path.replace(prefix, '') : path;
     if (!relativePath || relativePath.endsWith('/')) continue;
+
+    // Defensive: archives from older/external packagers may contain dotfiles
+    // that Tauri's fs scope won't let us write. Skip any path segment that
+    // would be filtered on the pack side.
+    const segments = relativePath.split('/');
+    const skip = segments.some((seg, i) => {
+      const isDir = i < segments.length - 1;
+      return shouldSkipEntry(seg, isDir);
+    });
+    if (skip) continue;
 
     const targetPath = joinPath(targetDir, relativePath);
 

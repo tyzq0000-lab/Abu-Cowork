@@ -3,7 +3,9 @@ import { useChatStore } from '@/stores/chatStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
-import { FolderClosed, FolderOpen, Plus, Pin, PinOff, Settings, Archive, Trash2 } from 'lucide-react';
+import { FolderClosed, FolderOpen, Plus, Pin, PinOff, Settings, Archive, Trash2, Pencil, Download, FolderMinus } from 'lucide-react';
+import ShareExportDialog from '@/components/share/ShareExportDialog';
+import ImportedBadge from './ImportedBadge';
 import { cn } from '@/lib/utils';
 import { format } from '@/i18n';
 import type { Project } from '@/types/project';
@@ -35,8 +37,11 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
   const deleteProject = useProjectStore((s) => s.deleteProject);
   const switchConversation = useChatStore((s) => s.switchConversation);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
+  const renameConversation = useChatStore((s) => s.renameConversation);
+  const loadConversation = useChatStore((s) => s.loadConversation);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const loadedConversations = useChatStore((s) => s.conversations);
+  const conversationIndex = useChatStore((s) => s.conversationIndex);
   const setViewMode = useSettingsStore((s) => s.setViewMode);
   const viewMode = useSettingsStore((s) => s.viewMode);
 
@@ -47,6 +52,11 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
   const contextMenuRef = useRef<HTMLDivElement>(null);
   // Conversation context menu
   const [convMenu, setConvMenu] = useState<{ x: number; y: number; convId: string } | null>(null);
+  // Inline rename state — mirrors Sidebar.tsx's editingId pattern so the
+  // UX matches Recents exactly.
+  const [editingConvId, setEditingConvId] = useState<string | null>(null);
+  // Share export dialog target (conversation id)
+  const [shareConvId, setShareConvId] = useState<string | null>(null);
   // Archive confirmation dialog
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -132,9 +142,30 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
                 )}
               >
                 <ConvStatusDot status={loadedConversations[conv.id]?.status ?? 'idle'} />
-                <span className="flex-1 truncate">
-                  {conv.title.replace(/\[Attachment:\s*`[^`]*`\]\s*/g, '').trim() || conv.title}
-                </span>
+                {conv.importedFrom && (
+                  <ImportedBadge importedAt={conv.importedFrom.importedAt} />
+                )}
+                {editingConvId === conv.id ? (
+                  <input
+                    autoFocus
+                    defaultValue={conv.title}
+                    className="flex-1 text-[12px] bg-transparent border-b border-[var(--abu-clay)] outline-none min-w-0"
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val && val !== conv.title) renameConversation(conv.id, val);
+                      setEditingConvId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                      if (e.key === 'Escape') setEditingConvId(null);
+                    }}
+                  />
+                ) : (
+                  <span className="flex-1 truncate">
+                    {conv.title.replace(/\[Attachment:\s*`[^`]*`\]\s*/g, '').trim() || conv.title}
+                  </span>
+                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
                   className="h-4 w-4 flex items-center justify-center opacity-0 group-hover/conv:opacity-100 text-[var(--abu-text-tertiary)] hover:text-red-500 shrink-0"
@@ -209,7 +240,9 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
         </div>
       )}
 
-      {/* Conversation context menu */}
+      {/* Conversation context menu — aligned with Sidebar.tsx's recents menu
+          (rename / export / move-out / delete) so users get the same verbs
+          regardless of whether the conversation lives under a project. */}
       {convMenu && (
         <div
           className="fixed z-50 bg-white rounded-lg shadow-lg border border-[var(--abu-border)] py-1 min-w-[140px]"
@@ -217,13 +250,39 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
         >
           <button
             onClick={() => {
+              setEditingConvId(convMenu.convId);
+              setConvMenu(null);
+            }}
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-active)]"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            {t.sidebar.renameConversation}
+          </button>
+          <button
+            onClick={async () => {
+              const targetId = convMenu.convId;
+              setConvMenu(null);
+              // Pre-load so the share dialog opens straight into ready state,
+              // matching Sidebar.handleExport's behavior.
+              await loadConversation(targetId);
+              setShareConvId(targetId);
+            }}
+            className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-active)]"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {t.sidebar.exportConversation}
+          </button>
+          <button
+            onClick={() => {
               setConversationProject(convMenu.convId, undefined);
               setConvMenu(null);
             }}
             className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-active)]"
           >
+            <FolderMinus className="h-3.5 w-3.5" />
             {t.project.removeFromProject}
           </button>
+          <div className="my-1 border-t border-[var(--abu-border)]" />
           <button
             onClick={() => {
               deleteConversation(convMenu.convId);
@@ -232,9 +291,18 @@ export default function ProjectItem({ project, conversations, expanded, onNewTas
             className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-red-500 hover:bg-[var(--abu-bg-active)]"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            {t.project.delete}
+            {t.sidebar.deleteConversation}
           </button>
         </div>
+      )}
+
+      {/* Share export preview — mirrors the one Sidebar renders for Recents */}
+      {shareConvId && (
+        <ShareExportDialog
+          convId={shareConvId}
+          defaultFilename={`abu-conversation-${conversationIndex[shareConvId]?.title || shareConvId}.abu.json`}
+          onClose={() => setShareConvId(null)}
+        />
       )}
 
       {/* Archive confirmation dialog */}

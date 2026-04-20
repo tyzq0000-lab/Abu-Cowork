@@ -13,9 +13,54 @@ import { removeAgentsByConversation, setConversationLookup } from '../core/agent
 import { cancelSubagent } from '../core/agent/subagentAbort';
 import { setComputerUseActive } from '../core/agent/computerUseStatus';
 import type { ConversationMeta } from '../core/session/conversationStorage';
+import type { ShareBundle } from '../core/session/shareBundle';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+}
+
+/** Extra safety net for messages coming in via import — ensures no streaming
+ * flag survives even if the source bundle was built by a broken exporter. */
+function sanitizeImportedMessage(msg: Message): Message {
+  return {
+    ...msg,
+    isStreaming: false,
+    toolCalls: msg.toolCalls?.map((tc) => ({ ...tc, isExecuting: false })),
+  };
+}
+
+/** Build an in-memory Conversation + Meta from a validated ShareBundle.
+ * Intentionally drops external references (workspacePath, scheduledTaskId,
+ * triggerId, projectId, imChannelId/imPlatform, activeSkills,
+ * enabledMCPServers) so the imported copy is self-contained. The recipient
+ * can keep chatting on top of it — only the origin is tagged via
+ * `importedFrom`, surfaced as a small sidebar badge. The `readOnly` field
+ * on Conversation/Meta is kept in the type for a future team-sync use case
+ * but deliberately not set here. */
+function buildImportedFromShareBundle(bundle: ShareBundle): { conv: Conversation; meta: ConversationMeta } {
+  const newId = generateId();
+  const importedFrom = {
+    schemaVersion: bundle.schema.abuShareVersion,
+    importedAt: Date.now(),
+  };
+  const conv: Conversation = {
+    id: newId,
+    title: bundle.conversation.title,
+    createdAt: bundle.conversation.createdAt,
+    updatedAt: bundle.conversation.updatedAt,
+    messages: bundle.messages.map(sanitizeImportedMessage),
+    status: 'idle',
+    importedFrom,
+  };
+  const meta: ConversationMeta = {
+    id: newId,
+    title: conv.title,
+    createdAt: conv.createdAt,
+    updatedAt: conv.updatedAt,
+    messageCount: conv.messages.length,
+    importedFrom,
+  };
+  return { conv, meta };
 }
 
 // Wire up conversation lookup for backgroundAgentRegistry (avoids circular import)
@@ -130,6 +175,13 @@ interface ChatState {
   thinkingStartTime: number | null;
   // Track multiple concurrent active agents
   activeAgentNames: string[];
+  /** Bumped whenever a conversation's outputs manifest materially changes
+   *  from outside the snapshot hot path — currently: after
+   *  installSharedAttachments writes newly imported files. FileAttachment
+   *  watches this so it re-resolves once the async import finishes, rather
+   *  than getting stuck showing "missing" because it read the manifest
+   *  before the install side-effects landed. Ephemeral, not persisted. */
+  outputsRev: Record<string, number>;
 }
 
 interface ChatActions {
@@ -197,6 +249,16 @@ interface ChatActions {
   // Export/Import
   exportConversation: (convId: string) => string | null;
   importConversation: (json: string) => string | null;
+  /**
+   * Build a redacted, portable share bundle for the given conversation.
+   * Returns null if the conversation does not exist. Caller is responsible
+   * for awaiting `loadConversation(convId)` when the conversation may not be
+   * in the in-memory cache — this action does the load itself.
+   */
+  exportConversationForShare: (
+    convId: string,
+    opts?: { tier?: import('../core/session/shareBundle').ShareTier },
+  ) => Promise<import('../core/session/shareBundle').ShareBundle | null>;
 
   // Persistence — load conversation from disk on demand
   loadConversation: (convId: string) => Promise<void>;
@@ -217,6 +279,7 @@ export const useChatStore = create<ChatStore>()(
       agentStatus: 'idle' as AgentStatus,
       currentTool: null,
       currentUsage: null,
+      outputsRev: {} as Record<string, number>,
       pendingInput: null,
       thinkingStartTime: null,
       activeAgentNames: [],
@@ -921,10 +984,64 @@ export const useChatStore = create<ChatStore>()(
         return JSON.stringify(conv, null, 2);
       },
 
-      // Import conversation from JSON string, returns new conversation ID
+      // Import conversation from JSON string, returns new conversation ID.
+      //
+      // Accepts two payload shapes, auto-dispatched by inspecting the parsed
+      // structure:
+      //   1. Share bundle (`schema.abuShareVersion === 1`) — built by
+      //      `exportConversationForShare`. Produces a read-only conversation
+      //      with external references stripped and an `importedFrom` stamp.
+      //   2. Raw conversation JSON (legacy, used by the undo-delete flow via
+      //      `exportConversation`). Retained verbatim so undo keeps working.
       importConversation: (json: string) => {
         try {
-          const conv = JSON.parse(json) as Conversation;
+          const parsed = JSON.parse(json) as unknown;
+
+          // ── Share bundle path ───────────────────────────────────────────
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            (parsed as { schema?: { abuShareVersion?: unknown } }).schema?.abuShareVersion === 1
+          ) {
+            const bundle = parsed as ShareBundle;
+            if (!Array.isArray(bundle.messages) || !bundle.conversation) return null;
+            const { conv, meta } = buildImportedFromShareBundle(bundle);
+
+            set((state) => {
+              state.conversations[conv.id] = conv;
+              state.conversationIndex[conv.id] = meta;
+              state.activeConversationId = conv.id;
+            });
+            // Persist messages to JSONL + install bundled attachments. Both
+            // happen async; attach a rev bump at the end so FileAttachment
+            // components re-resolve once the outputs manifest materially
+            // changes (otherwise they'd stay stuck on the empty snapshot
+            // they read in the same tick as `set` landed).
+            const attachmentsToInstall = bundle.attachments && Object.keys(bundle.attachments).length > 0
+              ? bundle.attachments
+              : null;
+            (async () => {
+              try {
+                const { migrateConversation } = await import('../core/session/conversationStorage');
+                await migrateConversation(conv);
+              } catch { /* non-fatal */ }
+              if (attachmentsToInstall) {
+                try {
+                  const { installSharedAttachments } = await import('../core/session/outputSnapshots');
+                  await installSharedAttachments(conv.id, attachmentsToInstall);
+                } catch { /* non-fatal */ }
+                set((state) => {
+                  state.outputsRev[conv.id] = (state.outputsRev[conv.id] ?? 0) + 1;
+                });
+              }
+            })();
+            // Imported share bundles are not bound to any workspace.
+            useWorkspaceStore.getState().clearWorkspace();
+            return conv.id;
+          }
+
+          // ── Legacy raw conversation path (undo-delete) ──────────────────
+          const conv = parsed as Conversation;
           if (!conv.id || !conv.messages) return null;
 
           // Generate new ID to avoid conflicts
@@ -958,6 +1075,8 @@ export const useChatStore = create<ChatStore>()(
             scheduledTaskId: imported.scheduledTaskId,
             triggerId: imported.triggerId,
             projectId: imported.projectId,
+            readOnly: imported.readOnly,
+            importedFrom: imported.importedFrom,
           };
 
           set((state) => {
@@ -981,6 +1100,17 @@ export const useChatStore = create<ChatStore>()(
         } catch {
           return null;
         }
+      },
+
+      // Build a redacted share bundle. Does not write to disk — the caller
+      // (preview dialog) is responsible for persisting the JSON after the
+      // user confirms.
+      exportConversationForShare: async (convId, opts = {}) => {
+        await get().loadConversation(convId);
+        const conv = get().conversations[convId];
+        if (!conv) return null;
+        const { buildShareBundle } = await import('../core/session/shareBundle');
+        return buildShareBundle(conv, { tier: opts.tier ?? 'standard' });
       },
 
       // ── Persistence: load conversation from disk on demand ──
@@ -1011,6 +1141,8 @@ export const useChatStore = create<ChatStore>()(
               scheduledTaskId: meta.scheduledTaskId,
               triggerId: meta.triggerId,
               projectId: meta.projectId,
+              readOnly: meta.readOnly,
+              importedFrom: meta.importedFrom,
             };
           });
         } catch {
@@ -1032,6 +1164,8 @@ export const useChatStore = create<ChatStore>()(
                 scheduledTaskId: meta.scheduledTaskId,
                 triggerId: meta.triggerId,
                 projectId: meta.projectId,
+                readOnly: meta.readOnly,
+                importedFrom: meta.importedFrom,
               };
             });
           }
@@ -1067,13 +1201,15 @@ export const useChatStore = create<ChatStore>()(
     })),
     {
       name: 'abu-chat',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const state = persisted as Record<string, unknown>;
         // v1 → v2: added executionSteps on Message (optional field, no-op migration)
         if (version < 2) { /* no transform needed */ }
         // v2 → v3: added projectId on Conversation (optional field, no-op migration)
         if (version < 3) { /* no transform needed */ }
+        // v4 → v5: added readOnly + importedFrom on ConversationMeta (optional fields, no-op migration)
+        if (version < 5) { /* no transform needed */ }
         // v3 → v4: migrate conversations from localStorage to file system
         if (version < 4) {
           // Mark for async migration in onRehydrateStorage
