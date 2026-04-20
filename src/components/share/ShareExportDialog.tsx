@@ -18,7 +18,8 @@ import { writeTextFile } from '@tauri-apps/plugin-fs';
 import { useChatStore } from '@/stores/chatStore';
 import { useI18n, format } from '@/i18n';
 import { serializeShareBundle, type ShareBundle } from '@/core/session/shareBundle';
-import type { MessageContent } from '@/types';
+import type { MessageContent, ToolCall } from '@/types';
+import MarkdownRenderer from '@/components/chat/MarkdownRenderer';
 
 interface ShareExportDialogProps {
   convId: string;
@@ -217,7 +218,7 @@ function BundlePreview({ bundle }: { bundle: ShareBundle }) {
                 key={msg.id}
                 role={msg.role}
                 content={msg.content}
-                toolCallCount={msg.toolCalls?.length ?? 0}
+                toolCalls={msg.toolCalls}
               />
             ))}
             {bundle.messages.length > 50 && (
@@ -235,11 +236,11 @@ function BundlePreview({ bundle }: { bundle: ShareBundle }) {
 function MessagePreviewRow({
   role,
   content,
-  toolCallCount,
+  toolCalls,
 }: {
   role: 'user' | 'assistant' | 'system';
   content: string | MessageContent[];
-  toolCallCount: number;
+  toolCalls?: ToolCall[];
 }) {
   const roleLabel = role === 'user' ? 'You' : role === 'assistant' ? 'Assistant' : 'System';
   const badge = role === 'user'
@@ -249,7 +250,11 @@ function MessagePreviewRow({
       : 'bg-gray-100 text-gray-600';
 
   const { text, imageCount, otherCount } = flattenContent(content);
-  const truncated = text.length > 200 ? `${text.slice(0, 200)}…` : text;
+  // Truncate on the raw text so large messages don't bloat the preview.
+  // Markdown still renders within the truncated slice (unmatched fences
+  // are harmless — react-markdown just treats them as text).
+  const truncated = text.length > 600 ? `${text.slice(0, 600)}…` : text;
+  const toolNames = (toolCalls ?? []).map((tc) => tc.name);
 
   return (
     <div className="flex gap-2 items-start">
@@ -258,11 +263,11 @@ function MessagePreviewRow({
       </span>
       <div className="flex-1 min-w-0">
         {truncated && (
-          <p className="text-[12px] text-[var(--abu-text-primary)] whitespace-pre-wrap break-words">
-            {truncated}
-          </p>
+          <div className="text-[12px] text-[var(--abu-text-primary)] leading-relaxed share-preview-md">
+            <MarkdownRenderer content={truncated} variant={role === 'user' ? 'user' : 'assistant'} />
+          </div>
         )}
-        <div className="flex flex-wrap gap-1.5 mt-0.5">
+        <div className="flex flex-wrap gap-1.5 mt-1">
           {imageCount > 0 && (
             <span className="inline-flex items-center gap-1 text-[10px] text-[var(--abu-text-tertiary)]">
               <ImageIcon className="h-3 w-3" /> {imageCount}
@@ -273,9 +278,18 @@ function MessagePreviewRow({
               <FileText className="h-3 w-3" /> {otherCount}
             </span>
           )}
-          {toolCallCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-[var(--abu-text-tertiary)]">
-              <Wrench className="h-3 w-3" /> {toolCallCount}
+          {toolNames.slice(0, 3).map((name, i) => (
+            <span
+              key={`${name}-${i}`}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--abu-bg-subtle)] text-[10px] text-[var(--abu-text-tertiary)] font-mono"
+            >
+              <Wrench className="h-3 w-3" />
+              {name}
+            </span>
+          ))}
+          {toolNames.length > 3 && (
+            <span className="inline-flex items-center text-[10px] text-[var(--abu-text-tertiary)]">
+              +{toolNames.length - 3}
             </span>
           )}
         </div>
