@@ -25,10 +25,11 @@
  *     new content type will silently lose data when originals are deleted. ★
  */
 
-import { exists, mkdir, readTextFile, writeTextFile, remove, stat, copyFile, rename, readFile } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, readTextFile, writeTextFile, remove, stat, copyFile, rename, readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, homeDir } from '@tauri-apps/api/path';
 import { joinPath, normalizeSeparators, getBaseName } from '@/utils/pathUtils';
 import { extractFileOutputs } from '@/utils/workflowExtractor';
+import { base64ToUint8Array } from '@/utils/base64';
 import type { ToolCall } from '@/types';
 import { createLogger } from '../logging/logger';
 
@@ -570,6 +571,84 @@ export async function readSnapshotBytes(convId: string, snapshotRelPath: string)
   } catch {
     return null;
   }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Share import: materialise attachments carried in an incoming bundle
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Minimal shape installSharedAttachments needs — mirrors ShareAttachment in
+ *  shareBundle.ts. Duplicated locally so this module stays free of a
+ *  reverse core->core dependency. */
+export interface ShareAttachmentInput {
+  basename: string;
+  originalPath: string;
+  source: SnapshotSource;
+  sizeBytes: number;
+  /** Base64 payload. Entries without `data` are skipped (user-upload-excluded,
+   *  oversized, missing, budget-exceeded — already filtered by the sender). */
+  data?: string;
+}
+
+export interface InstallSharedAttachmentsResult {
+  installed: number;
+  skipped: number;
+}
+
+/**
+ * Write AI-generated files that were carried inside an incoming share bundle
+ * to this conversation's outputs/ dir, registering each in the manifest so
+ * file cards resolve to a real on-disk snapshot (instead of "missing").
+ *
+ * Path rule: the manifest key is `normalizePath(expandTilde(incoming))` —
+ * exactly what `resolveFileSource` looks up at render time. Basename
+ * fallback in that function (rule 3b) covers any residual home-dir
+ * mismatch between sender and recipient.
+ *
+ * Failures per-entry are swallowed and counted in `skipped` rather than
+ * aborting the whole install — a single bad entry should not block the
+ * rest of the conversation from importing cleanly.
+ */
+export async function installSharedAttachments(
+  convId: string,
+  attachments: Record<string, ShareAttachmentInput>,
+): Promise<InstallSharedAttachmentsResult> {
+  let installed = 0;
+  let skipped = 0;
+  const outputsDir = await getOutputsDir(convId);
+
+  for (const entry of Object.values(attachments)) {
+    if (!entry.data) { skipped++; continue; }
+    try {
+      const expandedPath = await expandTilde(entry.originalPath);
+      const keyPath = normalizePath(expandedPath);
+      const hash = hashPath(keyPath);
+      const subdir = joinPath(outputsDir, 'files', hash);
+      if (!(await exists(subdir))) await mkdir(subdir, { recursive: true });
+      const targetPath = joinPath(subdir, entry.basename);
+      const bytes = base64ToUint8Array(entry.data);
+      await writeFile(targetPath, bytes);
+
+      const snapshotEntry: SnapshotEntry = {
+        originalPath: keyPath,
+        basename: entry.basename,
+        snapshotRelPath: `files/${hash}/${entry.basename}`,
+        size: entry.sizeBytes,
+        originalMtime: 0,
+        snapshottedAt: Date.now(),
+        source: entry.source,
+        refId: 'shared-import',
+        refKind: 'shared',
+      };
+      await recordEntry(convId, snapshotEntry);
+      installed++;
+    } catch (e) {
+      logger.warn('installSharedAttachments: entry failed', { basename: entry.basename, err: e });
+      skipped++;
+    }
+  }
+
+  return { installed, skipped };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

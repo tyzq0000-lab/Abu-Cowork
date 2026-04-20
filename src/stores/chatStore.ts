@@ -1007,6 +1007,14 @@ export const useChatStore = create<ChatStore>()(
             import('../core/session/conversationStorage').then(async ({ migrateConversation }) => {
               await migrateConversation(conv);
             }).catch(() => {});
+            // Materialise attached AI-generated files so file cards resolve
+            // instead of showing "missing". Fire-and-forget to match the
+            // migrateConversation pattern — failure does not block import.
+            if (bundle.attachments && Object.keys(bundle.attachments).length > 0) {
+              import('../core/session/outputSnapshots').then(({ installSharedAttachments }) => {
+                installSharedAttachments(conv.id, bundle.attachments).catch(() => {});
+              }).catch(() => {});
+            }
             // Imported share bundles are not bound to any workspace.
             useWorkspaceStore.getState().clearWorkspace();
             return conv.id;
