@@ -197,6 +197,16 @@ interface ChatActions {
   // Export/Import
   exportConversation: (convId: string) => string | null;
   importConversation: (json: string) => string | null;
+  /**
+   * Build a redacted, portable share bundle for the given conversation.
+   * Returns null if the conversation does not exist. Caller is responsible
+   * for awaiting `loadConversation(convId)` when the conversation may not be
+   * in the in-memory cache — this action does the load itself.
+   */
+  exportConversationForShare: (
+    convId: string,
+    opts?: { tier?: import('../core/session/shareBundle').ShareTier },
+  ) => Promise<import('../core/session/shareBundle').ShareBundle | null>;
 
   // Persistence — load conversation from disk on demand
   loadConversation: (convId: string) => Promise<void>;
@@ -983,6 +993,17 @@ export const useChatStore = create<ChatStore>()(
         }
       },
 
+      // Build a redacted share bundle. Does not write to disk — the caller
+      // (preview dialog) is responsible for persisting the JSON after the
+      // user confirms.
+      exportConversationForShare: async (convId, opts = {}) => {
+        await get().loadConversation(convId);
+        const conv = get().conversations[convId];
+        if (!conv) return null;
+        const { buildShareBundle } = await import('../core/session/shareBundle');
+        return buildShareBundle(conv, { tier: opts.tier ?? 'standard' });
+      },
+
       // ── Persistence: load conversation from disk on demand ──
 
       loadConversation: async (convId: string) => {
@@ -1011,6 +1032,8 @@ export const useChatStore = create<ChatStore>()(
               scheduledTaskId: meta.scheduledTaskId,
               triggerId: meta.triggerId,
               projectId: meta.projectId,
+              readOnly: meta.readOnly,
+              importedFrom: meta.importedFrom,
             };
           });
         } catch {
@@ -1032,6 +1055,8 @@ export const useChatStore = create<ChatStore>()(
                 scheduledTaskId: meta.scheduledTaskId,
                 triggerId: meta.triggerId,
                 projectId: meta.projectId,
+                readOnly: meta.readOnly,
+                importedFrom: meta.importedFrom,
               };
             });
           }
@@ -1067,13 +1092,15 @@ export const useChatStore = create<ChatStore>()(
     })),
     {
       name: 'abu-chat',
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         const state = persisted as Record<string, unknown>;
         // v1 → v2: added executionSteps on Message (optional field, no-op migration)
         if (version < 2) { /* no transform needed */ }
         // v2 → v3: added projectId on Conversation (optional field, no-op migration)
         if (version < 3) { /* no transform needed */ }
+        // v4 → v5: added readOnly + importedFrom on ConversationMeta (optional fields, no-op migration)
+        if (version < 5) { /* no transform needed */ }
         // v3 → v4: migrate conversations from localStorage to file system
         if (version < 4) {
           // Mark for async migration in onRehydrateStorage

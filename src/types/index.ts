@@ -252,6 +252,20 @@ export interface Conversation {
    * persisted across sessions.
    */
   pendingProposalSignal?: import('../core/agent/proposalSignal').ProposalSignal;
+  /**
+   * True if this conversation was imported from a shared bundle (.abu.json).
+   * Read-only — user cannot continue the conversation. Persisted via
+   * ConversationMeta (index.json) so the flag survives restarts.
+   */
+  readOnly?: boolean;
+  /**
+   * Provenance of an imported share bundle. Populated during import alongside
+   * `readOnly: true`. Persisted via ConversationMeta.
+   */
+  importedFrom?: {
+    schemaVersion: number;
+    importedAt: number;
+  };
 }
 
 // --- Agent ---

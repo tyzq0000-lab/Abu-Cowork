@@ -25,7 +25,7 @@
  *     new content type will silently lose data when originals are deleted. ★
  */
 
-import { exists, mkdir, readTextFile, writeTextFile, remove, stat, copyFile, rename } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, readTextFile, writeTextFile, remove, stat, copyFile, rename, readFile } from '@tauri-apps/plugin-fs';
 import { appDataDir, homeDir } from '@tauri-apps/api/path';
 import { joinPath, normalizeSeparators, getBaseName } from '@/utils/pathUtils';
 import { extractFileOutputs } from '@/utils/workflowExtractor';
@@ -541,6 +541,34 @@ export async function cleanupConversationOutputs(convId: string): Promise<void> 
     }
   } catch {
     // Non-critical
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Read-only helpers (used by share export — never mutate manifest)
+// ────────────────────────────────────────────────────────────────────────────
+
+/** List all snapshot entries for a conversation. Returns [] if none. */
+export async function listSnapshots(convId: string): Promise<SnapshotEntry[]> {
+  const manifest = await loadManifest(convId);
+  return Object.values(manifest.entries);
+}
+
+/**
+ * Read a snapshot's raw bytes by relative path (as stored in SnapshotEntry.snapshotRelPath).
+ * Returns null if the snapshot file is missing or the path escapes the outputs dir.
+ */
+export async function readSnapshotBytes(convId: string, snapshotRelPath: string): Promise<Uint8Array | null> {
+  if (!snapshotRelPath) return null;
+  const outputsDir = await getOutputsDir(convId);
+  const fullPath = joinPath(outputsDir, snapshotRelPath);
+  // Defense-in-depth: ensure the resolved path stays inside outputsDir
+  if (!normalizePath(fullPath).startsWith(normalizePath(outputsDir))) return null;
+  try {
+    if (!(await exists(fullPath))) return null;
+    return await readFile(fullPath);
+  } catch {
+    return null;
   }
 }
 
