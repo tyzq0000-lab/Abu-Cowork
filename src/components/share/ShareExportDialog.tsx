@@ -137,7 +137,7 @@ export default function ShareExportDialog({ convId, defaultFilename, onClose }: 
             <button
               onClick={handleExport}
               disabled={state.phase !== 'ready' || exporting}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--abu-clay)] text-white text-[13px] hover:bg-[var(--abu-clay-dark)] disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--abu-clay)] text-white text-[13px] hover:bg-[var(--abu-clay-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="h-3.5 w-3.5" />
               {t.share.exportBtn}
