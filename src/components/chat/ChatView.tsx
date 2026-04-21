@@ -119,8 +119,10 @@ export default function ChatView() {
         defaultPath: workspaceRequest?.suggestedPath || undefined,
       });
       if (selected && typeof selected === 'string') {
-        // Set workspace globally
         useWorkspaceStore.getState().setWorkspace(selected);
+        if (activeConv?.id) {
+          useChatStore.getState().setConversationWorkspace(activeConv.id, selected);
+        }
         resolveWorkspaceRequest(selected);
       } else {
         resolveWorkspaceRequest(null);
@@ -134,6 +136,9 @@ export default function ChatView() {
   const handleWorkspaceAuthorize = () => {
     if (workspaceRequest?.suggestedPath) {
       useWorkspaceStore.getState().setWorkspace(workspaceRequest.suggestedPath);
+      if (activeConv?.id) {
+        useChatStore.getState().setConversationWorkspace(activeConv.id, workspaceRequest.suggestedPath);
+      }
       resolveWorkspaceRequest(workspaceRequest.suggestedPath);
     }
   };

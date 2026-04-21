@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { Sparkles, ChevronDown, ChevronRight } from 'lucide-react';
 import type { Message, MessageContent, ToolCall, ImageAttachment } from '@/types';
 import { TOOL_NAMES } from '@/core/tools/toolNames';
 import type { ExecutionStep } from '@/types/execution';
@@ -23,6 +24,44 @@ import abuAvatar from '@/assets/abu-avatar.png';
 interface MessageGroupProps {
   messages: Message[];
   isLastGroup?: boolean;
+}
+
+/** Collapsed fold-row summarising all patch/edit calls for one skill. */
+function SkillPatchSummaryRow({ skillName, calls }: { skillName: string; calls: ToolCall[] }) {
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="my-1">
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--abu-border-subtle)] bg-[var(--abu-bg-muted)] text-xs text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-elevated)] transition-colors"
+      >
+        <Sparkles className="h-3.5 w-3.5 text-[var(--abu-clay)] flex-shrink-0" />
+        <span className="flex-1 text-left">
+          {t.toolbox.skillPatchGroupLabel}{' '}
+          <span className="font-medium text-[var(--abu-text-primary)]">{skillName}</span>
+          <span className="text-[var(--abu-text-muted)]">（{calls.length} 处）</span>
+        </span>
+        {expanded
+          ? <ChevronDown className="h-3 w-3 flex-shrink-0" />
+          : <ChevronRight className="h-3 w-3 flex-shrink-0" />
+        }
+      </button>
+      {expanded && (
+        <div className="mt-0.5 ml-5 space-y-0.5">
+          {calls.map((tc) => {
+            let msg = '';
+            try { msg = (JSON.parse(tc.result ?? '{}') as { message?: string }).message ?? ''; } catch { /* empty */ }
+            return msg ? (
+              <div key={tc.id} className="text-[11px] text-[var(--abu-text-muted)] px-2 py-0.5">
+                {msg}
+              </div>
+            ) : null;
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Helper to get text content from Message
@@ -513,6 +552,26 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
                 />
               );
             })}
+
+            {/* Grouped skill-patch summary — one collapsible fold-row per
+                skill, replacing the old per-patch floating pills. */}
+            {(() => {
+              const patchCalls = allToolCalls.filter(
+                (tc) =>
+                  tc.name === TOOL_NAMES.SKILL_MANAGE &&
+                  (tc.input?.['action'] === 'patch' || tc.input?.['action'] === 'edit'),
+              );
+              if (patchCalls.length === 0) return null;
+              const bySkill = new Map<string, ToolCall[]>();
+              for (const tc of patchCalls) {
+                const key = (tc.input?.['name'] as string) || '?';
+                if (!bySkill.has(key)) bySkill.set(key, []);
+                bySkill.get(key)!.push(tc);
+              }
+              return Array.from(bySkill.entries()).map(([skillName, calls]) => (
+                <SkillPatchSummaryRow key={`patch-${skillName}`} skillName={skillName} calls={calls} />
+              ));
+            })()}
 
             {/* File attachments - show when this group's execution is done.
                 Previous groups always show; last group waits for global status

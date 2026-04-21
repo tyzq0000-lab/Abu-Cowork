@@ -824,6 +824,8 @@ export interface TranslationDict {
     skillProposalCardOnboardGateAction: string;  // button label
     // Interactive notice card · skill patched (Task #41)
     skillPatchedCardLabel: string;      // "Abu 修正了技能" / "Abu patched skill"
+    // Grouped patch fold-row in MessageGroup
+    skillPatchGroupLabel: string;       // "Abu 修改了技能" / "Abu modified skill"
     // Interactive notice card · skill deleted (Task #17 v2)
     skillDeletedCardLabel: string;      // "Abu 删除了技能"
     skillDeletedCardRescuable: string;  // "可在 7 天内恢复"

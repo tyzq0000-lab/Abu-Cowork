@@ -9,12 +9,16 @@ describe('sourceToUXCategory', () => {
     expect(sourceToUXCategory('project-standard')).toBe('mine');
   });
 
-  it('groups workspace-auto + draft into "agent-evolved"', () => {
-    // Regression guard: before this refactor, workspace-auto/draft
-    // fell into the default branch and silently appeared under the
-    // user's own skills — the exact mental-model confusion Task #25/
-    // taxonomy rework addresses.
-    expect(sourceToUXCategory('workspace-auto')).toBe('agent-evolved');
+  it('puts workspace-auto into "mine" (per-row badge shows origin)', () => {
+    // workspace-auto skills land in "我的" with a "自进化" badge via
+    // sourceBadge(). Keeping them in a separate category was confusing
+    // when the user explicitly asked Abu to create the skill.
+    expect(sourceToUXCategory('workspace-auto')).toBe('mine');
+  });
+
+  it('keeps draft in "agent-evolved" (pending review, not yet accepted)', () => {
+    // Drafts are agent-proposed skills awaiting user accept/reject.
+    // They're managed by SkillDraftsPanel, not the regular skill list.
     expect(sourceToUXCategory('draft')).toBe('agent-evolved');
   });
 

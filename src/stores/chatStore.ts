@@ -387,6 +387,14 @@ export const useChatStore = create<ChatStore>()(
           if (conv) {
             conv.workspacePath = path;
           }
+          if (state.conversationIndex[convId]) {
+            state.conversationIndex[convId].workspacePath = path;
+          }
+        });
+        // Persist to disk index — mirrors setConversationProject
+        import('../core/session/conversationStorage').then(({ updateIndexEntry }) => {
+          const meta = get().conversationIndex[convId];
+          if (meta) updateIndexEntry(meta).catch(() => {});
         });
       },
 

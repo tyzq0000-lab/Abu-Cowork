@@ -365,10 +365,10 @@ async function listFilesRecursive(
     const entries = await readDir(joinPath(baseDir, prefix || '.'));
     for (const entry of entries) {
       const relativePath = prefix ? joinPath(prefix, entry.name) : entry.name;
-      if (entry.isDirectory) {
+      if (entry.isDirectory && !entry.name.startsWith('.')) {
         const nested = await listFilesRecursive(baseDir, relativePath, exclude);
         result.push(...nested);
-      } else if (entry.name !== exclude) {
+      } else if (!entry.isDirectory && entry.name !== exclude && !entry.name.startsWith('.')) {
         result.push(relativePath);
       }
     }

@@ -3,18 +3,18 @@
  *
  * The Toolbox shows 3 top-level skill buckets (`SkillUXCategory`):
  *
- *   - **mine** — user/standard/project/project-standard. Everything
- *     the human (or their team's repo) explicitly put on disk.
- *   - **agent-evolved** — workspace-auto + draft. Everything Abu's
- *     self-evolution produced. Kept separate from `mine` so users
- *     can tell "I made this" from "Abu made this".
+ *   - **mine** — user/standard/project/project-standard/workspace-auto.
+ *     Everything the human or Abu created on behalf of the user. Abu-created
+ *     skills get the per-row "自进化" badge via sourceBadge() so the origin
+ *     is still visible without a separate category.
+ *   - **agent-evolved** — draft only. Pending agent proposals awaiting
+ *     user review. Shown via SkillDraftsPanel when draftsCount > 0.
  *   - **builtin** — bundled with the app binary.
  *
  * All Toolbox grouping goes through this function, so the enum-to-
  * bucket mapping stays in one place and it's hard to forget a new
  * source (unknown values log a warning instead of silently landing
- * in `mine`, which was the pre-refactor bug where workspace-auto
- * skills looked like user-created ones).
+ * in `mine`).
  */
 
 import type { SkillSource, SkillUXCategory } from '../../types';
@@ -27,6 +27,7 @@ export function sourceToUXCategory(source: SkillSource | undefined): SkillUXCate
     case 'project-standard':
       return 'mine';
     case 'workspace-auto':
+      return 'mine';
     case 'draft':
       return 'agent-evolved';
     case 'builtin':

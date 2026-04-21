@@ -680,15 +680,6 @@ async function patchAction(input: Record<string, unknown>, context?: ToolExecuti
 
   await skillLoader.discoverSkills(workspacePath).catch(() => {});
 
-  // Build a user-visible summary — short preview of what changed, so
-  // users glancing at the chat see the intent without opening the tool
-  // call. Trim to the first non-empty line of new_string, max ~80 chars.
-  const firstLine = newString
-    .split('\n')
-    .map((s) => s.trim())
-    .find((s) => s.length > 0) ?? '';
-  const summary = firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
-
   // Record history — best-effort, must not abort the successful write.
   // The backupPath on disk is what restoreFromBackup will consume
   // during a future revert.
@@ -705,19 +696,6 @@ async function patchAction(input: Record<string, unknown>, context?: ToolExecuti
     summary: `${fuzzy.matchCount} replacement${fuzzy.matchCount > 1 ? 's' : ''} via ${fuzzy.strategy}`,
   }).catch(() => {});
 
-  const noticeCard: InteractiveNoticeCard = {
-    type: 'skill-patched',
-    // Timestamp disambiguator — rapid successive patches of the same
-    // skill each get their own card in the chat stream.
-    id: `${name}@${Date.now()}`,
-    skillPatched: {
-      skillName: name,
-      filePath: targetPath,
-      summary: summary || undefined,
-      workspacePath,
-    },
-  };
-
   return {
     success: true,
     status: 'applied',
@@ -725,7 +703,6 @@ async function patchAction(input: Record<string, unknown>, context?: ToolExecuti
     path: targetPath,
     strategy: fuzzy.strategy ?? undefined,
     match_count: fuzzy.matchCount,
-    notice_card: noticeCard,
   };
 }
 
@@ -935,13 +912,6 @@ async function editAction(input: Record<string, unknown>, context?: ToolExecutio
 
   await skillLoader.discoverSkills(workspacePath).catch(() => {});
 
-  // Same summary strategy as patch: first non-empty line, capped at 80
-  // chars. Reuses the skill-patched notice card type — from the user's
-  // POV edit and patch are both "Abu changed this skill", and we don't
-  // want to multiply card types that render identically.
-  const firstLine = content.split('\n').map((s) => s.trim()).find((s) => s.length > 0) ?? '';
-  const summary = firstLine.length > 80 ? `${firstLine.slice(0, 77)}...` : firstLine;
-
   await appendHistoryEntry(targetDir, {
     turnId: newTurnId(),
     op: 'edit',
@@ -952,26 +922,13 @@ async function editAction(input: Record<string, unknown>, context?: ToolExecutio
         action: backupPath ? 'modified' : 'created',
       },
     ],
-    summary: summary || undefined,
   }).catch(() => {});
-
-  const noticeCard: InteractiveNoticeCard = {
-    type: 'skill-patched',
-    id: `${name}@${Date.now()}`,
-    skillPatched: {
-      skillName: name,
-      filePath: targetPath,
-      summary: summary || undefined,
-      workspacePath,
-    },
-  };
 
   return {
     success: true,
     status: 'applied',
     message: `Edited ${filePath ?? 'SKILL.md'} in "${name}".`,
     path: targetPath,
-    notice_card: noticeCard,
   };
 }
 

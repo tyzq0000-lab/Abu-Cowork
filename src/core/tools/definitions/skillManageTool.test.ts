@@ -388,7 +388,7 @@ describe('skill_manage · patch', () => {
     expect(writtenContent).not.toContain('oc_old');
   });
 
-  it('emits a skill-patched notice_card so users see silent patches (Task #41)', async () => {
+  it('does not emit notice_card for patch (grouped fold-row handles visibility)', async () => {
     const skill = makeSkill('visible-patch', {
       source: 'workspace-auto',
       skillDir: '/ws/skills/visible-patch',
@@ -412,17 +412,10 @@ describe('skill_manage · patch', () => {
     );
 
     expect(result.success).toBe(true);
-    expect(result.notice_card).toBeDefined();
-    expect(result.notice_card.type).toBe('skill-patched');
-    expect(result.notice_card.id).toMatch(/^visible-patch@\d+$/);
-    expect(result.notice_card.skillPatched).toMatchObject({
-      skillName: 'visible-patch',
-      // summary preview — first non-empty line of new_string, trimmed.
-      summary: 'new body text',
-    });
-    // workspacePath is captured at patch time; exact value depends on
-    // requireWorkspace() resolution, just verify it's set to a string.
-    expect(typeof result.notice_card.skillPatched.workspacePath).toBe('string');
+    // Patch result carries no notice_card — multiple patches per skill no
+    // longer flood the chat with N identical pills. MessageGroup groups all
+    // patch/edit calls into a single collapsible fold-row instead.
+    expect(result.notice_card).toBeUndefined();
   });
 
   it('rejects scope=user (MVP limitation)', async () => {
@@ -620,10 +613,8 @@ describe('skill_manage · edit', () => {
     expect(result.success).toBe(true);
     expect(result.status).toBe('applied');
     expect(result.path).toBe('/ws/skills/wa-skill/SKILL.md');
-    // Notice card reuses skill-patched type so users get the same "Abu
-    // changed this skill" visibility as patch does.
-    expect(result.notice_card?.type).toBe('skill-patched');
-    expect(result.notice_card?.skillPatched?.skillName).toBe('wa-skill');
+    // edit no longer emits notice_card — same reasoning as patch.
+    expect(result.notice_card).toBeUndefined();
     // The exact content we passed was atomically written.
     const [, written] = mockAtomicWriteWithBackup.mock.calls[0];
     expect(written).toBe(newContent);
