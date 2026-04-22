@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
-import { open } from '@tauri-apps/plugin-shell';
-import { RefreshCw, Download, CheckCircle, CircleAlert, RotateCcw } from 'lucide-react';
+import { openUrl } from '@tauri-apps/plugin-opener';
+import { RefreshCw, Download, CheckCircle, CircleAlert, RotateCcw, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import abuAvatar from '@/assets/abu-avatar.png';
@@ -23,7 +23,7 @@ export default function AboutSection() {
 
   const handleOpenLink = async (url: string) => {
     try {
-      await open(url);
+      await openUrl(url);
     } catch (e) {
       console.error('Failed to open link:', e);
     }
@@ -94,35 +94,46 @@ export default function AboutSection() {
             <span className="text-sm font-semibold text-[var(--abu-clay)]">{t.updates.newVersionAvailable}</span>
             <span className="text-sm font-mono font-semibold text-[var(--abu-text-primary)]">v{updateInfo.version}</span>
           </div>
-          {updateInfo.releaseNotes && (
-            <div className="space-y-1">
+          {(updateInfo.releaseNotes || updateInfo.releaseUrl) && (
+            <div className="space-y-1.5">
               <span className="text-xs font-medium text-[var(--abu-text-tertiary)]">{t.updates.releaseNotes}</span>
-              <div className="text-sm text-[var(--abu-text-secondary)] space-y-1.5
-                [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-[var(--abu-text-primary)] [&_h3]:mt-2
-                [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-0.5
-                [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-0.5
-                [&_strong]:font-semibold [&_strong]:text-[var(--abu-text-primary)]
-                [&_p]:leading-relaxed">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    a: ({ href, children }) => (
-                      <a
-                        href={href ?? '#'}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          if (href) void handleOpenLink(href);
-                        }}
-                        className="text-[var(--abu-clay)] hover:underline cursor-pointer"
-                      >
-                        {children}
-                      </a>
-                    ),
-                  }}
+              {updateInfo.releaseNotes && updateInfo.releaseNotes.trim().length > 0 ? (
+                <div className="text-sm text-[var(--abu-text-secondary)] space-y-1.5
+                  [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-[var(--abu-text-primary)] [&_h3]:mt-2
+                  [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-0.5
+                  [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-0.5
+                  [&_strong]:font-semibold [&_strong]:text-[var(--abu-text-primary)]
+                  [&_p]:leading-relaxed">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ href, children }) => (
+                        <a
+                          href={href ?? '#'}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (href) void handleOpenLink(href);
+                          }}
+                          className="text-[var(--abu-clay)] hover:underline cursor-pointer"
+                        >
+                          {children}
+                        </a>
+                      ),
+                    }}
+                  >
+                    {updateInfo.releaseNotes}
+                  </ReactMarkdown>
+                </div>
+              ) : null}
+              {updateInfo.releaseUrl && (
+                <button
+                  onClick={() => void handleOpenLink(updateInfo.releaseUrl)}
+                  className="flex items-center gap-1.5 text-xs text-[var(--abu-clay)] hover:underline"
                 >
-                  {updateInfo.releaseNotes}
-                </ReactMarkdown>
-              </div>
+                  <ExternalLink className="h-3 w-3" />
+                  {t.updates.viewOnGitHub}
+                </button>
+              )}
             </div>
           )}
 

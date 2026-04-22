@@ -1346,6 +1346,7 @@ const enUS: TranslationDict = {
     restartToInstall: 'Restart to Install',
     downloadFailed: 'Download failed',
     retry: 'Retry',
+    viewOnGitHub: 'View full release notes on GitHub',
   },
 
   about: {

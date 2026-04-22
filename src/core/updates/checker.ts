@@ -7,10 +7,40 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 export interface UpdateInfo {
   version: string;
   releaseNotes: string;
+  releaseUrl: string;
   publishedAt: string;
 }
 
 let _pendingUpdate: Update | null = null;
+
+// When OSS latest.json body is just "See {github-url}", fetch the real body from GitHub API.
+async function enrichReleaseNotes(rawNotes: string): Promise<{ notes: string; url: string }> {
+  const urlMatch = rawNotes.match(/https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/releases\/tag\/([^\s)]+)/);
+  if (!urlMatch) return { notes: rawNotes, url: '' };
+
+  const [releaseUrl, owner, repo, tag] = urlMatch;
+
+  // If there's meaningful content beyond the URL, keep it.
+  const stripped = rawNotes.replace(releaseUrl, '').replace(/^See\s*/i, '').trim();
+  if (stripped.length > 20) return { notes: rawNotes, url: releaseUrl };
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`, {
+      headers: { Accept: 'application/vnd.github.v3+json' },
+    });
+    if (!res.ok) return { notes: rawNotes, url: releaseUrl };
+    const data = await res.json() as { body?: string };
+    const body = data.body?.trim() ?? '';
+    // Only use API body if it's richer than the original
+    if (body && body.length > stripped.length + 10) {
+      return { notes: body, url: releaseUrl };
+    }
+  } catch {
+    // ignore — fall back to raw notes
+  }
+
+  return { notes: rawNotes, url: releaseUrl };
+}
 
 export async function checkForUpdate(force = false): Promise<UpdateInfo | null> {
   const store = useSettingsStore.getState();
@@ -34,9 +64,12 @@ export async function checkForUpdate(force = false): Promise<UpdateInfo | null> 
 
     _pendingUpdate = update;
 
+    const { notes, url } = await enrichReleaseNotes(update.body ?? '');
+
     const info: UpdateInfo = {
       version: update.version.replace(/^v/, ''),
-      releaseNotes: update.body ?? '',
+      releaseNotes: notes,
+      releaseUrl: url,
       publishedAt: update.date ?? '',
     };
 
