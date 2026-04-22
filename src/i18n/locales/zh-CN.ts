@@ -1347,6 +1347,7 @@ const zhCN: TranslationDict = {
     restartToInstall: '重启以完成更新',
     downloadFailed: '下载更新失败',
     retry: '重试',
+    viewOnGitHub: '在 GitHub 查看完整更新说明',
   },
 
   about: {

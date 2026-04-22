@@ -1327,6 +1327,7 @@ export interface TranslationDict {
     restartToInstall: string;
     downloadFailed: string;
     retry: string;
+    viewOnGitHub: string;
   };
 
   // About
