@@ -58,6 +58,8 @@ type ProviderConfig = {
 export const PROVIDER_CONFIGS = {
   volcengine: {
     name: '火山引擎 (Volcengine)',
+    // Coding Plan aggregator endpoint — multi-vendor, strict OpenAI tool schema only.
+    // No private extensions like Ark's `web_search`, so no webSearch capability here.
     baseUrl: 'https://ark.cn-beijing.volces.com/api/coding/v3',
     format: 'openai-compatible',
     models: [
@@ -70,9 +72,6 @@ export const PROVIDER_CONFIGS = {
       { id: 'deepseek-v3.2', label: 'DeepSeek V3.2' },
       { id: 'kimi-k2.5', label: 'Kimi K2.5' },
     ],
-    capabilities: {
-      webSearch: { type: 'tool', toolSpec: { type: 'web_search', web_search: { enable: true } } },
-    },
   },
   bailian: {
     name: '阿里百炼 (Bailian)',
@@ -944,7 +943,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'abu-settings',
-      version: 21,
+      version: 22,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>;
 
@@ -964,6 +963,29 @@ export const useSettingsStore = create<SettingsStore>()(
             );
           }
         };
+
+        // ════════════════════════════════════════════════
+        // V22: Strip stale `capabilities.webSearch` from persisted Volcengine
+        // provider. Volcengine's Coding Plan endpoint (/api/coding/v3) is a
+        // multi-vendor aggregator that only accepts strict OpenAI function-form
+        // tools; the previously-declared `{type:'web_search', web_search:{...}}`
+        // toolSpec was unconditionally injected into body.tools and made every
+        // request crash with "missing tools.function parameter". The capability
+        // was removed from PROVIDER_CONFIGS; this one-shot cleanup makes UI
+        // badges (ProviderCard, ModelSelector, AIServicesSection) agree with
+        // the actual endpoint behavior for users who upgraded.
+        // ════════════════════════════════════════════════
+        if (version < 22) step('V22 strip volcengine webSearch', () => {
+          if (!Array.isArray(state.providers)) return;
+          state.providers = (state.providers as Array<Record<string, unknown>>).map((p) => {
+            if (p.id !== 'volcengine') return p;
+            const caps = p.capabilities as Record<string, unknown> | undefined;
+            if (!caps || !('webSearch' in caps)) return p;
+            const { webSearch: _webSearch, ...rest } = caps;
+            void _webSearch;
+            return { ...p, capabilities: Object.keys(rest).length > 0 ? rest : undefined };
+          });
+        });
 
         // ════════════════════════════════════════════════
         // V21: One-shot trim pass on stored baseUrl/apiKey for providers and
