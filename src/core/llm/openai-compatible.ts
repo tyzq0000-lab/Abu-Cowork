@@ -1,5 +1,5 @@
 import type { LLMAdapter, ChatOptions } from './adapter';
-import { classifyError } from './adapter';
+import { LLMError, classifyError } from './adapter';
 import type { Message, StreamEvent, ToolDefinition } from '../../types';
 import { getTauriFetch } from './tauriFetch';
 import { normalizeMessages } from './messageNormalizer';
@@ -620,6 +620,14 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         }
         onEvent({ type: 'done', stopReason: toolCallBuffers.size > 0 ? 'tool_use' : 'end_turn' });
       }
+    } catch (streamErr) {
+      // Wrap raw network/decode errors (e.g. "error decoding response body" from
+      // gateway disconnects) as retryable LLMErrors so withRetry can handle them.
+      if (!(streamErr instanceof LLMError)) {
+        const msg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+        throw new LLMError(msg, 'network_error', { retryable: true });
+      }
+      throw streamErr;
     } finally {
       heartbeat.clear();
       reader.releaseLock();
