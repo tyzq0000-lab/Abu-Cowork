@@ -272,6 +272,16 @@ export function CollapsibleCodeBlock({ codeString, language }: { codeString: str
   );
 }
 
+// Close any unclosed code fence so interrupted streams don't spill content as plain text.
+// Counts fence-opening lines (starting with 3+ backticks); appends a closing fence if odd.
+function closeOpenFences(text: string): string {
+  let inFence = false;
+  for (const line of text.split('\n')) {
+    if (/^`{3,}/.test(line)) inFence = !inFence;
+  }
+  return inFence ? text + '\n```' : text;
+}
+
 // Stable references — avoid recreating on every render
 const remarkPluginsStable = [remarkGfm, remarkBreaks];
 const SAFE_URL_PATTERN = /^(https?:\/\/|mailto:|tel:|#)/i;
@@ -422,7 +432,7 @@ export default memo(function MarkdownRenderer({ content, searchResults, onCitati
       remarkPlugins={remarkPluginsStable}
       components={components}
     >
-      {content}
+      {closeOpenFences(content)}
     </ReactMarkdown>
   );
 });

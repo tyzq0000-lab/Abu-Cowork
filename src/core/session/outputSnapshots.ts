@@ -377,13 +377,18 @@ export async function snapshotFile(
 export async function snapshotToolOutputs(
   convId: string,
   toolCall: { id: string; name: string; input: Record<string, unknown>; result: string },
+  workspacePath?: string | null,
 ): Promise<void> {
   const outputs = extractFileOutputs([toolCall as ToolCall], { includeReads: false });
   const targets = outputs.filter((o) => o.operation === 'create' || o.operation === 'write');
   if (targets.length === 0) return;
 
   for (const { path } of targets) {
-    await snapshotFile(convId, path, {
+    // Resolve relative paths against the workspace so snapshotFile can stat them.
+    const resolvedPath = (!isAbsolutePath(path) && workspacePath)
+      ? joinPath(workspacePath, path)
+      : path;
+    await snapshotFile(convId, resolvedPath, {
       source: 'tool-output',
       refId: toolCall.id,
       refKind: toolCall.name,
@@ -447,6 +452,7 @@ export async function snapshotCodeBlockSave(
 export async function resolveFileSource(
   convId: string | undefined,
   originalPath: string,
+  workspacePath?: string | null,
 ): Promise<ResolvedSource> {
   const basename = getBaseName(originalPath);
 
@@ -458,6 +464,18 @@ export async function resolveFileSource(
   if (expandedPath && isAbsolutePath(expandedPath)) {
     if (await exists(expandedPath)) {
       return { status: 'available', path: expandedPath, isFromSnapshot: false };
+    }
+  }
+
+  // 1.5. Relative path + known workspace — probe workspace-relative location.
+  // Handles the case where the AI wrote a file with a bare name (e.g. "报告.docx")
+  // relative to the workspace CWD; extractFileOutputs captures the bare basename
+  // and the snapshot was stored under the absolute path, but the live file check
+  // (step 1) was skipped because the path isn't absolute.
+  if (!isAbsolutePath(expandedPath ?? '') && basename && workspacePath) {
+    const candidate = joinPath(workspacePath, basename);
+    if (await exists(candidate)) {
+      return { status: 'available', path: candidate, isFromSnapshot: false };
     }
   }
 

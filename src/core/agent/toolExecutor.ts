@@ -374,13 +374,14 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
       // Fire-and-forget: snapshot failures must never block the agent loop.
       // Uses the un-offloaded toolResult so extractFileOutputs can still parse stdout.
       if (!error && matchedTc) {
+        const workspacePath = useChatStore.getState().conversations[conversationId]?.workspacePath ?? null;
         import('../session/outputSnapshots').then(({ snapshotToolOutputs }) => {
           snapshotToolOutputs(conversationId, {
             id,
             name: matchedTc.name,
             input: matchedTc.input,
             result: toolResult,
-          }).catch((e) => logger.warn('snapshot tool output failed', { tool: matchedTc.name, err: e }));
+          }, workspacePath).catch((e) => logger.warn('snapshot tool output failed', { tool: matchedTc.name, err: e }));
         }).catch(() => {});
       }
 

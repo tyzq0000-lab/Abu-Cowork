@@ -104,6 +104,7 @@ export default function FileAttachment({ filePath }: FileAttachmentProps) {
   // once the async install settles, instead of getting stuck on the empty
   // snapshot it saw on first render.
   const outputsRev = useChatStore((s) => (conversationId ? s.outputsRev[conversationId] ?? 0 : 0));
+  const workspacePath = useChatStore((s) => (conversationId ? (s.conversations[conversationId]?.workspacePath ?? null) : null));
   const { t } = useI18n();
   const { icon: Icon, label, category } = getFileTypeInfo(filePath);
   const fileName = getBaseName(filePath);
@@ -116,13 +117,13 @@ export default function FileAttachment({ filePath }: FileAttachmentProps) {
   // Re-runs when outputsRev bumps so async share-import writes become visible.
   useEffect(() => {
     let cancelled = false;
-    resolveFileSource(conversationId, filePath)
+    resolveFileSource(conversationId, filePath, workspacePath)
       .then((r) => { if (!cancelled) setResolved(r); })
       .catch(() => {
         if (!cancelled) setResolved({ status: 'missing', basename: getBaseName(filePath), originalPath: filePath });
       });
     return () => { cancelled = true; };
-  }, [filePath, conversationId, outputsRev]);
+  }, [filePath, conversationId, outputsRev, workspacePath]);
 
   // Effective path: where to actually read bytes from for thumbnail / preview / open-with.
   // null when the file is not loadable (skipped/missing/loading).

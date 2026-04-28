@@ -902,7 +902,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       const modelCaps = resolveCapabilities(effectiveModelId);
 
       // Determine dynamic maxTokens — use model caps as default, user settings as override
-      let maxOutputTokens = freshSettings.enableThinking && modelCaps.thinking
+      const autoThinking = modelCaps.thinking === 'anthropic';
+      let maxOutputTokens = autoThinking
         ? Math.max(freshSettings.maxOutputTokens ?? modelCaps.maxOutputTokens, 16384)
         : (freshSettings.maxOutputTokens ?? modelCaps.maxOutputTokens);
       const contextWindowSize = freshSettings.contextWindowSize ?? modelCaps.contextWindow;
@@ -1037,9 +1038,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         tools: tools.length > 0 ? tools : undefined,
         maxTokens: maxOutputTokens,
         signal: abortController.signal,
-        temperature: freshSettings.temperature,
-        enableThinking: freshSettings.enableThinking && modelCaps.thinking !== false,
-        thinkingBudget: freshSettings.thinkingBudget,
+        enableThinking: autoThinking,
+        thinkingBudget: 10000,
         supportsVision: modelCaps.vision,
         builtinWebSearch,
       };
@@ -1214,16 +1214,16 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
           chatFn,
           { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000 },
           abortController.signal,
-          (attempt, error, delayMs) => {
-            // Show rate-limited status in UI when it's a rate limit error
+          (_attempt, error, delayMs) => {
+            // Show rate-limited status in UI via status bar (not message body).
             if (error.code === 'rate_limit') {
               chatStore.setAgentStatus('rate-limited', `${Math.round(delayMs / 1000)}s`);
             }
-            chatStore.appendToLastMessage(
-              conversationId,
-              `\n*${error.code === 'rate_limit' ? 'API 限流' : '重试'}中 (${attempt})... ${Math.round(delayMs / 1000)}s 后重试*`,
-              assistantMsgId
-            );
+            // Clear any partial content written before the stream failed so
+            // the retry starts with a clean message instead of appending to
+            // a truncated or corrupted response.
+            flushTokenBuffer(conversationId, assistantMsgId);
+            chatStore.setLastMessageContent(conversationId, '', assistantMsgId);
           }
         );
       } catch (retryErr) {
