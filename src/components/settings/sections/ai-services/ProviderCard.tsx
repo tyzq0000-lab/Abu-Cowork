@@ -154,7 +154,12 @@ export default function ProviderCard({ provider, isActive }: ProviderCardProps) 
     const result = await fetchProviderModels(formBaseUrl, formApiKey, provider.apiFormat);
     setFetchingModels(false);
     if (result.success && result.models.length > 0) {
-      setFormModels(result.models);
+      setFormModels((prev) => {
+        const customModels = prev.filter((m) => m.isCustom);
+        const fetchedIds = new Set(result.models.map((m) => m.id));
+        const preserved = customModels.filter((m) => !fetchedIds.has(m.id));
+        return [...result.models, ...preserved];
+      });
       setFetchModelsMsg({ ok: true, text: `获取到 ${result.models.length} 个模型` });
     } else {
       setFetchModelsMsg({ ok: false, text: result.error ?? '获取失败，请手动添加' });
@@ -238,7 +243,7 @@ export default function ProviderCard({ provider, isActive }: ProviderCardProps) 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-medium text-[var(--abu-text-tertiary)]">{t.settings.models}</label>
-            {provider.apiFormat !== 'anthropic' && (
+            {!isOllama && provider.apiFormat !== 'anthropic' && (
               <button
                 type="button"
                 onClick={handleFetchModels}
