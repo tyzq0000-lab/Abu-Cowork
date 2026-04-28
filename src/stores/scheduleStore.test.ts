@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useScheduleStore, computeNextRunAt, applyCatchupOnRehydrate } from './scheduleStore';
 import type { ScheduleConfig, ScheduledTask } from '../types/schedule';
 
@@ -261,6 +261,17 @@ describe('scheduleStore', () => {
 
   // ── applyCatchupOnRehydrate (cold-start catchup) ──
   describe('applyCatchupOnRehydrate', () => {
+    // Pin wall clock to 14:00 UTC so daily/weekly boundary calculations
+    // never coincide with the test's "now", preventing flaky failures
+    // when CI runs between 09:00–10:00 UTC (the default schedule hour).
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-15T14:00:00.000Z'));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     // Local helper: build only the fields the catchup logic touches. The
     // rest of ScheduledTask is filled with safe defaults via the cast —
     // the test would fail loudly if applyCatchupOnRehydrate started
