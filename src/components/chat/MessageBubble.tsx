@@ -28,6 +28,10 @@ function UserImageThumbnail({ image }: { image: Extract<MessageContent, { type: 
   const { t } = useI18n();
   const openPreview = usePreviewStore.getState().openPreview;
   const conversationId = useChatStore((s) => s.activeConversationId) ?? undefined;
+  const workspacePath = useChatStore((s) => {
+    const id = s.activeConversationId;
+    return id ? (s.conversations[id]?.workspacePath ?? null) : null;
+  });
   const hasData = !!image.source.data;
   const [diskSrc, setDiskSrc] = useState<string | null>(null);
   const [effectivePath, setEffectivePath] = useState<string | null>(null);
@@ -41,7 +45,7 @@ function UserImageThumbnail({ image }: { image: Extract<MessageContent, { type: 
     // Try original first; fall back to snapshot via resolveFileSource
     (async () => {
       const { resolveFileSource } = await import('@/core/session/outputSnapshots');
-      const resolved = await resolveFileSource(conversationId, image.filePath!);
+      const resolved = await resolveFileSource(conversationId, image.filePath!, workspacePath);
       if (cancelled) return;
       if (resolved.status !== 'available') {
         setExpired(true);
@@ -59,7 +63,7 @@ function UserImageThumbnail({ image }: { image: Extract<MessageContent, { type: 
     })();
 
     return () => { cancelled = true; if (revoke) URL.revokeObjectURL(revoke); };
-  }, [hasData, image.filePath, conversationId]);
+  }, [hasData, image.filePath, conversationId, workspacePath]);
 
   const src = hasData
     ? `data:${image.source.media_type};base64,${image.source.data}`
