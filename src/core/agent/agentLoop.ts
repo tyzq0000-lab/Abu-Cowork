@@ -109,6 +109,33 @@ async function saveUserImagesToDisk(
     return images.map(() => undefined);
   }
 }
+
+/**
+ * Build a user message content (string or multimodal blocks) from raw text + optional images.
+ * Persists images to disk so they survive localStorage stripping. Used by both the normal
+ * agent loop path and the API-key-missing early-return path so user input is never dropped.
+ */
+async function buildUserMessageContent(
+  conversationId: string,
+  text: string,
+  images: ImageAttachment[] | undefined,
+): Promise<string | MessageContent[]> {
+  if (!images || images.length === 0) return text;
+  const savedPaths = await saveUserImagesToDisk(conversationId, images);
+  const blocks: MessageContent[] = images.map((img, i) => ({
+    type: 'image' as const,
+    source: {
+      type: 'base64' as const,
+      media_type: img.mediaType,
+      data: img.data,
+    },
+    filePath: savedPaths[i],
+  }));
+  if (text) {
+    blocks.push({ type: 'text' as const, text });
+  }
+  return blocks;
+}
 import {
   clearLoopContext,
   requestCommandConfirmation,
@@ -512,6 +539,17 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   });
 
   if (providerRequiresApiKey(settings) && !getActiveApiKey(settings)) {
+    // Persist the user's input first so the chat history isn't an orphan warning.
+    // Use raw userMessage (orchestrator hasn't run); skill metadata is intentionally omitted —
+    // the user needs to configure a key before any skill/agent routing takes effect.
+    const userContent = await buildUserMessageContent(conversationId, userMessage, options?.images);
+    chatStore.addMessage(conversationId, {
+      id: generateId(),
+      role: 'user',
+      content: userContent,
+      timestamp: Date.now(),
+      loopId,
+    });
     chatStore.addMessage(conversationId, {
       id: generateId(),
       role: 'assistant',
@@ -566,29 +604,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   setActiveModel(effectiveModelId);
 
   // Add user message with loopId (use cleanInput for display)
-  // Include skill info if a skill was triggered
-  // Build multimodal content if images are attached
-  const userImages = options?.images;
-  let userContent: string | MessageContent[];
-  if (userImages && userImages.length > 0) {
-    // Save images to disk so they survive localStorage persistence
-    const savedPaths = await saveUserImagesToDisk(conversationId, userImages);
-    const blocks: MessageContent[] = userImages.map((img, i) => ({
-      type: 'image' as const,
-      source: {
-        type: 'base64' as const,
-        media_type: img.mediaType,
-        data: img.data,
-      },
-      filePath: savedPaths[i],
-    }));
-    if (route.cleanInput) {
-      blocks.push({ type: 'text' as const, text: route.cleanInput });
-    }
-    userContent = blocks;
-  } else {
-    userContent = route.cleanInput;
-  }
+  // Include skill info if a skill was triggered; build multimodal content if images are attached
+  const userContent = await buildUserMessageContent(conversationId, route.cleanInput, options?.images);
 
   chatStore.addMessage(conversationId, {
     id: generateId(),

@@ -343,6 +343,16 @@ describe('Agent Pipeline Integration', () => {
       (m) => m.role === 'assistant' && typeof m.content === 'string' && m.content.includes('API Key'),
     );
     expect(errorMsg).toBeDefined();
+
+    // Regression: user message must also be persisted, not orphaned by the early return.
+    // Bug history: error branch only added the assistant warning, leaving the chat with
+    // a lone "请先配置 API Key" bubble and no user input above it.
+    const userMsg = conv.messages.find((m) => m.role === 'user');
+    expect(userMsg).toBeDefined();
+    expect(userMsg?.content).toBe('Hello');
+    // User and assistant messages should share the same loopId (one logical turn).
+    expect(userMsg?.loopId).toBeDefined();
+    expect(userMsg?.loopId).toBe(errorMsg?.loopId);
   });
 
   it('escalateMaxOutputTokens pure function works correctly', () => {

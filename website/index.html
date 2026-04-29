@@ -43,10 +43,40 @@
             <h1>交给阿布就行啦</h1>
             <p class="tagline">本地运行的 AI 桌面办公助手<br>你说需求，阿布干活 — 读文件、跑命令、写文档、做报表</p>
             <div class="hero-buttons">
-                <a href="https://github.com/PM-Shawn/Abu-Cowork/releases/latest" target="_blank" rel="noopener" class="btn btn-primary">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                    下载最新版本
-                </a>
+                <div class="download-dropdown" id="downloadDropdown">
+                    <button class="btn btn-primary dl-trigger" id="dlChevron" aria-expanded="false">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span id="dlPrimaryLabel">下载最新版本</span>
+                        <svg class="dl-chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    <div class="dl-menu" id="dlMenu" hidden>
+                        <a href="https://github.com/PM-Shawn/Abu-Cowork/releases/latest" id="dlMacSilicon" class="dl-menu-item" target="_blank" rel="noopener">
+                            <svg class="dl-menu-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                            <div class="dl-menu-info">
+                                <span class="dl-menu-name">macOS Apple Silicon</span>
+                                <span class="dl-menu-sub">.dmg · M 系列芯片</span>
+                            </div>
+                        </a>
+                        <a href="https://github.com/PM-Shawn/Abu-Cowork/releases/latest" id="dlMacIntel" class="dl-menu-item" target="_blank" rel="noopener">
+                            <svg class="dl-menu-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+                            <div class="dl-menu-info">
+                                <span class="dl-menu-name">macOS Intel</span>
+                                <span class="dl-menu-sub">.dmg · x86_64</span>
+                            </div>
+                        </a>
+                        <a href="https://github.com/PM-Shawn/Abu-Cowork/releases/latest" id="dlWindows" class="dl-menu-item" target="_blank" rel="noopener">
+                            <svg class="dl-menu-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                            <div class="dl-menu-info">
+                                <span class="dl-menu-name">Windows</span>
+                                <span class="dl-menu-sub">.exe · x64</span>
+                            </div>
+                        </a>
+                        <div class="dl-menu-footer">
+                            <span id="dlVersion"></span>
+                            <a href="https://github.com/PM-Shawn/Abu-Cowork/releases" target="_blank" rel="noopener">所有版本</a>
+                        </div>
+                    </div>
+                </div>
                 <a href="https://github.com/PM-Shawn/Abu-Cowork" target="_blank" rel="noopener" class="btn btn-secondary">
                     <svg class="icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
                     Star on GitHub
@@ -77,10 +107,10 @@
             <div class="feature-grid">
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                     </div>
-                    <h3>对话式交互</h3>
-                    <p>用自然语言描述需求，对话即指令。告别繁琐操作，阿布帮你搞定。</p>
+                    <h3>自进化 Skills</h3>
+                    <p>跑完复杂流程后，阿布主动提议「固化成技能」，一键生成草稿，审阅上架后下次直接调用。越用越专属于你的工作流。</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">
@@ -94,7 +124,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
                     </div>
                     <h3>Skill 技能系统</h3>
-                    <p>内置 Office 文档、设计创作、开发辅助等 25+ 技能，一键安装，支持自定义。</p>
+                    <p>内置 28 个技能，覆盖 Office 文档、设计创作、浏览器自动化、开发辅助等场景，一键安装，支持自定义扩展。</p>
                 </div>
                 <div class="feature-card">
                     <div class="feature-icon">
@@ -136,7 +166,28 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
                     </div>
                     <h3>多模型支持</h3>
-                    <p>支持 Claude、DeepSeek、通义千问、豆包、Moonshot、智谱等主流模型。</p>
+                    <p>支持 Claude、DeepSeek、通义千问、豆包、Moonshot、智谱等主流模型，以及 Ollama 本地模型零配置接入。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 8h10"/><path d="M7 12h6"/></svg>
+                    </div>
+                    <h3>Projects 管理</h3>
+                    <p>工作区可升级为 Project，相关对话自动聚合归类，每个项目独立配置默认模型、技能集、MCP，一次设置长期生效。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                    </div>
+                    <h3>对话分享</h3>
+                    <p>把与阿布的对话打包成 .abuShare 文件发给朋友，对方导入后即可查看完整记录，AI 生成的附件也一并打包带走。</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    </div>
+                    <h3>智能通知</h3>
+                    <p>任务完成、消息提醒通过菜单栏图标和侧边栏角标推送；全屏或勿扰时暂存 inbox，回到窗口可见未读提醒。</p>
                 </div>
             </div>
         </div>
@@ -182,7 +233,7 @@
                         <div class="screenshot-card">
                             <img src="assets/screenshot-skills.png" alt="Skill 技能" loading="lazy">
                             <div class="screenshot-label">Skill 技能</div>
-                            <p class="screenshot-caption">内置 25+ 技能，支持自定义扩展</p>
+                            <p class="screenshot-caption">内置 28 个技能，支持自定义扩展</p>
                         </div>
                         <div class="screenshot-card">
                             <img src="assets/screenshot-mcp.png" alt="MCP 连接器" loading="lazy">
@@ -335,7 +386,7 @@
                 </div>
             </div>
             <div class="community-links">
-                <a href="https://github.com/PM-Shawn/Abu-Cowork/releases/latest" target="_blank" rel="noopener" class="btn btn-primary">
+                <a href="https://github.com/PM-Shawn/Abu-Cowork/releases/latest" id="dlCommunity" target="_blank" rel="noopener" class="btn btn-primary">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                     下载最新版本
                 </a>
@@ -430,6 +481,99 @@
     </footer>
 
     <script>
+        // Dynamic download links from OSS latest.json → GitHub API fallback
+        (function () {
+            const OSS_LATEST = 'https://abu-agent.oss-cn-beijing.aliyuncs.com/latest.json';
+            const OSS_BASE   = 'https://abu-agent.oss-cn-beijing.aliyuncs.com';
+            const GH_API     = 'https://api.github.com/repos/PM-Shawn/Abu-Cowork/releases/latest';
+            const GH_LATEST  = 'https://github.com/PM-Shawn/Abu-Cowork/releases/latest';
+
+            function detectPlatform() {
+                const ua = navigator.userAgent;
+                if (/Win/i.test(ua)) return 'windows';
+                if (/Mac/i.test(ua)) return 'mac';
+                return 'other';
+            }
+
+            function applyLinks(tag, urls) {
+                document.getElementById('dlMacSilicon').href = urls.macSilicon;
+                document.getElementById('dlMacIntel').href   = urls.macIntel;
+                document.getElementById('dlWindows').href    = urls.windows;
+
+                const platform = detectPlatform();
+                const label    = document.getElementById('dlPrimaryLabel');
+                if (platform === 'windows') {
+                    label.textContent = `下载 ${tag}  ·  Windows`;
+                } else if (platform === 'mac') {
+                    label.textContent = `下载 ${tag}  ·  macOS`;
+                } else {
+                    label.textContent = `下载 ${tag}`;
+                }
+
+                const dlCommunity = document.getElementById('dlCommunity');
+                if (dlCommunity) {
+                    dlCommunity.href = platform === 'windows' ? urls.windows : urls.macSilicon;
+                }
+
+                const versionEl = document.getElementById('dlVersion');
+                if (versionEl) versionEl.textContent = tag;
+            }
+
+            function applyFromOSS(tag) {
+                const ver  = tag.replace(/^v/, '');
+                const base = `${OSS_BASE}/releases/${tag}`;
+                applyLinks(tag, {
+                    macSilicon: `${base}/Abu_${ver}_aarch64.dmg`,
+                    macIntel:   `${base}/Abu_${ver}_x64.dmg`,
+                    windows:    `${base}/Abu_${ver}_x64-setup.exe`,
+                });
+            }
+
+            function applyFromGitHub(release) {
+                const tag    = release.tag_name;
+                const assets = release.assets || [];
+                const find   = (re) => {
+                    const a = assets.find(a => re.test(a.name));
+                    return a ? a.browser_download_url : GH_LATEST;
+                };
+                applyLinks(tag, {
+                    macSilicon: find(/aarch64.*\.dmg$/i),
+                    macIntel:   find(/x64.*\.dmg$/i),
+                    windows:    find(/setup\.exe$/i),
+                });
+            }
+
+            // Try OSS first, fall back to GitHub API
+            fetch(OSS_LATEST, { cache: 'no-cache' })
+                .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                .then(d => applyFromOSS(d.version))
+                .catch(() =>
+                    fetch(GH_API)
+                        .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                        .then(d => applyFromGitHub(d))
+                        .catch(() => { /* both failed, links stay on GH_LATEST page */ })
+                );
+
+            // Dropdown toggle
+            const chevron = document.getElementById('dlChevron');
+            const menu    = document.getElementById('dlMenu');
+            if (chevron && menu) {
+                chevron.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const open = !menu.hidden;
+                    menu.hidden = open;
+                    chevron.setAttribute('aria-expanded', String(!open));
+                    chevron.classList.toggle('open', !open);
+                });
+                document.addEventListener('click', () => {
+                    menu.hidden = true;
+                    chevron.setAttribute('aria-expanded', 'false');
+                    chevron.classList.remove('open');
+                });
+                menu.addEventListener('click', e => e.stopPropagation());
+            }
+        })();
+
         // Navbar scroll effect
         let lastScroll = 0;
         const navbar = document.getElementById('navbar');

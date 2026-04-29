@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { FileCode, FileText, FileImage, File, FileJson, ExternalLink, Globe, SquareArrowOutUpRight, Presentation, Sheet, FileType2, FileSearch, FileX, FileWarning } from 'lucide-react';
 import { usePreviewStore } from '@/stores/previewStore';
 import { useChatStore } from '@/stores/chatStore';
+import { useToastStore } from '@/stores/toastStore';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { loadLocalImage, getBaseName, isLocalFilePath } from '@/utils/pathUtils';
@@ -152,24 +153,24 @@ export default function FileAttachment({ filePath }: FileAttachmentProps) {
 
   const handleOpenWithDefaultApp = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!effectivePath) return;
-    try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const platform = navigator.platform.toLowerCase();
-      const command = platform.includes('win')
-        ? `start "" "${effectivePath}"`
-        : platform.includes('linux')
-          ? `xdg-open "${effectivePath}"`
-          : `open "${effectivePath}"`;
-      await invoke('run_shell_command', {
-        command,
-        cwd: null,
-        background: true,
-        timeout: 5,
-        sandboxEnabled: false,
+    if (!effectivePath) {
+      useToastStore.getState().addToast({
+        type: 'error',
+        title: t.chat.openFailed,
+        message: t.chat.fileMissing,
       });
+      return;
+    }
+    try {
+      const { openPath } = await import('@tauri-apps/plugin-opener');
+      await openPath(effectivePath);
     } catch (err) {
       console.error('[FileAttachment] Failed to open with default app:', err);
+      useToastStore.getState().addToast({
+        type: 'error',
+        title: t.chat.openFailed,
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   };
 

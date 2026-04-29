@@ -125,6 +125,7 @@ const enUS: TranslationDict = {
     openInFinder: 'Show in File Manager',
     openInBrowser: 'Open in Browser',
     openWithDefaultApp: 'Open',
+    openFailed: 'Failed to open file',
     clickToPreview: 'Click to preview',
     fileMissing: 'File no longer accessible',
     fileOversized: 'File too large to auto-backup',
