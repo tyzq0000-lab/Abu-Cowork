@@ -125,6 +125,7 @@ const zhCN: TranslationDict = {
     openInFinder: '在文件管理器中显示',
     openInBrowser: '在浏览器中打开',
     openWithDefaultApp: '打开',
+    openFailed: '无法打开文件',
     clickToPreview: '点击预览',
     fileMissing: '文件已不可访问',
     fileOversized: '文件过大未自动备份',

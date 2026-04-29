@@ -142,6 +142,7 @@ export interface TranslationDict {
     openInFinder: string;
     openInBrowser: string;
     openWithDefaultApp: string;
+    openFailed: string;
     clickToPreview: string;
     fileMissing: string;
     fileOversized: string;
