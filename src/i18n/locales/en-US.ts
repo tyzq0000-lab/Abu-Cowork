@@ -43,6 +43,16 @@ const enUS: TranslationDict = {
     legacyHint: 'Legacy memory (will be auto-migrated on next conversation)',
     emptyHint: 'AI will automatically accumulate memories during conversations',
     globalMemories: 'Global Memories',
+    bulkCleanup: 'Bulk cleanup',
+    bulkExit: 'Exit cleanup',
+    bulkSelected: '{count} selected',
+    bulkSelectAutoFlushUnused: 'Select auto-extracted & unused',
+    bulkSelectStale: 'Select 30+ days unused',
+    bulkSelectAll: 'Select all',
+    bulkClearSelection: 'Clear selection',
+    bulkDelete: 'Delete selected',
+    bulkConfirmTitle: 'Bulk Delete Memories',
+    bulkConfirmMessage: '{count} memories will be permanently deleted. This cannot be undone.',
   },
 
   soul: {

@@ -43,6 +43,16 @@ const zhCN: TranslationDict = {
     legacyHint: '旧版记忆（将在下次对话时自动迁移为结构化格式）',
     emptyHint: '对话时 AI 会自动积累记忆，或你可以让 AI "记住这个"',
     globalMemories: '全局记忆',
+    bulkCleanup: '批量整理',
+    bulkExit: '退出整理',
+    bulkSelected: '已选 {count} 条',
+    bulkSelectAutoFlushUnused: '勾选自动提取且从未使用',
+    bulkSelectStale: '勾选 30 天未使用',
+    bulkSelectAll: '全选',
+    bulkClearSelection: '清空选择',
+    bulkDelete: '删除选中',
+    bulkConfirmTitle: '批量删除记忆',
+    bulkConfirmMessage: '将永久删除 {count} 条记忆，此操作不可撤销',
   },
 
   soul: {
