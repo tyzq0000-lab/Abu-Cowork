@@ -925,6 +925,7 @@ export interface TranslationDict {
     instructionsDesc: string;
     instructionsPlaceholder: string;
     instructionsSaving: string;
+    instructionsSaveFailed: string;
     memory: string;
     memoryEmpty: string;
     memoryTitle: string;

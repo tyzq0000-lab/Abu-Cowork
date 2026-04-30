@@ -952,6 +952,7 @@ const enUS: TranslationDict = {
     instructionsDesc: 'Tell Abu how to work in this project. Loaded automatically in every conversation.',
     instructionsPlaceholder: 'Example:\nThis is a React + Tailwind admin dashboard\nUse pnpm for dependencies, run pnpm dev to start\nCode style follows ESLint config, pre-commit checks enabled',
     instructionsSaving: 'Saving...',
+    instructionsSaveFailed: 'Failed to save',
     memory: 'Project Memory',
     memoryEmpty: 'Project Memory · None',
     memoryTitle: 'Project Memory',

@@ -36,6 +36,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
@@ -51,6 +53,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
@@ -66,6 +70,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**/.abu/**" },
@@ -77,6 +83,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**/.abu/**" },
@@ -90,6 +98,8 @@
         { "path": "$HOME/.abu/**" },
         { "path": "$HOME/.abu/**/.trash" },
         { "path": "$HOME/.abu/**/.trash/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
@@ -107,6 +117,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
@@ -126,6 +138,8 @@
         { "path": "$HOME/.abu/**" },
         { "path": "$HOME/.abu/**/.trash" },
         { "path": "$HOME/.abu/**/.trash/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "/Volumes/**/.abu" },
         { "path": "/Volumes/**/.abu/**" },
         { "path": "/Volumes/**/.abu/**/.trash" },
@@ -137,7 +151,8 @@
       "identifier": "fs:allow-remove",
       "allow": [
         { "path": "$HOME/.abu/**" },
-        { "path": "$HOME/.abu/**/.trash/**" }
+        { "path": "$HOME/.abu/**/.trash/**" },
+        { "path": "$HOME/**/.abu/**" }
       ]
     },
     {
@@ -145,6 +160,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
@@ -160,6 +177,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
@@ -173,6 +192,8 @@
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
         { "path": "$HOME/.abu/**/.trash/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },
@@ -195,6 +216,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/**/.abu" },
+        { "path": "$HOME/**/.abu/**" },
         { "path": "/tmp/**" },
         { "path": "/private/tmp/**" },
         { "path": "/Volumes/**" },

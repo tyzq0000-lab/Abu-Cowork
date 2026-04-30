@@ -953,6 +953,7 @@ const zhCN: TranslationDict = {
     instructionsDesc: '告诉阿布在这个项目中如何工作，每次对话都会自动加载。',
     instructionsPlaceholder: '示例：\n这个项目是基于 React + Tailwind 的后台管理系统\n使用 pnpm 管理依赖，运行 pnpm dev 启动开发\n代码风格遵循 ESLint 配置，提交前会自动检查',
     instructionsSaving: '保存中...',
+    instructionsSaveFailed: '保存失败',
     memory: '项目记忆',
     memoryEmpty: '项目记忆 · 暂无',
     memoryTitle: '项目记忆',
