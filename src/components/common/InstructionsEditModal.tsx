@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useI18n } from '@/i18n';
 import { readTextFile, writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
 import { joinPath } from '@/utils/pathUtils';
@@ -50,7 +51,7 @@ export default function InstructionsEditModal({ open, onClose, workspacePath }: 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!open || typeof document === 'undefined') return null;
 
   const handleSave = async () => {
     setSaving(true);
@@ -71,7 +72,7 @@ export default function InstructionsEditModal({ open, onClose, workspacePath }: 
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 animate-in fade-in duration-150"
       onMouseDown={(e) => {
@@ -125,6 +126,7 @@ export default function InstructionsEditModal({ open, onClose, workspacePath }: 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
