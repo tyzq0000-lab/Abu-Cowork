@@ -379,7 +379,7 @@ export async function snapshotToolOutputs(
   toolCall: { id: string; name: string; input: Record<string, unknown>; result: string },
   workspacePath?: string | null,
 ): Promise<void> {
-  const outputs = extractFileOutputs([toolCall as ToolCall], { includeReads: false });
+  const outputs = extractFileOutputs([toolCall as ToolCall], { mode: 'deliverables', includeReads: false });
   const targets = outputs.filter((o) => o.operation === 'create' || o.operation === 'write');
   if (targets.length === 0) return;
 

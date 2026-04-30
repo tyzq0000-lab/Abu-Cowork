@@ -287,14 +287,20 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
   // 'thinking' status from injecting a phantom thinking step into completed groups
   const workflowSteps = extractWorkflowSteps(allToolCalls, thinkingContent, isStreaming ? agentStatus : undefined, skillInfo, thinkingDuration);
 
-  // Extract file outputs for attachments
-  // Source 1: tool calls (reliable). Source 2: last assistant message text (for announced paths)
+  // Extract file outputs for attachments — deliverables semantics: only show
+  // what the AI actually produced this turn. extractFileOutputs (deliverables
+  // mode) applies the DOCUMENT_EXTENSIONS whitelist + script filtering.
+  //
+  // Source 1: tool calls (reliable, primary). Source 2: last assistant message
+  // text — fallback for paths the LLM announces in prose ("已保存到 X") but
+  // never appear in toolCall.input.path (e.g. python subprocess writing files
+  // not visible to the agent loop).
   const fileOutputs = useMemo(() => {
-    const files = extractFileOutputs(allToolCalls);
-    // Deduplicate by both full path and basename
+    const files = extractFileOutputs(allToolCalls, { mode: 'deliverables' });
+    // Path-only dedup for the text fallback. basename dedup was removed
+    // (cross-turn same-basename writes are legitimate, e.g. todo skill
+    // writing 2026-04-{28,29,30}.md).
     const seenPaths = new Set(files.map(f => f.path));
-    const seenBasenames = new Set(files.map(f => f.path.split('/').pop() || f.path));
-    // Only check the LAST assistant message for file paths (final result, not intermediate narration)
     const lastMsg = assistantMsgs[assistantMsgs.length - 1];
     if (lastMsg) {
       const text = getTextContent(lastMsg.content);
@@ -309,10 +315,8 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
             .replace(/[*_`~)）\]】}"'。，,;；:：.]+$/, '')
             .trim().replace(/\\/g, '/');
           if (!p) continue;
-          const basename = p.split('/').pop() || p;
-          if (!seenPaths.has(p) && !seenBasenames.has(basename)) {
+          if (!seenPaths.has(p)) {
             seenPaths.add(p);
-            seenBasenames.add(basename);
             files.push({ path: p, operation: 'create' });
           }
         }
