@@ -47,7 +47,7 @@ const enUS: TranslationDict = {
     bulkExit: 'Exit cleanup',
     bulkSelected: '{count} selected',
     bulkSelectAutoFlushUnused: 'Select auto-extracted & unused',
-    bulkSelectStale: 'Select 30+ days unused',
+    bulkSelectUnused: 'Select all never-used',
     bulkSelectAll: 'Select all',
     bulkClearSelection: 'Clear selection',
     bulkDelete: 'Delete selected',

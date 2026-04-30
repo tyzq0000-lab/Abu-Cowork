@@ -8,8 +8,6 @@ import { useWorkspaceStore } from '@/stores/workspaceStore';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 
-const STALE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
 function getTypeLabel(type: MemoryType, t: ReturnType<typeof useI18n>['t']): string {
   const map: Record<MemoryType, string> = {
     user: t.memory.categoryPreference,
@@ -38,8 +36,11 @@ function formatAge(timestamp: number): string {
   return `${Math.floor(days / 30)}个月前`;
 }
 
-function isStale(header: MemoryHeader): boolean {
-  return Date.now() - header.updated > STALE_MS;
+function isUnused(header: MemoryHeader): boolean {
+  // Never-recalled by the agent. accessCount is now meaningful (P1 removed
+  // passive-injection bumps), so accessCount===0 means "the agent has never
+  // pulled this via recall/read_memory" — a strong cleanup-candidate signal.
+  return header.accessCount === 0;
 }
 
 function isAutoFlushUnused(header: MemoryHeader): boolean {
@@ -280,8 +281,8 @@ export default function PersonalMemorySection() {
                   <Button size="xs" variant="ghost" onClick={() => selectByFilter(isAutoFlushUnused)}>
                     {t.memory.bulkSelectAutoFlushUnused}
                   </Button>
-                  <Button size="xs" variant="ghost" onClick={() => selectByFilter(isStale)}>
-                    {t.memory.bulkSelectStale}
+                  <Button size="xs" variant="ghost" onClick={() => selectByFilter(isUnused)}>
+                    {t.memory.bulkSelectUnused}
                   </Button>
                   <Button size="xs" variant="ghost" onClick={() => selectByFilter(() => true)}>
                     {t.memory.bulkSelectAll}

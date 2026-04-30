@@ -60,7 +60,7 @@ export interface TranslationDict {
     bulkExit: string;
     bulkSelected: string;
     bulkSelectAutoFlushUnused: string;
-    bulkSelectStale: string;
+    bulkSelectUnused: string;
     bulkSelectAll: string;
     bulkClearSelection: string;
     bulkDelete: string;

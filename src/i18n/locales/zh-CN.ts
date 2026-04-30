@@ -47,7 +47,7 @@ const zhCN: TranslationDict = {
     bulkExit: '退出整理',
     bulkSelected: '已选 {count} 条',
     bulkSelectAutoFlushUnused: '勾选自动提取且从未使用',
-    bulkSelectStale: '勾选 30 天未使用',
+    bulkSelectUnused: '勾选所有从未引用',
     bulkSelectAll: '全选',
     bulkClearSelection: '清空选择',
     bulkDelete: '删除选中',
