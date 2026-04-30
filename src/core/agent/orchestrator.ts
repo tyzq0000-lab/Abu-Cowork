@@ -445,82 +445,124 @@ export async function buildSystemPromptSections(
     }
   }
 
-  // Inject memories from memdir (file-based memory system)
+  // Inject memories from memdir (file-based memory system).
+  //
+  // Pull-based: only the MEMORY.md index is injected. Per-file content is
+  // pulled on demand by the agent via the `recall` tool. This avoids the
+  // accessCount feedback loop that previously locked the same N memories
+  // into top slots regardless of relevance to the current query.
   if (!isForkContext) {
     try {
-      const { loadMemoryIndex, scanMemoryFiles, readMemoryFile } = await import('../memdir/scan');
-      const { touchMemory } = await import('../memdir/write');
+      const { loadMemoryIndex } = await import('../memdir/scan');
 
-      // Load from both global (no workspace) and workspace-specific memdir
-      const [globalIndex, wsIndex, globalHeaders, wsHeaders] = await Promise.all([
+      const [globalIndex, wsIndex] = await Promise.all([
         loadMemoryIndex(null),
         workspacePath ? loadMemoryIndex(workspacePath) : Promise.resolve(''),
-        scanMemoryFiles(null),
-        workspacePath ? scanMemoryFiles(workspacePath) : Promise.resolve([]),
       ]);
 
-      const allHeaders = [...globalHeaders, ...wsHeaders];
       const indexContent = [globalIndex, wsIndex].filter(Boolean).join('\n');
 
       // Always inject MEMORY.md index if it has content
       if (indexContent.trim()) {
         sections.push({ name: 'memory-index', text: `\n## 你的长期记忆索引
-以下是你跨会话保持的记忆索引。标记为 [feedback] 的记忆是用户对你行为的指导，应当遵守。
+以下是你跨会话保持的记忆索引。标记为 [feedback] 的记忆是用户对你行为的指导，应当遵守。索引行的描述若不足以判断，调用 recall 工具按关键词拉取详情。
 <memory-index>
 ${indexContent.trim()}
 </memory-index>`, cacheable: true });
       }
 
-      // Select top 5 most relevant memory files to inject full content
-      if (allHeaders.length > 0) {
-        const top = allHeaders
-          .sort((a, b) => {
-            const scoreA = a.accessCount * 0.3 + a.updated / 1e12;
-            const scoreB = b.accessCount * 0.3 + b.updated / 1e12;
-            return scoreB - scoreA;
-          })
-          .slice(0, 5);
-
-        const memoryTexts: string[] = [];
-        for (const h of top) {
-          const file = await readMemoryFile(h.filePath);
-          if (file) {
-            memoryTexts.push(`### [${h.type}] ${h.name}\n${file.content.slice(0, 500)}`);
-            // Touch accessed memories (fire-and-forget)
-            touchMemory(h.filePath).catch(() => {});
-          }
-        }
-
-        if (memoryTexts.length > 0) {
-          sections.push({ name: 'memories', text: `\n## 近期记忆详情
-<agent-memory>
-${memoryTexts.join('\n\n')}
-</agent-memory>`, cacheable: true });
-        }
-      }
-
-      // Memory management instruction
+      // Memory management instruction. Aligned with Claude Code's
+      // buildMemoryLines philosophy but adapted for desktop/office users:
+      // examples are non-technical (not git/migration/PR), and the recall
+      // path uses the `recall` tool rather than grep (since Abu users do
+      // not edit .md files directly).
       sections.push({ name: 'memory-mgmt', text: `\n## 记忆管理
-你有 update_memory 工具保存持久记忆，recall 工具检索过去的记忆和经验。
-记忆按当前工作区隔离存储，无工作区时存为全局记忆。
 
-### 何时主动保存（update_memory）
-不等用户要求，在以下场景主动调用：
-- 用户说"我喜欢/不喜欢/以后都/默认用…" → type="user"
-- 用户分享角色、团队、工作流 → type="user"
-- 用户纠正你的做法（"不要这样"、"下次先…"）或确认你的非常规做法 → type="feedback"（含原因和适用场景）
-- 发现项目技术栈/架构/约定、完成复杂任务后保存关键结论、重要决策 → type="project"
-- 得知外部系统指针（文档链接、看板地址、频道名） → type="reference"
-每条记忆需提供 name、content、description。
+你有一套基于文件的持久记忆系统。每条记忆是一个 .md 文件，存在
+\`~/.abu/memory/\`（全局）或 \`{workspace}/.abu/memory/\`（按工作区）。
+索引（MEMORY.md）已注入到上面的 <memory-index>。详情按需拉取：
+按 filename 精确读取调 \`read_memory\`；按关键词模糊搜调 \`recall\`。
 
-### 不要保存
-- 临时性查询（天气、一次性计算、闲聊）
-- 已在项目规则文件（.abu/ABU.md）中的内容
-- 代码模式、架构、文件路径等可从代码推断的信息
-项目规则由用户手动维护，不要用 update_memory 修改。
+让这套系统随时间不断完善——未来对话能从中看到用户是谁、喜欢怎样
+协作、有哪些该避免/重复的行为、当前工作的背景。如果用户说"记住这个"
+立即保存；说"忘掉/别记了"找到并删除对应条目。
 
-### 何时回忆（recall）
-用户问到"之前…"、"上次…"、"最近做了什么"、"我们聊过…"时，先用 recall 搜索。`, cacheable: true });
+### 4 类记忆
+
+- **user** — 用户角色、目标、知识水平、长期偏好。
+  例：用户是数据团队 PM；常写公众号；偏好简洁回复。
+- **feedback** — 用户对你的纠正或确认。**body 结构：规则 + Why + How to apply**。
+  从纠正和确认两端都记；只记纠正会让你逐渐过度谨慎。
+  例（纠正）：规则=不要用 echo 写文件；Why=中文易乱码；How=改用 Write 工具
+  例（确认）：规则=重构按"一类一 commit"拆；Why=便于回溯；How=后续重构沿用
+- **project** — 项目进展、关键决策、待办、约束。**body 结构：事实 + Why + How to apply**。
+  例：事实=Q3 公众号目标 4 篇；Why=老板要求；How=排素材时优先这 4 个主题
+- **reference** — 外部资源指针（看板/文档/频道地址）。
+  例：周报模板在 Cooper /团队空间/模板/周报
+
+### ❌ 不要保存
+
+- **一次性任务结果**："X 已生成"、"翻译完成"、"路线已规划"、"整理了 N 个文件"
+- **临时状态**："测试通过"、"密钥无效"、"端口被占用"、"服务连不上"
+- **可派生信息**：项目路径、技术栈、代码模式（读项目/grep 就知道）
+- 闲聊、问候、一次性查询（天气、临时计算、新闻）
+- 项目规则文件（.abu/ABU.md）已包含的内容
+
+即便用户明确说"记住这个清单/总结"，先问：哪一部分是 *意外的、未来
+还有用的*？只记那部分，不要把整个清单原样存下来。
+
+### 写入前必查（重要！避免重复 / 处理冲突）
+
+调 update_memory 前，**先扫上面的 <memory-index>**，按现有记忆与新信息的关系
+分三种处理：
+
+**情况 A：完全新主题** —— 索引中没有相似条目
+→ \`update_memory(action='append', name, content, type)\` 新写一条。
+
+**情况 B：信息冲突**（同一事实的不同值）—— 索引中已有"用户名为小包"，用户
+现在说"我叫小白"，或先前 feedback "用 npm" 用户改口"以后用 bun"
+→ \`update_memory(action='edit', filename='user_xxx.md', content='用户名为小白')\`
+  覆盖旧条；
+→ 或 \`update_memory(action='delete', filename='user_xxx.md')\` 删除过时的，
+  再 append 新的。
+**永远不要**留下两条值矛盾的记忆并存——会让未来对话困惑。
+
+**情况 C：信息补充**（原条目缺 Why/How，新对话补全了）
+→ \`update_memory(action='edit', filename='...', content='规则 + Why + How to apply 完整版')\`
+  把旧条 edit 成完整版本，而不是新写一条平行的。
+
+**情况 D：完全同义重复** —— 索引已有近义条目，没新信息
+→ **跳过**，什么都不做。
+
+判断三问：①是冲突还是补充？②若同时存在两条会不会让未来 Agent 困惑？
+③用户最近一句话是不是在改之前的偏好？任意一个"是" → 用 edit/delete 修旧的，
+不要 append 新的。
+
+### 何时调用 recall vs read_memory
+
+- **recall（按关键词搜）**：用户问"之前/上次/最近/我们聊过..."等回溯类问题，
+  或当前任务可能依赖过去结论但不确定有没有相关记忆时。
+- **read_memory（按 filename 精确拉）**：在 <memory-index> 看到一行明确相关，
+  但 description 不够判断细节时——直接 read_memory(filename) 拉详情，
+  比 recall 准确，token 也省。
+
+### 用记忆时的 sanity-check（重要）
+
+记忆是过去某时刻的快照，**可能已过时**。基于记忆给建议前：
+- 提到具体文件路径 → 先确认文件还在
+- 提到具体函数/工具名 → 先 grep 确认
+- 用户即将据此行动 → 先验证现状再说
+
+"记忆说 X 存在" ≠ "X 现在还存在"。发现记忆与现状冲突，相信现状，
+并更新或删除过时的记忆，不要据此回答。
+
+### 记忆 vs 当前任务
+
+记忆是给 **未来对话** 用的。**当前对话内** 的步骤、临时进度、未完成
+事项，用 todo_write 工具，不要塞进记忆。
+
+记忆按当前工作区隔离存储，无工作区时存为全局记忆。项目规则
+（.abu/ABU.md）由用户手动维护，不要用 update_memory 修改。`, cacheable: true });
     } catch (err) {
       console.warn('Failed to load memories:', err);
     }

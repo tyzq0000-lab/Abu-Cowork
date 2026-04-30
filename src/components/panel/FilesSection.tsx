@@ -144,18 +144,23 @@ export default function FilesSection() {
     create: t.panel.operationCreate,
   };
 
-  // Extract file references from tool calls
+  // Extract file references from tool calls — file-ops semantics: show every
+  // file the conversation touched, not just deliverables. extractFileOutputs
+  // (file-ops mode) skips DOCUMENT_EXTENSIONS whitelist, includes reads, keeps
+  // executed scripts, and only filters obvious noise (NOISE_EXTENSIONS).
   const trackedFiles = useMemo(() => {
     if (!conversation) return [];
 
     const allToolCalls = conversation.messages.flatMap((msg) => msg.toolCalls || []);
-    const fileOutputs = extractFileOutputs(allToolCalls, { includeReads: true });
+    const fileOutputs = extractFileOutputs(allToolCalls, { mode: 'file-ops' });
 
-    // Deduplicate: writes/creates override reads
+    // extractFileOutputs already dedupes by path (and upgrades read→write
+    // when both happen on the same path). The local dedup below is redundant
+    // but kept as a defensive last line + to attach a stable timestamp/index.
     const fileMap = new Map<string, TrackedFile>();
     fileOutputs.forEach((fo, index) => {
       const existing = fileMap.get(fo.path);
-      if (fo.operation === 'read' && existing) return; // reads don't override
+      if (fo.operation === 'read' && existing) return;
       fileMap.set(fo.path, { path: fo.path, operation: fo.operation, timestamp: index });
     });
 

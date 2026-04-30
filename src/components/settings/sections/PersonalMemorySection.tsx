@@ -1,11 +1,27 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useI18n, format } from '@/i18n';
-import { HelpCircle, Trash2, ChevronDown, ChevronUp, FolderOpen, Globe } from 'lucide-react';
+import { HelpCircle, Trash2, ChevronDown, ChevronUp, ChevronRight, FolderOpen, Globe, ListChecks, X, Check } from 'lucide-react';
 import { scanMemoryFiles, readMemoryFile } from '@/core/memdir/scan';
 import { deleteMemory } from '@/core/memdir/write';
 import type { MemoryHeader, MemoryType } from '@/core/memdir/types';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import { Button } from '@/components/ui/button';
+
+// Abu 设计 token：toolbar 按钮风格（对齐 AboutSection 的"检查更新"按钮）
+const ABU_BTN_OUTLINE =
+  'border border-[var(--abu-border)] bg-transparent text-[var(--abu-text-secondary)] ' +
+  'hover:bg-[var(--abu-bg-active)] hover:text-[var(--abu-text-primary)] hover:border-[var(--abu-border-hover)] ' +
+  'active:scale-[0.98]';
+
+const ABU_BTN_GHOST =
+  'bg-transparent text-[var(--abu-text-muted)] ' +
+  'hover:bg-[var(--abu-bg-active)] hover:text-[var(--abu-text-primary)]';
+
+const ABU_BTN_DESTRUCTIVE =
+  'border border-red-200 bg-red-50 text-red-600 ' +
+  'hover:bg-red-100 hover:border-red-300 hover:text-red-700 ' +
+  'active:scale-[0.98]';
 
 function getTypeLabel(type: MemoryType, t: ReturnType<typeof useI18n>['t']): string {
   const map: Record<MemoryType, string> = {
@@ -35,11 +51,28 @@ function formatAge(timestamp: number): string {
   return `${Math.floor(days / 30)}个月前`;
 }
 
+function isUnused(header: MemoryHeader): boolean {
+  // Never-recalled by the agent. accessCount is now meaningful (P1 removed
+  // passive-injection bumps), so accessCount===0 means "the agent has never
+  // pulled this via recall/read_memory" — a strong cleanup-candidate signal.
+  return header.accessCount === 0;
+}
+
+function isAutoFlushUnused(header: MemoryHeader): boolean {
+  return header.source === 'auto_flush' && header.accessCount === 0;
+}
+
 interface MemoryGroup {
   label: string;
   icon: 'global' | 'workspace';
   workspacePath: string | null;
   headers: MemoryHeader[];
+}
+
+interface SelectableEntry {
+  key: string;
+  header: MemoryHeader;
+  workspacePath: string | null;
 }
 
 export default function PersonalMemorySection() {
@@ -53,14 +86,48 @@ export default function PersonalMemorySection() {
   const tipRef = useRef<HTMLDivElement>(null);
   const recentPaths = useWorkspaceStore((s) => s.recentPaths);
 
+  // Bulk cleanup mode
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
+  // Collapsed groups: workspace path key, '__global__' for the global group.
+  // Default behavior: all groups start expanded so users see what's there;
+  // toggling persists only within this session (intentional — users typically
+  // want a fresh view each time they open settings).
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   const totalCount = groups.reduce((sum, g) => sum + g.headers.length, 0);
+
+  // Flatten for bulk filters/operations — order matches group display order.
+  const allEntries: SelectableEntry[] = useMemo(() => {
+    const entries: SelectableEntry[] = [];
+    for (const group of groups) {
+      for (const header of group.headers) {
+        entries.push({
+          key: `${group.workspacePath ?? 'g'}:${header.filename}`,
+          header,
+          workspacePath: group.workspacePath,
+        });
+      }
+    }
+    return entries;
+  }, [groups]);
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
     try {
       const result: MemoryGroup[] = [];
 
-      // Global memories
       const globalItems = await scanMemoryFiles(null);
       if (globalItems.length > 0) {
         result.push({
@@ -71,7 +138,6 @@ export default function PersonalMemorySection() {
         });
       }
 
-      // Per-workspace memories
       for (const wsPath of recentPaths) {
         try {
           const wsItems = await scanMemoryFiles(wsPath);
@@ -109,6 +175,28 @@ export default function PersonalMemorySection() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showTip]);
 
+  const exitBulkMode = useCallback(() => {
+    setBulkMode(false);
+    setSelectedKeys(new Set());
+  }, []);
+
+  const toggleSelected = (key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectByFilter = (filter: (h: MemoryHeader) => boolean) => {
+    const next = new Set<string>();
+    for (const e of allEntries) {
+      if (filter(e.header)) next.add(e.key);
+    }
+    setSelectedKeys(next);
+  };
+
   const handleExpand = async (header: MemoryHeader) => {
     const id = header.filename;
     if (expandedId === id) {
@@ -116,11 +204,10 @@ export default function PersonalMemorySection() {
       return;
     }
     setExpandedId(id);
-    // Lazy load content
     if (!expandedContent[id]) {
       const file = await readMemoryFile(header.filePath);
       if (file) {
-        setExpandedContent(prev => ({ ...prev, [id]: file.content }));
+        setExpandedContent((prev) => ({ ...prev, [id]: file.content }));
       }
     }
   };
@@ -136,6 +223,20 @@ export default function PersonalMemorySection() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    setBulkConfirmOpen(false);
+    const targets = allEntries.filter((e) => selectedKeys.has(e.key));
+    for (const target of targets) {
+      try {
+        await deleteMemory(target.header.filename, target.workspacePath);
+      } catch (err) {
+        console.error(`Failed to delete ${target.header.filename}:`, err);
+      }
+    }
+    exitBulkMode();
+    await loadEntries();
+  };
+
   return (
     <>
       <ConfirmDialog
@@ -146,6 +247,17 @@ export default function PersonalMemorySection() {
         cancelText={t.common.cancel}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+        variant="danger"
+      />
+
+      <ConfirmDialog
+        open={bulkConfirmOpen}
+        title={t.memory.bulkConfirmTitle}
+        message={format(t.memory.bulkConfirmMessage, { count: String(selectedKeys.size) })}
+        confirmText={t.common.delete}
+        cancelText={t.common.cancel}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setBulkConfirmOpen(false)}
         variant="danger"
       />
 
@@ -187,13 +299,66 @@ export default function PersonalMemorySection() {
           </div>
         ) : totalCount > 0 ? (
           <div className="space-y-4">
-            <div className="text-[12px] text-[var(--abu-text-placeholder)]">
-              {format(t.memory.entryCount, { count: String(totalCount) })}
+            {/* Top toolbar: count + bulk toggle / bulk actions */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="text-[12px] text-[var(--abu-text-placeholder)]">
+                {bulkMode
+                  ? format(t.memory.bulkSelected, { count: String(selectedKeys.size) })
+                  : format(t.memory.entryCount, { count: String(totalCount) })}
+              </div>
+              {bulkMode ? (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Button size="xs" variant="ghost" className={ABU_BTN_OUTLINE} onClick={() => selectByFilter(isAutoFlushUnused)}>
+                    {t.memory.bulkSelectAutoFlushUnused}
+                  </Button>
+                  <Button size="xs" variant="ghost" className={ABU_BTN_OUTLINE} onClick={() => selectByFilter(isUnused)}>
+                    {t.memory.bulkSelectUnused}
+                  </Button>
+                  <Button size="xs" variant="ghost" className={ABU_BTN_OUTLINE} onClick={() => selectByFilter(() => true)}>
+                    {t.memory.bulkSelectAll}
+                  </Button>
+                  <Button size="xs" variant="ghost" className={ABU_BTN_OUTLINE} onClick={() => setSelectedKeys(new Set())}>
+                    {t.memory.bulkClearSelection}
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    className={selectedKeys.size === 0 ? ABU_BTN_OUTLINE : ABU_BTN_DESTRUCTIVE}
+                    disabled={selectedKeys.size === 0}
+                    onClick={() => setBulkConfirmOpen(true)}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    {t.memory.bulkDelete}
+                  </Button>
+                  <Button size="xs" variant="ghost" className={ABU_BTN_GHOST} onClick={exitBulkMode}>
+                    <X className="h-3 w-3 mr-1" />
+                    {t.memory.bulkExit}
+                  </Button>
+                </div>
+              ) : (
+                <Button size="xs" variant="ghost" className={ABU_BTN_OUTLINE} onClick={() => setBulkMode(true)}>
+                  <ListChecks className="h-3 w-3 mr-1" />
+                  {t.memory.bulkCleanup}
+                </Button>
+              )}
             </div>
-            {groups.map((group) => (
-              <div key={group.workspacePath ?? '__global__'} className="space-y-2">
-                {/* Group header */}
-                <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--abu-text-muted)] uppercase tracking-wider">
+
+            {groups.map((group) => {
+              const groupKey = group.workspacePath ?? '__global__';
+              const isCollapsed = collapsedGroups.has(groupKey);
+              return (
+              <div key={groupKey} className="space-y-2">
+                {/* Group header — clickable to toggle collapse */}
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(groupKey)}
+                  className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--abu-text-muted)] uppercase tracking-wider hover:text-[var(--abu-text-primary)] transition-colors w-full"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight className="h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3" />
+                  )}
                   {group.icon === 'global' ? (
                     <Globe className="h-3 w-3" />
                   ) : (
@@ -201,20 +366,36 @@ export default function PersonalMemorySection() {
                   )}
                   <span>{group.label}</span>
                   <span className="text-[var(--abu-text-placeholder)]">({group.headers.length})</span>
-                </div>
+                </button>
 
-                {/* Group entries */}
-                {group.headers.map((header) => {
+                {/* Group entries — hidden when collapsed */}
+                {!isCollapsed && group.headers.map((header) => {
                   const key = `${group.workspacePath ?? 'g'}:${header.filename}`;
+                  const isSelected = selectedKeys.has(key);
                   return (
                     <div
                       key={key}
-                      className="border border-[var(--abu-border)] rounded-lg bg-[var(--abu-bg-muted)] overflow-hidden"
+                      className={`border rounded-lg overflow-hidden transition-colors ${
+                        bulkMode && isSelected
+                          ? 'border-[var(--abu-clay)] bg-orange-50/50'
+                          : 'border-[var(--abu-border)] bg-[var(--abu-bg-muted)]'
+                      }`}
                     >
                       <div
                         className="flex items-center gap-2 px-3 py-2.5 cursor-pointer hover:bg-[var(--abu-bg-hover)] transition-colors"
-                        onClick={() => handleExpand(header)}
+                        onClick={() => bulkMode ? toggleSelected(key) : handleExpand(header)}
                       >
+                        {bulkMode && (
+                          <span
+                            className={`flex h-4 w-4 items-center justify-center rounded-full border transition-colors ${
+                              isSelected
+                                ? 'border-[var(--abu-clay)] bg-[var(--abu-clay)] text-white'
+                                : 'border-[var(--abu-text-placeholder)]'
+                            }`}
+                          >
+                            {isSelected && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                          </span>
+                        )}
                         <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${TYPE_COLORS[header.type]}`}>
                           {getTypeLabel(header.type, t)}
                         </span>
@@ -224,14 +405,16 @@ export default function PersonalMemorySection() {
                         <span className="text-[11px] text-[var(--abu-text-placeholder)] whitespace-nowrap">
                           {formatAge(header.updated)}
                         </span>
-                        {expandedId === header.filename ? (
-                          <ChevronUp className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
+                        {!bulkMode && (
+                          expandedId === header.filename ? (
+                            <ChevronUp className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5 text-[var(--abu-text-placeholder)]" />
+                          )
                         )}
                       </div>
 
-                      {expandedId === header.filename && (
+                      {!bulkMode && expandedId === header.filename && (
                         <div className="px-3 pb-3 border-t border-[var(--abu-bg-active)]">
                           <p className="text-[12px] text-[var(--abu-text-tertiary)] leading-relaxed mt-2 whitespace-pre-wrap">
                             {expandedContent[header.filename] ?? header.description}
@@ -255,7 +438,8 @@ export default function PersonalMemorySection() {
                   );
                 })}
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-12 text-center">

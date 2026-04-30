@@ -41,7 +41,17 @@ Inspired by Claude Code's Cowork mode. Features multi-agent architecture with ex
 3. `git checkout main && git merge dev` — 合并到 main。
 4. `git tag vX.Y.Z` — 打 tag，格式为 `v` + 语义化版本号。
 5. `git push origin main --tags` — 推送 main 和 tag。
-6. 在 GitHub 创建 Release，附上 changelog。
+6. 在 GitHub 创建 Release，按 [`RELEASING.md`](./RELEASING.md) 的模板写 release notes（patch / minor / major 三档）。
+
+### Release Notes Convention (核心要点)
+- **分档**：patch（vX.Y.Z++）用极简模板（根因 + 修复 2-3 行）；minor（vX.Y.0）用完整模板（Features / Fixes / English Summary）；major（vX.0.0）额外加 Migration Notes。
+- **Title**：`vX.Y.Z` 或 `vX.Y.Z — 一句话主题`。patch 选最重要的特征当副标题，让 release 列表能扫读。
+- **双语策略**：中文先（主要用户群），bullet 末尾英文短语点睛即可，**不要每行翻译**。Minor+ 加独立 English Summary section；patch 不加。
+- **写"为什么"**：哪怕 patch 也至少给一句"用户会看到的变化"，禁止 "See assets below" 这种空 release。
+- **数字即证据**：能给数字给数字（"9 处子进程 spawn"、"TTL 从 5s 延到 30s"），不要"大幅优化"这种空话。
+- **emoji**：patch 标题不加；minor+ 分区图标可加（✨ Features / 🐛 Fixes / 🪟 Windows-only）。
+
+完整模板和示例见 [`RELEASING.md`](./RELEASING.md)。
 
 ### Forbidden
 - ❌ 直接在 `main` 上 commit 或 push。
@@ -90,6 +100,59 @@ src/
 ├── lib/              # Third-party wrappers (cn utility etc.)
 └── test/             # Test setup & global mocks
 ```
+
+---
+
+## Behavioral Principles
+
+适用于非 trivial 任务（涉及多文件改动、状态/Tauri/i18n 三方耦合、新功能、行为类 bug）。**改 typo、调 padding、补一行注释这种小活，用判断力，不必套全套。**
+
+### B1. Think Before Coding — 先暴露歧义，再动手
+
+Abu 的功能动辄横跨 store 持久化 / Tauri / i18n / 跨平台路径，一个词在三处可能各有定义。**不要沉默选一个解释就开干。**
+
+- **Assumptions explicit**：动手前一句话说清楚你在假设什么。"我假设你说的'清空'是指清掉 conversation 列表，不是清掉 message 内容" — 比改完再回滚便宜。
+- **多个解释都摆出来**：如果用户的请求有 ≥2 种合理解读，列出来让 user 选，**不要默认挑一个就跑**。
+- **不懂就停**：发现自己在猜，就停下问。"checkpoint 这块我没读过，要我先读 `src/core/session/` 再回答吗？"
+- **Push back when warranted**：如果有更简单的方案，说出来。Abu 的 CLAUDE.md 第 14 节已经禁了一堆过度抽象，但**简单方案的提议得你先开口**。
+
+### B2. Goal-Driven Execution — 翻译成可验证目标，再循环
+
+Abu 是 Tauri 桌面端，每轮"改 → 重启 dev → 验证"的成本比 web 项目高。**给定可验证的成功标准 → 自循环到验证通过 → 再回报**，比"我改完了你跑跑看"省一个回合。
+
+**把祈使句翻译成可验证目标**：
+
+| 用户说 | 翻译成 |
+|---|---|
+| "修这个 bug" | 先写一个 reproduce 的测试（或最少描述出 reproduce 步骤），再改，然后跑测试验证 |
+| "加个校验" | 先列非法输入 case，写测试或 dry-run，再让它过 |
+| "重构 X" | 列出"前后行为应该一致"的检查点（测试 / 关键路径手动跑），改前改后都验证一遍 |
+
+**多步任务前先列 plan**（每步带 verify）：
+
+```
+1. 改 chatStore 加 pinnedAt 字段 → verify: storeVersions.test.ts 通过
+2. 在 ChatList 里读 pinnedAt → verify: tauri:dev 跑一遍，置顶/取消置顶都点一次
+3. 持久化迁移 → verify: 删 ~/Library/.../com.abu.app.dev 重启，老 conversation 不丢
+```
+
+**项目现成的验证手段优先用**：
+- `npm run build` / `npm run lint` — 抓编译和静态错误（必跑）
+- `npm test` — 抓已有行为回归（涉及 store、core/agent、core/skill 时必跑）
+- `npm run tauri:dev` — 抓行为类 bug（UI 改动、Tauri 调用、跨平台路径必跑，**冒号别忘**）
+- 看 MEMORY 里 `feedback_tauri_e2e_required` — Tauri 改动**真实 dev 环境跑一遍**才算完
+
+**没验证就不要说"修好了"**。build 全绿 ≠ 功能正确 — Abu 大量 bug 是行为类的（看近期 commit：批量整理对齐、草稿不显示、中文文件名 docx），build 抓不到。
+
+### B3. Surgical Changes — 只动该动的
+
+（与系统 prompt 头部的"bug fix doesn't need surrounding cleanup"互为补充）
+
+- 改 A 的时候不要顺手"优化"旁边的 B，哪怕 B 写得很丑。
+- 不要重构没坏的东西。匹配既有风格，哪怕你不喜欢。
+- **发现无关的 dead code / 可疑代码 → 提一下，不要删**。先问，再动。
+- 你的改动产生的 orphan（unused import / 变量）该删；**预先存在的 dead code 不归你管**。
+- 测试：每一行 diff 都能直接追溯到用户的请求。追溯不到的，删掉再提交。
 
 ---
 

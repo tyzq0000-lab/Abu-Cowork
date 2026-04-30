@@ -33,32 +33,32 @@ export const reportPlanTool: ToolDefinition = {
 
 export const updateMemoryTool: ToolDefinition = {
   name: TOOL_NAMES.UPDATE_MEMORY,
-  description: '保存持久记忆。记忆按当前工作区隔离存储，无工作区时存为全局记忆。注意：项目规则（.abu/ABU.md）由用户手动维护，不要用此工具修改规则。',
+  description: '保存或更新持久记忆。**调用前先核对 system prompt 中的 <memory-index>**：如果已有相同主题的记忆，根据情况选择 edit 覆盖或 delete 删除，不要写重复条目。\n\n四种 action：\n- append（默认）：新写一条记忆。仅在索引中没有相似主题时使用。\n- edit：用 filename 覆盖某条已有记忆（用户改主意/补充 Why/How 时用）。\n- delete：用 filename 删除某条已过时的记忆（信息冲突且新值更合适时用）。\n- clear：清空所有记忆（极少用，仅用户明确要求时）。\n\n不要保存一次性任务结果（"X 已生成"）、临时状态（"测试通过"）、可派生信息（"项目位于 /Users/X"）。项目规则（.abu/ABU.md）由用户手动维护，不要用此工具修改。',
   inputSchema: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: '记忆名称（简短标题）' },
-      content: { type: 'string', description: '记忆内容（必填）' },
-      description: { type: 'string', description: '一句话描述，用于索引检索' },
-      type: {
-        type: 'string',
-        description: '分类: user(用户偏好/角色/知识水平) / feedback(行为纠正或确认，含原因和适用场景) / project(项目动态/决策/技术栈) / reference(外部系统指针)',
-        enum: ['user', 'feedback', 'project', 'reference'],
-      },
       action: {
         type: 'string',
-        description: '操作类型: append(添加，默认) / clear(清空所有记忆)',
-        enum: ['append', 'clear'],
+        description: '操作类型: append(新写，默认) / edit(覆盖单条) / delete(删除单条) / clear(清空全部)',
+        enum: ['append', 'edit', 'delete', 'clear'],
+      },
+      filename: {
+        type: 'string',
+        description: '记忆文件名（edit 和 delete 必填）。来自 <memory-index> 索引行的 [filename](filename) 部分。',
+      },
+      name: { type: 'string', description: '记忆名称（append 必填，edit 可选）' },
+      content: { type: 'string', description: '记忆内容（append 和 edit 必填）' },
+      description: { type: 'string', description: '一句话描述（append 和 edit 可选；不传则取 content 前 80 字）' },
+      type: {
+        type: 'string',
+        description: '分类: user(用户偏好/角色/知识水平) / feedback(行为纠正或确认，含原因和适用场景) / project(项目动态/决策) / reference(外部系统指针)',
+        enum: ['user', 'feedback', 'project', 'reference'],
       },
     },
-    required: ['name', 'content'],
+    required: ['action'],
   },
   execute: async (input, context) => {
     const action = (input.action as string) || 'append';
-    const content = (input.content as string) || '';
-    const name = (input.name as string) || content.slice(0, 40);
-    const description = (input.description as string) || content.slice(0, 80);
-    const type = ((input.type as string) || 'project') as MemoryType;
 
     try {
       const workspacePath = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
@@ -69,8 +69,77 @@ export const updateMemoryTool: ToolDefinition = {
         return `已清空记忆（${count} 条）。`;
       }
 
-      // Append: write a new .md memory file
-      if (!content) return '错误：content 不能为空。';
+      if (action === 'delete') {
+        const filename = (input.filename as string)?.trim();
+        if (!filename) return 'Error: action=delete 必须提供 filename';
+        const { deleteMemory } = await import('../../memdir/write');
+        await deleteMemory(filename, workspacePath);
+        return `已删除记忆: ${filename}`;
+      }
+
+      if (action === 'edit') {
+        const filename = (input.filename as string)?.trim();
+        if (!filename) return 'Error: action=edit 必须提供 filename';
+        const content = (input.content as string) || '';
+        if (!content) return 'Error: action=edit 必须提供 content';
+
+        // Edit: read existing header to preserve type/created if not overridden,
+        // then writeMemory with override filename to overwrite the .md file.
+        const { scanMemoryFiles, readMemoryFile } = await import('../../memdir/scan');
+        const { writeMemory } = await import('../../memdir/write');
+        const { ContentSafetyError } = await import('../../safety/contentGuard');
+
+        // Find the existing memory across both global and workspace dirs
+        const [globalHeaders, wsHeaders] = await Promise.all([
+          scanMemoryFiles(null),
+          workspacePath ? scanMemoryFiles(workspacePath) : Promise.resolve([]),
+        ]);
+        const existing = [...globalHeaders, ...wsHeaders].find((h) => h.filename === filename);
+        if (!existing) {
+          return `Error: filename="${filename}" 不存在。请确认拼写（参考 <memory-index>），或改用 action=append 新写一条。`;
+        }
+        const existingFile = await readMemoryFile(existing.filePath);
+
+        const name = (input.name as string) || existing.name;
+        const description = (input.description as string) || content.slice(0, 80);
+        const type = ((input.type as string) || existing.type) as MemoryType;
+        // Determine which workspace this memory lives in (preserve, don't relocate)
+        const liveWorkspace = wsHeaders.some((h) => h.filename === filename) ? workspacePath : null;
+
+        try {
+          await writeMemory({
+            name,
+            description,
+            type,
+            content,
+            source: existingFile?.header.source ?? 'agent_explicit',
+            workspacePath: liveWorkspace,
+            filename, // override → overwrites the existing .md
+          });
+          return `已更新记忆 [${type}]: ${name} (${filename})`;
+        } catch (err) {
+          if (err instanceof ContentSafetyError) {
+            const patterns = err.scan.findings
+              .filter((f) => f.severity === 'critical' || f.severity === 'high')
+              .map((f) => `[${f.patternId}] ${f.description} (line ${f.line}: "${f.match}")`)
+              .join('\n  ');
+            return (
+              `Error: memory content was blocked by the safety scanner.\n` +
+              `Matched patterns:\n  ${patterns}\n` +
+              `Rewrite the memory without these patterns and retry.`
+            );
+          }
+          throw err;
+        }
+      }
+
+      // action === 'append' (default): write a new .md memory file
+      const content = (input.content as string) || '';
+      const name = (input.name as string) || content.slice(0, 40);
+      const description = (input.description as string) || content.slice(0, 80);
+      const type = ((input.type as string) || 'project') as MemoryType;
+
+      if (!content) return '错误：append 时 content 不能为空。';
 
       const { writeMemory } = await import('../../memdir/write');
       const { ContentSafetyError } = await import('../../safety/contentGuard');
@@ -86,9 +155,6 @@ export const updateMemoryTool: ToolDefinition = {
         return `已保存记忆 [${type}]: ${name} → ${filename}`;
       } catch (err) {
         if (err instanceof ContentSafetyError) {
-          // Give the agent a directive, self-correctable error rather than a
-          // generic failure — include pattern IDs + lines so it can rewrite
-          // without the offending content.
           const patterns = err.scan.findings
             .filter((f) => f.severity === 'critical' || f.severity === 'high')
             .map((f) => `[${f.patternId}] ${f.description} (line ${f.line}: "${f.match}")`)

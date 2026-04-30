@@ -56,6 +56,16 @@ export interface TranslationDict {
     legacyHint: string;
     emptyHint: string;
     globalMemories: string;
+    bulkCleanup: string;
+    bulkExit: string;
+    bulkSelected: string;
+    bulkSelectAutoFlushUnused: string;
+    bulkSelectUnused: string;
+    bulkSelectAll: string;
+    bulkClearSelection: string;
+    bulkDelete: string;
+    bulkConfirmTitle: string;
+    bulkConfirmMessage: string;
   };
 
   // Soul (personality)
