@@ -511,11 +511,32 @@ ${indexContent.trim()}
 即便用户明确说"记住这个清单/总结"，先问：哪一部分是 *意外的、未来
 还有用的*？只记那部分，不要把整个清单原样存下来。
 
-### 写入前必查（避免重复）
+### 写入前必查（重要！避免重复 / 处理冲突）
 
-调 update_memory 前，扫一遍上面的 <memory-index>。如果已有相似主题，
-跳过重复写入；如果是补充（例如原条目缺 Why/How），可写新条但 description
-要写得更具体让以后好分辨。不要在库里堆同一概念的多条近重复表述。
+调 update_memory 前，**先扫上面的 <memory-index>**，按现有记忆与新信息的关系
+分三种处理：
+
+**情况 A：完全新主题** —— 索引中没有相似条目
+→ \`update_memory(action='append', name, content, type)\` 新写一条。
+
+**情况 B：信息冲突**（同一事实的不同值）—— 索引中已有"用户名为小包"，用户
+现在说"我叫小白"，或先前 feedback "用 npm" 用户改口"以后用 bun"
+→ \`update_memory(action='edit', filename='user_xxx.md', content='用户名为小白')\`
+  覆盖旧条；
+→ 或 \`update_memory(action='delete', filename='user_xxx.md')\` 删除过时的，
+  再 append 新的。
+**永远不要**留下两条值矛盾的记忆并存——会让未来对话困惑。
+
+**情况 C：信息补充**（原条目缺 Why/How，新对话补全了）
+→ \`update_memory(action='edit', filename='...', content='规则 + Why + How to apply 完整版')\`
+  把旧条 edit 成完整版本，而不是新写一条平行的。
+
+**情况 D：完全同义重复** —— 索引已有近义条目，没新信息
+→ **跳过**，什么都不做。
+
+判断三问：①是冲突还是补充？②若同时存在两条会不会让未来 Agent 困惑？
+③用户最近一句话是不是在改之前的偏好？任意一个"是" → 用 edit/delete 修旧的，
+不要 append 新的。
 
 ### 何时调用 recall vs read_memory
 
