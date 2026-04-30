@@ -471,28 +471,74 @@ ${indexContent.trim()}
 </memory-index>`, cacheable: true });
       }
 
-      // Memory management instruction
+      // Memory management instruction. Aligned with Claude Code's
+      // buildMemoryLines philosophy but adapted for desktop/office users:
+      // examples are non-technical (not git/migration/PR), and the recall
+      // path uses the `recall` tool rather than grep (since Abu users do
+      // not edit .md files directly).
       sections.push({ name: 'memory-mgmt', text: `\n## 记忆管理
-你有 update_memory 工具保存持久记忆，recall 工具检索过去的记忆和经验。
-记忆按当前工作区隔离存储，无工作区时存为全局记忆。
 
-### 何时主动保存（update_memory）
-不等用户要求，在以下场景主动调用：
-- 用户说"我喜欢/不喜欢/以后都/默认用…" → type="user"
-- 用户分享角色、团队、工作流 → type="user"
-- 用户纠正你的做法（"不要这样"、"下次先…"）或确认你的非常规做法 → type="feedback"（含原因和适用场景）
-- 发现项目技术栈/架构/约定、完成复杂任务后保存关键结论、重要决策 → type="project"
-- 得知外部系统指针（文档链接、看板地址、频道名） → type="reference"
-每条记忆需提供 name、content、description。
+你有一套基于文件的持久记忆系统。每条记忆是一个 .md 文件，存在
+\`~/.abu/memory/\`（全局）或 \`{workspace}/.abu/memory/\`（按工作区）。
+索引（MEMORY.md）已注入到上面的 <memory-index>，详情可调 recall 工具按需拉取。
 
-### 不要保存
-- 临时性查询（天气、一次性计算、闲聊）
-- 已在项目规则文件（.abu/ABU.md）中的内容
-- 代码模式、架构、文件路径等可从代码推断的信息
-项目规则由用户手动维护，不要用 update_memory 修改。
+让这套系统随时间不断完善——未来对话能从中看到用户是谁、喜欢怎样
+协作、有哪些该避免/重复的行为、当前工作的背景。如果用户说"记住这个"
+立即保存；说"忘掉/别记了"找到并删除对应条目。
 
-### 何时回忆（recall）
-用户问到"之前…"、"上次…"、"最近做了什么"、"我们聊过…"时，先用 recall 搜索。`, cacheable: true });
+### 4 类记忆
+
+- **user** — 用户角色、目标、知识水平、长期偏好。
+  例：用户是数据团队 PM；常写公众号；偏好简洁回复。
+- **feedback** — 用户对你的纠正或确认。**body 结构：规则 + Why + How to apply**。
+  从纠正和确认两端都记；只记纠正会让你逐渐过度谨慎。
+  例（纠正）：规则=不要用 echo 写文件；Why=中文易乱码；How=改用 Write 工具
+  例（确认）：规则=重构按"一类一 commit"拆；Why=便于回溯；How=后续重构沿用
+- **project** — 项目进展、关键决策、待办、约束。**body 结构：事实 + Why + How to apply**。
+  例：事实=Q3 公众号目标 4 篇；Why=老板要求；How=排素材时优先这 4 个主题
+- **reference** — 外部资源指针（看板/文档/频道地址）。
+  例：周报模板在 Cooper /团队空间/模板/周报
+
+### ❌ 不要保存
+
+- **一次性任务结果**："X 已生成"、"翻译完成"、"路线已规划"、"整理了 N 个文件"
+- **临时状态**："测试通过"、"密钥无效"、"端口被占用"、"服务连不上"
+- **可派生信息**：项目路径、技术栈、代码模式（读项目/grep 就知道）
+- 闲聊、问候、一次性查询（天气、临时计算、新闻）
+- 项目规则文件（.abu/ABU.md）已包含的内容
+
+即便用户明确说"记住这个清单/总结"，先问：哪一部分是 *意外的、未来
+还有用的*？只记那部分，不要把整个清单原样存下来。
+
+### 写入前必查（避免重复）
+
+调 update_memory 前，扫一遍上面的 <memory-index>。如果已有相似主题，
+跳过重复写入；如果是补充（例如原条目缺 Why/How），可写新条但 description
+要写得更具体让以后好分辨。不要在库里堆同一概念的多条近重复表述。
+
+### 何时主动调用 recall
+
+- 用户问"之前/上次/最近/我们聊过..."等回溯类问题
+- 当前任务可能依赖过去结论
+- 索引行的 description 不够你判断时
+
+### 用记忆时的 sanity-check（重要）
+
+记忆是过去某时刻的快照，**可能已过时**。基于记忆给建议前：
+- 提到具体文件路径 → 先确认文件还在
+- 提到具体函数/工具名 → 先 grep 确认
+- 用户即将据此行动 → 先验证现状再说
+
+"记忆说 X 存在" ≠ "X 现在还存在"。发现记忆与现状冲突，相信现状，
+并更新或删除过时的记忆，不要据此回答。
+
+### 记忆 vs 当前任务
+
+记忆是给 **未来对话** 用的。**当前对话内** 的步骤、临时进度、未完成
+事项，用 todo_write 工具，不要塞进记忆。
+
+记忆按当前工作区隔离存储，无工作区时存为全局记忆。项目规则
+（.abu/ABU.md）由用户手动维护，不要用 update_memory 修改。`, cacheable: true });
     } catch (err) {
       console.warn('Failed to load memories:', err);
     }
