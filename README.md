@@ -12,7 +12,7 @@
 你说需求，阿布干活 — 读文件、跑命令、写文档、做报表，全在本地完成。
 
 [![Release](https://img.shields.io/github/v/release/PM-Shawn/Abu-Cowork?style=flat-square)](https://github.com/PM-Shawn/Abu-Cowork/releases)
-[![License](https://img.shields.io/badge/license-Abu%20License-blue?style=flat-square)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 
 [下载安装](#-下载安装) · [快速开始](#-快速开始) · [功能介绍](#-功能介绍) · [使用指南](docs/User-Guide.md) · [从源码构建](#-从源码构建)
 
@@ -354,4 +354,4 @@ src-tauri/
 
 ## 许可证
 
-[Abu License](LICENSE) — 个人、教育、非商业用途免费使用。使用需保留版权声明，禁止修改或删除。商业用途需获取授权，详见 [LICENSE](LICENSE)。
+[Apache License 2.0](LICENSE) — 可自由使用、修改、分发，包括商业用途，需保留版权声明。
