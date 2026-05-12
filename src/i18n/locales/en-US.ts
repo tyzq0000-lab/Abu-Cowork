@@ -203,9 +203,7 @@ const enUS: TranslationDict = {
     copyConvIdCopied: 'Conversation ID copied',
     timeJustNow: 'Just now',
     timeMinutesAgo: '{n} min ago',
-    dayToday: 'Today',
     dayYesterday: 'Yesterday',
-    dayBeforeYesterday: '2 days ago',
     fromScheduledTask: 'Scheduled Task',
     fromTrigger: 'Trigger',
     // Scenario guide

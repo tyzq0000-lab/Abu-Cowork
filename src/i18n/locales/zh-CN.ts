@@ -203,9 +203,7 @@ const zhCN: TranslationDict = {
     copyConvIdCopied: '已复制对话 ID',
     timeJustNow: '刚刚',
     timeMinutesAgo: '{n} 分钟前',
-    dayToday: '今天',
     dayYesterday: '昨天',
-    dayBeforeYesterday: '前天',
     fromScheduledTask: '定时任务',
     fromTrigger: '监听事件',
     // Scenario guide
