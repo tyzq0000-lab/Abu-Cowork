@@ -61,7 +61,7 @@ export default function SystemSettingsView() {
       {/* Body - Left/Right Layout */}
       <div className="flex-1 flex min-h-0">
         {/* Left Navigation */}
-        <nav className="w-[180px] shrink-0 border-r border-[var(--abu-border)] py-4 px-3">
+        <nav className="w-[224px] shrink-0 border-r border-[var(--abu-border)] py-4 px-3">
           <div className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
