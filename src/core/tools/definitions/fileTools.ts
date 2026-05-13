@@ -177,7 +177,7 @@ export const readFileTool: ToolDefinition = {
 
 export const writeFileTool: ToolDefinition = {
   name: TOOL_NAMES.WRITE_FILE,
-  description: '将内容写入文件。文件不存在则创建，已存在则覆盖。创建新文件或完整覆写时使用，局部修改用 edit_file。仅支持纯文本，不能创建二进制文件（.docx/.xlsx 等）。',
+  description: '将内容写入文件。文件不存在则创建，已存在则覆盖。仅用于创建新文件；已存在文件的局部修改必须用 edit_file（整覆盖会丢失未明确修改的 section）。仅支持纯文本，不能创建二进制文件（.docx/.xlsx 等）。',
   inputSchema: {
     type: 'object',
     properties: {

@@ -271,7 +271,7 @@ function createDefaultProviders(): ProviderInstance[] {
 
 export type ViewMode = 'chat' | 'automation' | 'toolbox' | 'settings';
 export type AutomationTab = 'schedule' | 'trigger';
-export type SystemSettingsTab = 'general' | 'ai-services' | 'sandbox' | 'im-channels' | 'personal-memory' | 'soul' | 'diagnostic' | 'about' | 'feedback' | 'sponsor';
+export type SystemSettingsTab = 'general' | 'ai-services' | 'sandbox' | 'im-channels' | 'personal-memory' | 'soul' | 'diagnostic' | 'usage' | 'about' | 'feedback' | 'sponsor';
 export type ToolboxTab = 'skills' | 'agents' | 'mcp';
 
 // ============================================================
@@ -605,7 +605,7 @@ export const useSettingsStore = create<SettingsStore>()(
       maxOutputTokens: 32768,
       contextWindowSize: 200000,
       language: 'system' as LanguageSetting,
-      activeSystemTab: 'ai-services' as SystemSettingsTab,
+      activeSystemTab: 'usage' as SystemSettingsTab,
       activeAutomationTab: 'schedule' as AutomationTab,
       activeToolboxTab: 'skills' as ToolboxTab,
       toolboxSearchQuery: '',
@@ -1472,7 +1472,7 @@ export const useSettingsStore = create<SettingsStore>()(
         reconcileActiveProvider(state);
         // Force reset ephemeral UI state
         state.showSettings = false;
-        state.activeSystemTab = 'ai-services';
+        state.activeSystemTab = 'usage';
         state.activeAutomationTab = 'schedule';
         state.activeToolboxTab = 'skills';
         state.toolboxSearchQuery = '';

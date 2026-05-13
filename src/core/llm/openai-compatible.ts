@@ -219,6 +219,8 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
       messages: convertMessages(messages, options.systemPrompt, options.supportsVision),
       max_tokens: options.maxTokens ?? 4096,
       stream: useStreaming,
+      // Request token usage in streaming responses (OpenAI-compatible providers, e.g. GLM)
+      ...(useStreaming ? { stream_options: { include_usage: true } } : {}),
     };
 
     if (hasTools) {

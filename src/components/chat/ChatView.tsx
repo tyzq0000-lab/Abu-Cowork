@@ -22,6 +22,7 @@ import IMInfoBar from './IMInfoBar';
 import SourceInfoBar from './SourceInfoBar';
 import ComputerUseStatusBar from './ComputerUseStatusBar';
 import ConvIdBadge from './ConvIdBadge';
+import UsageChip from './UsageChip';
 
 /**
  * Groups messages by loopId for rendering.
@@ -416,6 +417,7 @@ export default function ChatView() {
           <BackgroundAgents />
           <ChatInput variant="chat" onSend={handleSend} />
           <div className="flex items-center justify-center gap-3 mt-1.5">
+            <UsageChip conversationId={activeConv.id} />
             <p className="text-[11px] text-[var(--abu-text-muted)]">
               {t.chat.disclaimer}
             </p>

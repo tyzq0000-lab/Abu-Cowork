@@ -37,6 +37,13 @@ export interface PreToolCallEvent extends BaseHookEvent {
   toolInput: Record<string, unknown>;
   /** Set to true to block the tool call */
   blocked?: boolean;
+  /**
+   * Optional reason string shown to the agent when blocked. If provided,
+   * the executor surfaces this as the tool result (error=true) so the
+   * model can adapt. If absent, a generic '[被 hook 拦截]' is used and
+   * error=false (legacy skill-hook behavior).
+   */
+  blockReason?: string;
   /** Override the input (optional) */
   modifiedInput?: Record<string, unknown>;
 }

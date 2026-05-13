@@ -9,7 +9,6 @@ import { format } from '@/i18n';
 import ProjectItem from './ProjectItem';
 import CreateProjectDialog from '@/components/common/CreateProjectDialog';
 import ProjectSettingsDialog from '@/components/common/ProjectSettingsDialog';
-import { suggestProjectGroupings, applyMigration } from '@/utils/projectMigration';
 
 export default function ProjectsSection() {
   const { t } = useI18n();
@@ -41,16 +40,8 @@ export default function ProjectsSection() {
   // Dialog state
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
-  const [migrationDismissed, setMigrationDismissed] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [sectionCollapsed, setSectionCollapsed] = useState(false);
-
-  // Check for migratable conversations
-  const migrationGroups = useMemo(() => {
-    if (migrationDismissed) return [];
-    return suggestProjectGroupings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationIndex, migrationDismissed]);
 
   // Group conversations by projectId using lightweight index
   const projectConversations = useMemo(() => {
@@ -142,29 +133,6 @@ export default function ProjectsSection() {
             + {t.project.emptyState}
           </button>
         ) : null}
-
-        {/* Migration banner */}
-        {!sectionCollapsed && migrationGroups.length > 0 && (
-          <div className="mx-2 mt-2 px-2.5 py-2 rounded-lg bg-[var(--abu-clay-bg)] text-[12px]">
-            <p className="text-[var(--abu-clay)]">
-              💡 {format(t.project.migrationBanner, { count: String(migrationGroups.length) })}
-            </p>
-            <div className="flex items-center gap-2 mt-1.5">
-              <button
-                onClick={() => { applyMigration(migrationGroups); setMigrationDismissed(true); }}
-                className="text-[var(--abu-clay)] font-medium hover:underline"
-              >
-                {t.project.migrationAction}
-              </button>
-              <button
-                onClick={() => setMigrationDismissed(true)}
-                className="text-[var(--abu-text-muted)] hover:text-[var(--abu-text-tertiary)]"
-              >
-                {t.project.migrationDismiss}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Archived projects */}
         {!sectionCollapsed && archivedProjects.length > 0 && (

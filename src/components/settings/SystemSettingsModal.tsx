@@ -1,12 +1,13 @@
 import { useSettingsStore, type SystemSettingsTab } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
-import { Settings2, Info, Shield, Check, SlidersHorizontal, MessageCircle, Radio, Brain, Heart, Activity } from 'lucide-react';
+import { Settings2, Info, Shield, SlidersHorizontal, MessageCircle, Radio, Brain, Heart, Activity, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIServicesSection, AboutSection, SandboxSection, GeneralSection, IMChannelSection } from './sections';
 import FeedbackSection from './sections/FeedbackSection';
 import PersonalMemorySection from './sections/PersonalMemorySection';
 import SoulSection from './sections/SoulSection';
 import DiagnosticSection from './sections/DiagnosticSection';
+import UsageSection from './sections/UsageSection';
 
 export default function SystemSettingsView() {
   const {
@@ -16,6 +17,7 @@ export default function SystemSettingsView() {
   const { t } = useI18n();
 
   const navItems: { id: SystemSettingsTab; label: string; icon: typeof Settings2 }[] = [
+    { id: 'usage', label: t.usage.title, icon: BarChart3 },
     { id: 'ai-services', label: t.settings.aiServices, icon: Settings2 },
     { id: 'im-channels', label: t.imChannel.title, icon: Radio },
     { id: 'personal-memory', label: t.sidebar.personalMemory, icon: Brain },
@@ -41,6 +43,8 @@ export default function SystemSettingsView() {
         return <PersonalMemorySection />;
       case 'soul':
         return <SoulSection />;
+      case 'usage':
+        return <UsageSection />;
       case 'diagnostic':
         return <DiagnosticSection />;
       case 'about':
@@ -54,20 +58,6 @@ export default function SystemSettingsView() {
 
   return (
     <div className="h-full bg-[var(--abu-bg-base)] flex flex-col">
-      {/* Header */}
-      <div className="shrink-0 flex items-center px-6 py-4 border-b border-[var(--abu-border)]">
-        <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-[var(--abu-clay-bg)] flex items-center justify-center">
-            <Settings2 className="h-4 w-4 text-[var(--abu-clay)]" />
-          </div>
-          <h2 className="text-lg font-semibold text-[var(--abu-text-primary)]">{t.settings.title}</h2>
-        </div>
-        <div className="flex items-center gap-1 text-[11px] text-[var(--abu-text-muted)]">
-          <Check className="h-3 w-3 text-green-500" />
-          <span>{t.settings.autoSaved}</span>
-        </div>
-      </div>
-
       {/* Body - Left/Right Layout */}
       <div className="flex-1 flex min-h-0">
         {/* Left Navigation */}

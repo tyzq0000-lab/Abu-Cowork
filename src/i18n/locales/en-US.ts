@@ -271,6 +271,10 @@ const enUS: TranslationDict = {
     contextCompressBtn: 'Compress',
     contextNewChatBtn: 'New Chat',
     maxTurnsReached: 'Completed {n} turns. Send a new message to continue if the task is not finished.',
+    usageChipInput: 'Input',
+    usageChipOutput: 'Output',
+    usageChipCache: 'cache',
+    usageChipRequests: 'requests',
   },
 
   share: {
@@ -425,7 +429,7 @@ const enUS: TranslationDict = {
     webSearchProviderTavily: 'Tavily Search',
     webSearchProviderSearXNG: 'SearXNG (Self-hosted)',
     // AI Services
-    aiServices: 'AI Services',
+    aiServices: 'Models',
     aiServicesDescription: 'Configure model, search, and image generation services',
     capabilities: 'Capabilities',
     capabilityChat: 'Chat',
@@ -1573,9 +1577,6 @@ const enUS: TranslationDict = {
     convertToProject: 'Convert to Project',
     moveToProject: 'Move to project',
     removeFromProject: 'Remove from project',
-    migrationBanner: 'Found {count} groups of conversations that can be organized into projects',
-    migrationAction: 'Organize All',
-    migrationDismiss: 'Later',
     emptyState: 'Create your first project',
     selectFolder: 'Select Folder',
     next: 'Next',
@@ -1594,6 +1595,28 @@ const enUS: TranslationDict = {
     modularRules: 'Modular Rules',
     rulesTruncated: 'Rules truncated',
     rulesNotModifiable: 'Project rules are manually maintained by users, not modifiable by AI',
+  },
+
+  usage: {
+    title: 'Usage Stats',
+    periodToday: 'Today',
+    periodWeek: 'This week',
+    periodMonth: 'This month',
+    periodAll: 'All time',
+    requests: 'Requests',
+    inputTokens: 'Input tokens',
+    outputTokens: 'Output tokens',
+    cacheHitRate: 'Cache hit rate',
+    bySkill: 'By Skill',
+    byModel: 'By Model',
+    noData: 'No data yet. Usage will be recorded after you send a message.',
+    heatmapTitle: 'Activity (last year)',
+    dailyTitle: 'Daily usage (last 30 days)',
+    heatmapTooltipUsed: '{date}: {tokens} tokens used',
+    heatmapTooltipNoData: '{date}: no data',
+    heatmapWeekdays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    heatmapLegendLess: 'Less',
+    heatmapLegendMore: 'More',
   },
 };
 

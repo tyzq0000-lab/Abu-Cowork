@@ -148,6 +148,12 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
     } as PreToolCallEvent);
 
     if (preEvent.blocked) {
+      // If the hook provided a reason, surface it as an error so the agent
+      // can read why and adapt (e.g. switch from write_file to edit_file).
+      // Without a reason, fall back to legacy generic message (error=false).
+      if (preEvent.blockReason) {
+        return { id: tc.id, result: preEvent.blockReason, resultContent: undefined, error: true, duration: 0 };
+      }
       return { id: tc.id, result: '[被 hook 拦截]', resultContent: undefined, error: false, duration: 0 };
     }
 

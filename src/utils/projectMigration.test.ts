@@ -125,9 +125,7 @@ describe('backfillProjectIds', () => {
 
     const n = backfillProjectIds();
     // System-owned conversations (scheduled / trigger) don't belong to a
-    // user-facing project — they're runbooks, not project chats. Mirrors
-    // the filter in `suggestProjectGroupings` above so both migration
-    // paths agree.
+    // user-facing project — they're runbooks, not project chats.
     expect(n).toBe(0);
     expect(useChatStore.getState().conversationIndex.sched.projectId).toBeUndefined();
     expect(useChatStore.getState().conversationIndex.trig.projectId).toBeUndefined();
