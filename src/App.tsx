@@ -425,10 +425,12 @@ function App() {
       </div>
 
       <div className="flex h-full w-full">
-        {/* Sidebar - collapses smoothly in toolbox mode */}
+        {/* Sidebar - width changes are always instant (no slide animation) */}
         <div
-          className="sidebar-transition shrink-0 overflow-hidden"
-          style={{ width: (sidebarCollapsed || viewMode === 'settings' || viewMode === 'automation' || viewMode === 'toolbox') ? 0 : 260 }}
+          className="shrink-0 overflow-hidden"
+          style={{
+            width: (sidebarCollapsed || viewMode === 'settings' || viewMode === 'automation' || viewMode === 'toolbox') ? 0 : 260,
+          }}
         >
           <Sidebar />
         </div>
