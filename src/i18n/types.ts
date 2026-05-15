@@ -1650,5 +1650,23 @@ export interface TranslationDict {
     subtitle: string;
     searchPlaceholder: string;
     comingSoon: string;
+    categoryAll: string;
+    categoryProductDesign: string;
+    categoryTechEng: string;
+    categoryDataIntel: string;
+    categoryContent: string;
+    categoryOpsHR: string;
+    categoryFinance: string;
+    categoryMarketing: string;
+    categorySales: string;
+    // ExpertDetailModal
+    startChat: string;
+    expertise: string;
+    samplePrompts: string;
+    advancedSettings: string;
+    modelLabel: string;
+    toolsLabel: string;
+    systemPromptLabel: string;
+    modelInherit: string;
   };
 }

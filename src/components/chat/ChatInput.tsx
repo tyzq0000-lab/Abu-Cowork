@@ -385,7 +385,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
         setSuggestionsDismissed(true);
       }
     } else if (suggestionType === 'agent') {
-      const agentMatch = /^@([a-z0-9-]+)(?:\s+(.*))?$/.exec(trimmed);
+      const agentMatch = /^@(\S+)(?:\s+([\s\S]*))?$/.exec(trimmed);
       if (agentMatch && suggestions.length === 1 && suggestions[0].name === agentMatch[1]) {
         setSelectedAgent(suggestions[0]);
         setText(agentMatch[2] ?? '');

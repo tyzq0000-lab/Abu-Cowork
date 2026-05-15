@@ -166,6 +166,105 @@ memory: project
   },
 ];
 
+/** Built-in experts for the Expert Team panel (registered in agentRegistry builtins) */
+export const expertTemplates: MarketplaceItem[] = [
+  {
+    id: 'sr-engineer',
+    name: '高级开发工程师',
+    description: '10 年以上全栈经验，精通架构设计、性能优化与代码审查',
+    author: 'ABU 团队',
+    category: 'tech-engineering',
+    tags: ['全栈开发', '架构设计', 'Code Review'],
+    expertise: [
+      '代码阅读与精准 diff 级改动建议',
+      '架构设计、技术选型与性能瓶颈排查',
+      'Code review：隐患、边界条件、安全问题',
+      '将模糊需求转化为可执行技术方案',
+    ],
+    samplePrompts: [
+      '帮我看下这段代码有什么问题',
+      'React 状态管理选 Zustand 还是 Redux，为什么',
+      '怎么给这个 API 做性能优化',
+    ],
+  },
+  {
+    id: 'product-manager',
+    name: '产品经理',
+    description: '8 年 B2B/B2C 产品经验，擅长需求分析、用户研究与产品策略',
+    author: 'ABU 团队',
+    category: 'product-design',
+    tags: ['需求分析', 'PRD 写作', '用户研究'],
+    expertise: [
+      '需求文档写作：PRD、BRD、需求评审材料',
+      '用户故事拆解与优先级排序（RICE/ICE/MoSCoW）',
+      '竞品分析与市场定位',
+      '产品路线图规划',
+    ],
+    samplePrompts: [
+      '帮我写一个用户注册功能的 PRD',
+      '这个需求怎么拆分用户故事',
+      '帮我做一份竞品分析框架',
+    ],
+  },
+  {
+    id: 'data-analyst',
+    name: '数据分析师',
+    description: '7 年数据分析经验，精通 SQL、Python 与统计建模',
+    author: 'ABU 团队',
+    category: 'data-intelligence',
+    tags: ['SQL', 'Python', 'A/B 测试'],
+    expertise: [
+      '业务指标体系设计与看板搭建',
+      'SQL 查询编写与优化（漏斗/留存/同期群）',
+      'A/B 测试设计、显著性检验与结果解读',
+      '用户行为分析、RFM 模型、用户分群',
+    ],
+    samplePrompts: [
+      '帮我写一个 7 日留存率的 SQL',
+      '怎么设计这个功能的 A/B 测试方案',
+      '帮我分析这份数据，找出异常点',
+    ],
+  },
+  {
+    id: 'wechat-editor',
+    name: '公众号编辑',
+    description: '6 年科技/商业赛道内容运营，擅长选题策划与爆款文章创作',
+    author: 'ABU 团队',
+    category: 'content-creation',
+    tags: ['选题策划', '标题创作', '内容运营'],
+    expertise: [
+      '选题策划：从热点/趋势找话题，判断传播潜力',
+      '文章框架：开头钩子 → 核心内容 → 行动号召',
+      '标题创作：5-10 个候选，注明打开率逻辑',
+      '文章润色：优化表达、加强节奏感、删废话',
+    ],
+    samplePrompts: [
+      '帮我围绕 AI 办公写一篇公众号文章',
+      '给这篇文章出 5 个标题候选',
+      '帮我分析为什么这篇文章阅读量低',
+    ],
+  },
+  {
+    id: 'hr-recruiter',
+    name: 'HR 招聘官',
+    description: '8 年互联网行业招聘经验，擅长 JD 撰写、面试设计与薪酬谈判',
+    author: 'ABU 团队',
+    category: 'ops-hr',
+    tags: ['JD 撰写', '面试设计', '薪酬谈判'],
+    expertise: [
+      'JD 撰写：岗位职责、任职要求的精准表达',
+      '简历筛选：判断候选人潜力的方法和红旗信号',
+      '面试题库设计：行为面试题（STAR）、场景题',
+      '薪酬谈判话术与策略',
+    ],
+    samplePrompts: [
+      '帮我写一个数据分析师的 JD',
+      '给这个岗位设计 5 道面试题',
+      '候选人期望薪资超预算，怎么谈',
+    ],
+  },
+];
+
 /** Get agent template by ID */
 export function getAgentTemplate(id: string): MarketplaceItem | undefined {
   return agentTemplates.find((t) => t.id === id);
