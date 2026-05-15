@@ -179,6 +179,11 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     // 3. Get + filter tools
     let tools = getAllTools();
     if (agent.tools && agent.tools.length > 0) {
+      const available = new Set(tools.map((t) => t.name));
+      const unknown = agent.tools.filter((name) => !available.has(name));
+      if (unknown.length > 0) {
+        console.warn(`[subagent:${agent.name}] unknown tool names dropped: ${unknown.join(', ')}`);
+      }
       const allowed = new Set(agent.tools);
       tools = tools.filter((t) => allowed.has(t.name));
     }

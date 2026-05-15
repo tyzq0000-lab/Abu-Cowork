@@ -38,21 +38,29 @@ export default function ExpertsCenter() {
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (e) =>
-          e.name.toLowerCase().includes(q) ||
-          e.description.toLowerCase().includes(q) ||
-          e.tags?.some((tag) => tag.toLowerCase().includes(q))
-      );
+      result = result.filter((e) => {
+        // Build cross-locale haystack: current locale fields + opposite locale overrides
+        const enOverride = expertsEnUS[e.id];
+        const parts = [
+          e.name,
+          e.description,
+          ...(e.tags ?? []),
+          enOverride?.name ?? '',
+          enOverride?.description ?? '',
+          ...(enOverride?.tags ?? []),
+        ];
+        return parts.some((p) => p.toLowerCase().includes(q));
+      });
     }
 
     return result;
   }, [localizedExperts, selectedCategory, searchQuery]);
 
-  const handleStartChat = (expertId: string) => {
+  const handleStartChat = (expertId: string, promptText?: string) => {
     const registryName = expertTemplates.find((e) => e.id === expertId)?.name ?? expertId;
+    const input = promptText ? `@${registryName} ${promptText}` : `@${registryName} `;
     startNewConversation();
-    setPendingInput(`@${registryName} `);
+    setPendingInput(input);
     closeExperts();
   };
 

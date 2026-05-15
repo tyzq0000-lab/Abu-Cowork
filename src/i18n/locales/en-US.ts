@@ -151,7 +151,7 @@ const enUS: TranslationDict = {
     welcomeTitle: 'Leave it to Abu ✨',
     welcomeSubtitle: "Hey~ I'm Abu, your desktop buddy! From now on, leave everything to me~",
     disclaimer: 'Abu may make mistakes. Please verify important information.',
-    thinking: 'Abu is thinking...',
+    thinking: 'Thinking…',
     dropFilesHere: 'Drop files here',
     pasteOrDropImages: 'Paste or drop images',
     imageAdded: 'Image added',

@@ -11,7 +11,7 @@ import type { TranslationDict } from '@/i18n/types';
 interface ExpertDetailModalProps {
   expert: MarketplaceItem | null;
   onClose: () => void;
-  onStartChat: (expertName: string) => void;
+  onStartChat: (expertId: string, promptText?: string) => void;
 }
 
 function getCategoryLabel(
@@ -27,6 +27,10 @@ function getAvatarFromContent(content?: string): string {
   if (!content) return '🤖';
   const match = content.match(/^---[\s\S]*?avatar:\s*(.+?)\s*\n/m);
   return match?.[1] ?? '🤖';
+}
+
+function resolveAvatar(expert: MarketplaceItem): string {
+  return expert.avatar ?? getAvatarFromContent(expert.content);
 }
 
 export default function ExpertDetailModal({
@@ -52,7 +56,7 @@ export default function ExpertDetailModal({
   const parsed = expert.content
     ? parseAgentFile(expert.content, '__preview__')
     : agentRegistry.getAgent(expert.name) ?? null;
-  const avatar = getAvatarFromContent(expert.content);
+  const avatar = resolveAvatar(expert);
   const categoryLabel = getCategoryLabel(expert.category, t);
   const resolvedModel = parsed?.model
     ? resolveAgentModel(parsed.model, settingsState)
@@ -127,9 +131,14 @@ export default function ExpertDetailModal({
               </p>
               <ul className="space-y-1.5">
                 {expert.samplePrompts.map((prompt) => (
-                  <li key={prompt} className="flex items-start gap-2 text-sm text-[var(--abu-text-secondary)]">
-                    <span className="text-[var(--abu-text-muted)] shrink-0">·</span>
-                    <span className="italic">"{prompt}"</span>
+                  <li key={prompt}>
+                    <button
+                      onClick={() => onStartChat(expert.id, prompt)}
+                      className="w-full text-left flex items-center gap-2 text-sm text-[var(--abu-text-secondary)] bg-[var(--abu-bg-subtle)] hover:bg-[var(--abu-bg-active)] hover:text-[var(--abu-text-primary)] border border-[var(--abu-border)] rounded-lg px-3 py-2 transition-colors group cursor-pointer"
+                    >
+                      <span className="text-[var(--abu-clay)] shrink-0">›</span>
+                      <span className="italic">"{prompt}"</span>
+                    </button>
                   </li>
                 ))}
               </ul>

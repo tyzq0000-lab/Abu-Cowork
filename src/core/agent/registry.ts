@@ -88,7 +88,7 @@ export class AgentRegistry {
         avatar: '💻',
         model: 'inherit',
         maxTurns: 50,
-        tools: ['read_file', 'write_file', 'list_directory', 'execute_command', 'web_search'],
+        tools: ['read_file', 'write_file', 'edit_file', 'list_directory', 'run_command', 'web_search'],
         memory: 'session',
         filePath: '__builtin__',
         systemPrompt: `你是一位拥有 10 年以上经验的高级全栈开发工程师，精通 TypeScript/JavaScript、Python、React、Node.js、数据库设计与性能优化，熟悉主流云服务架构。
@@ -147,7 +147,7 @@ export class AgentRegistry {
         avatar: '📊',
         model: 'inherit',
         maxTurns: 40,
-        tools: ['read_file', 'write_file', 'execute_command', 'web_search'],
+        tools: ['read_file', 'write_file', 'run_command', 'web_search'],
         memory: 'session',
         filePath: '__builtin__',
         systemPrompt: `你是一位拥有 7 年数据分析经验的数据分析师，精通 SQL、Python（Pandas/NumPy/Matplotlib）、数据可视化（Tableau/DataV/ECharts）和统计分析方法。

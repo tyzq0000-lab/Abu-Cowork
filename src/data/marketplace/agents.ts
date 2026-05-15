@@ -174,6 +174,7 @@ export const expertTemplates: MarketplaceItem[] = [
     description: '10 年以上全栈经验，精通架构设计、性能优化与代码审查',
     author: 'ABU 团队',
     category: 'tech-engineering',
+    avatar: '💻',
     tags: ['全栈开发', '架构设计', 'Code Review'],
     expertise: [
       '代码阅读与精准 diff 级改动建议',
@@ -193,6 +194,7 @@ export const expertTemplates: MarketplaceItem[] = [
     description: '8 年 B2B/B2C 产品经验，擅长需求分析、用户研究与产品策略',
     author: 'ABU 团队',
     category: 'product-design',
+    avatar: '📋',
     tags: ['需求分析', 'PRD 写作', '用户研究'],
     expertise: [
       '需求文档写作：PRD、BRD、需求评审材料',
@@ -212,6 +214,7 @@ export const expertTemplates: MarketplaceItem[] = [
     description: '7 年数据分析经验，精通 SQL、Python 与统计建模',
     author: 'ABU 团队',
     category: 'data-intelligence',
+    avatar: '📊',
     tags: ['SQL', 'Python', 'A/B 测试'],
     expertise: [
       '业务指标体系设计与看板搭建',
@@ -231,6 +234,7 @@ export const expertTemplates: MarketplaceItem[] = [
     description: '6 年科技/商业赛道内容运营，擅长选题策划与爆款文章创作',
     author: 'ABU 团队',
     category: 'content-creation',
+    avatar: '✍️',
     tags: ['选题策划', '标题创作', '内容运营'],
     expertise: [
       '选题策划：从热点/趋势找话题，判断传播潜力',
@@ -250,6 +254,7 @@ export const expertTemplates: MarketplaceItem[] = [
     description: '8 年互联网行业招聘经验，擅长 JD 撰写、面试设计与薪酬谈判',
     author: 'ABU 团队',
     category: 'ops-hr',
+    avatar: '👥',
     tags: ['JD 撰写', '面试设计', '薪酬谈判'],
     expertise: [
       'JD 撰写：岗位职责、任职要求的精准表达',

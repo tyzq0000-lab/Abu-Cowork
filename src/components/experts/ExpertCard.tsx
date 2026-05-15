@@ -18,7 +18,7 @@ export default function ExpertCard({ expert, onClick }: ExpertCardProps) {
     >
       {/* Avatar */}
       <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-[var(--abu-bg-active)] text-2xl select-none">
-        {expert.name ? getAvatarFromContent(expert.content) || '🤖' : '🤖'}
+        {expert.avatar ?? getAvatarFromContent(expert.content) ?? '🤖'}
       </div>
 
       {/* Name */}
