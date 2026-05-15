@@ -294,17 +294,18 @@ body {
 }
 
 .dl-menu-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    display: block;
 }
 
 .dl-menu-name {
+    display: block;
     font-size: 0.9rem;
     font-weight: 600;
+    margin-bottom: 2px;
 }
 
 .dl-menu-sub {
+    display: block;
     font-size: 0.75rem;
     color: var(--color-text-muted);
 }
