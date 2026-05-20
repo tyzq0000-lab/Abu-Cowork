@@ -108,6 +108,13 @@ const PREFETCH_RULES: ReadonlyArray<{
     tools: [TOOL_NAMES.RECALL],
   },
   {
+    // Save-to-memory triggers — promote update_memory so the model sees its
+    // detailed schema (where the memory-writing conventions now live after
+    // v0.18.6 slashed the always-on memory-mgmt section).
+    keywords: ['记住这个', '记住这一点', '帮我记下', '帮我记住', '记下来', '别忘了', '请记住', '保存到记忆', '存进记忆', 'remember this', 'save to memory'],
+    tools: [TOOL_NAMES.UPDATE_MEMORY],
+  },
+  {
     keywords: ['通知我', '提醒我', '完成后通知', 'notify'],
     tools: [TOOL_NAMES.SYSTEM_NOTIFY],
   },

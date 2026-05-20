@@ -52,7 +52,20 @@ function matchesQuery(text: string, queryTokens: string[]): boolean {
 
 export const recallTool: ToolDefinition = {
   name: TOOL_NAMES.RECALL,
-  description: '回忆过去的记忆、任务记录和历史会话。当用户问到"之前"、"上次"、"最近做了什么"、"你记得吗"、"我们聊过什么"等需要回溯历史的问题时使用。',
+  description: `回忆过去的记忆、任务记录和历史会话。当用户问到"之前"、"上次"、"最近做了什么"、"你记得吗"、"我们聊过什么"等需要回溯历史的问题时使用。
+
+## 优先级（按顺序）
+1. **先看 <relevant-memories>**（system prompt 后段）：每轮已自动注入相关非私密记忆完整内容，能从这里答就直接答，不用调任何工具。
+2. **recall（关键词搜）**：<relevant-memories> 没覆盖，或不确定有没有相关记忆时用。
+3. **read_memory（按 filename 精确拉）**：在 <memory-index> 看到具体的 filename 且 description 显示相关时（包括 🔒 私密记忆且用户明确问起的场景），直接 read_memory(filename) — 比 recall 准确，token 也省。
+
+## 用记忆时的 sanity-check
+记忆是过去某时刻的快照，可能已过时。基于记忆给建议前：
+- 提到具体文件路径 → 先确认文件还在
+- 提到具体函数/工具名 → 先 grep 确认
+- 用户即将据此行动 → 先验证现状再说
+
+"记忆说 X 存在" ≠ "X 现在还存在"。发现记忆与现状冲突，相信现状，并更新或删除过时的记忆。`,
   inputSchema: {
     type: 'object',
     properties: {

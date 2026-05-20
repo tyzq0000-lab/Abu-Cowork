@@ -33,7 +33,44 @@ export const reportPlanTool: ToolDefinition = {
 
 export const updateMemoryTool: ToolDefinition = {
   name: TOOL_NAMES.UPDATE_MEMORY,
-  description: '保存或更新持久记忆。**调用前先核对 system prompt 中的 <memory-index>**：如果已有相同主题的记忆，根据情况选择 edit 覆盖或 delete 删除，不要写重复条目。\n\n四种 action：\n- append（默认）：新写一条记忆。仅在索引中没有相似主题时使用。\n- edit：用 filename 覆盖某条已有记忆（用户改主意/补充 Why/How 时用）。\n- delete：用 filename 删除某条已过时的记忆（信息冲突且新值更合适时用）。\n- clear：清空所有记忆（极少用，仅用户明确要求时）。\n\n**private 标记 + description 写法**（重要）：保存身份证/银行卡/手机号/薪资/医疗等敏感信息时传 `private: true`。**对于 private 记忆，description 必须只写"主题"，不要写"具体值"**——因为 description 会出现在 MEMORY.md 索引里被注入到每轮对话的 system prompt。例：\n  ✅ description="个人身份证号"（主题，安全）\n  ❌ description="身份证号 110105199003078412"（值泄露，等于没保护）\n  ✅ description="银行账户信息"\n  ❌ description="工行卡 6228...0018，密码 xxx"\n普通用户偏好/工作习惯保持非私密，description 可以写得详细一些方便每轮自动引用。\n\n不要保存一次性任务结果（"X 已生成"）、临时状态（"测试通过"）、可派生信息（"项目位于 /Users/X"）。项目规则（.abu/ABU.md）由用户手动维护，不要用此工具修改。',
+  description: `保存或更新持久记忆。**调用前先核对 system prompt 中的 <memory-index>**：如果已有相同主题的记忆，根据情况选择 edit 覆盖或 delete 删除，不要写重复条目。
+
+## 四种 action
+- append（默认）：新写一条记忆。仅在索引中没有相似主题时使用。
+- edit：用 filename 覆盖某条已有记忆（用户改主意/补充 Why/How 时用）。
+- delete：用 filename 删除某条已过时的记忆（信息冲突且新值更合适时用）。
+- clear：清空所有记忆（极少用，仅用户明确要求时）。
+
+## 4 类记忆 type
+- user — 用户角色、目标、知识水平、长期偏好。例：用户是数据团队 PM；偏好简洁回复。
+- feedback — 用户对你的纠正或确认。body 结构：**规则 + Why + How to apply**。
+  - 例（纠正）：规则=不要用 echo 写文件；Why=中文易乱码；How=改用 Write 工具
+  - 例（确认）：规则=重构按"一类一 commit"拆；Why=便于回溯；How=后续重构沿用
+- project — 项目进展、关键决策、待办、约束。body 结构：**事实 + Why + How to apply**。
+- reference — 外部资源指针（看板/文档/频道地址）。
+
+## 不要保存
+- 一次性任务结果（"X 已生成"/"翻译完成"）、临时状态（"测试通过"/"端口被占用"）
+- 可派生信息（项目路径、代码模式 — 读项目/grep 就知道）
+- 闲聊、问候、一次性查询（天气、临时计算）
+- 项目规则文件（.abu/ABU.md）已包含的内容
+
+即便用户明确说"记住这个清单"，先问：哪部分是 *意外的、未来还有用的*？只记那部分。
+
+## 写入前必查（避免重复 / 处理冲突）
+先扫 <memory-index>，按现有记忆与新信息的关系分情况：
+- **新主题**（索引无相似条目）→ append
+- **信息冲突**（同一事实不同值，如"用户叫小包" → "用户叫小白"）→ edit 覆盖旧条，或 delete 后再 append。**永远不要留下两条值矛盾的记忆并存**。
+- **信息补充**（原条目缺 Why/How，新对话补全了）→ edit 把旧条补全，不要新写平行的。
+- **完全同义重复** → 跳过。
+
+判断三问：①冲突还是补充？②同时存在会不会让未来 Agent 困惑？③用户最近一句是不是在改之前的偏好？任一"是" → 用 edit/delete，不要 append。
+
+## private 标记 + description 写法（重要）
+保存身份证/银行卡/手机号/薪资/医疗/未公开商业等敏感信息时传 \`private: true\`。**对于 private 记忆，description 必须只写"主题"，不要写"具体值"**——因为 description 会出现在 MEMORY.md 索引里被注入到每轮对话的 system prompt。
+- ✅ description="个人身份证号" / "工行账户" / "本月薪资"
+- ❌ description="身份证 110105..." / "卡号 6228... 密码 xxx"
+普通用户偏好/工作习惯保持非私密，description 可以写得详细一些方便每轮自动引用。`,
   inputSchema: {
     type: 'object',
     properties: {
