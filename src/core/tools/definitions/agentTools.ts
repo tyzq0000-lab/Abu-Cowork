@@ -3,6 +3,8 @@ import type { ToolDefinition, Conversation, SubagentDefinition } from '../../../
 import { skillLoader } from '../../skill/loader';
 import { agentRegistry } from '../../agent/registry';
 import { getCurrentLoopContext, getLoopContext, requestWorkspace } from '../../agent/permissionBridge';
+import { incrementAsyncSubAgent, decrementAsyncSubAgent } from '../../agent/asyncSubAgentTracker';
+import { persistExecutionSnapshot } from '../../agent/agentLoop';
 import { runSubagentLoop, extractParentConversationSummary } from '../../agent/subagentLoop';
 import type { SubagentProgressEvent } from '../../agent/subagentLoop';
 import { createSubagentController } from '../../agent/subagentAbort';
@@ -323,6 +325,14 @@ export const delegateToAgentTool: ToolDefinition = {
         subagentId,
       });
 
+      // Capture parent loop identity before the async context so the finally
+      // block can trigger a re-snapshot + eviction after child steps land.
+      const capturedLoopId = loopCtx?.loopId;
+      const capturedConvId = convId;
+      if (capturedLoopId) {
+        incrementAsyncSubAgent(capturedLoopId);
+      }
+
       // Fire-and-forget: run subagent in background
       let bgToolCount = 0;
       void (async () => {
@@ -352,6 +362,14 @@ export const delegateToAgentTool: ToolDefinition = {
         } finally {
           subagentCleanup();
           useChatStore.getState().removeActiveAgent(effectiveAgentName);
+          // When the last async sub-agent for this loop finishes, take a fresh
+          // snapshot (now including all child steps) and evict the execution.
+          if (capturedLoopId) {
+            const isLast = decrementAsyncSubAgent(capturedLoopId);
+            if (isLast) {
+              persistExecutionSnapshot(capturedConvId, capturedLoopId);
+            }
+          }
         }
       })();
 

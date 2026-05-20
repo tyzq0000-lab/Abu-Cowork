@@ -881,6 +881,7 @@ export const useChatStore = create<ChatStore>()(
       },
 
       setExecutionStepsSnapshot: (convId, loopId, steps) => {
+        let targetMsgId: string | undefined;
         set((state) => {
           const conv = state.conversations[convId];
           if (!conv) return;
@@ -889,10 +890,22 @@ export const useChatStore = create<ChatStore>()(
             const m = conv.messages[i];
             if (m.role === 'assistant' && m.loopId === loopId) {
               m.executionSteps = steps;
+              targetMsgId = m.id;
               break;
             }
           }
         });
+        // Persist to disk so execution steps survive conversation reload.
+        // finishStreaming writes the message before the snapshot exists, so we
+        // must explicitly re-persist here — same pattern as updateToolCall.
+        if (targetMsgId) {
+          const msg = get().conversations[convId]?.messages.find((m) => m.id === targetMsgId);
+          if (msg) {
+            import('../core/session/conversationStorage').then(({ replaceMessageById }) => {
+              replaceMessageById(convId, msg).catch(() => {});
+            }).catch(() => {});
+          }
+        }
       },
 
       // Streaming control

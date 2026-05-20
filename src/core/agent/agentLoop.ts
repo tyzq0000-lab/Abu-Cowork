@@ -31,6 +31,7 @@ import type { SubagentProgressEvent } from './subagentLoop';
 import { createSubagentController } from './subagentAbort';
 import { drainQueuedInputs, clearInputQueue } from './userInputQueue';
 import { snapshotExecutionSteps } from './executionSnapshot';
+import { hasPendingAsyncSubAgents } from './asyncSubAgentTracker';
 import { emitHook } from './lifecycleHooks';
 import { getI18n, format } from '../../i18n';
 import { clearAllSkillHooks } from '../tools/builtins';
@@ -147,12 +148,19 @@ import {
 } from './permissionBridge';
 
 /** Persist execution steps onto the last assistant message for the given loop, then evict from memory */
-function persistExecutionSnapshot(conversationId: string, loopId: string): void {
+export function persistExecutionSnapshot(conversationId: string, loopId: string): void {
   const store = useTaskExecutionStore.getState();
   const exec = store.getExecutionByLoopId(loopId);
-  if (exec && exec.steps.length > 0) {
-    useChatStore.getState().setExecutionStepsSnapshot(conversationId, loopId, snapshotExecutionSteps(exec.steps));
-    // Evict completed execution from memory — data now lives on the persisted message
+  if (!exec || exec.steps.length === 0) return;
+
+  // Always save the latest snapshot (captures whatever child steps exist right now)
+  useChatStore.getState().setExecutionStepsSnapshot(conversationId, loopId, snapshotExecutionSteps(exec.steps));
+
+  // Delay eviction until all async sub-agents for this loop have finished.
+  // Evicting early would remove the execution from the store before sub-agents
+  // can add their child steps via addChildStepToDelegate, making those steps
+  // invisible in the expanded TaskBlock after the main loop ends.
+  if (!hasPendingAsyncSubAgents(loopId)) {
     store.evictExecution(exec.id);
   }
 }
