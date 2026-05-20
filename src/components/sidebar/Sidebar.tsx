@@ -79,7 +79,6 @@ export default function Sidebar() {
   const viewMode = useSettingsStore((s) => s.viewMode);
   const setViewMode = useSettingsStore((s) => s.setViewMode);
   const updateInfo = useSettingsStore((s) => s.updateInfo);
-  const badgeCounts = useNoticeBadgeStore((s) => s.counts);
   const clearBadge = useNoticeBadgeStore((s) => s.clear);
   const { t } = useI18n();
 
@@ -403,11 +402,6 @@ export default function Sidebar() {
                   />
                 ) : (
                   <span className="flex-1 truncate text-[13px]">{conv.title.replace(/\[Attachment:\s*`[^`]*`\]\s*/g, '').trim() || conv.title}</span>
-                )}
-                {badgeCounts[conv.id] > 0 && (
-                  <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--abu-clay)] text-white text-[10px] font-bold leading-[18px] text-center">
-                    {badgeCounts[conv.id] > 99 ? '99+' : badgeCounts[conv.id]}
-                  </span>
                 )}
                 <StatusIndicator
                   status={convStatus}
