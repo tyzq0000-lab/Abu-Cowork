@@ -91,6 +91,28 @@ function scoreMemory(tokens: readonly string[], h: MemoryHeader): number {
 }
 
 /**
+ * Detect whether the user's message shows "recall intent" — i.e. explicitly
+ * references past conversation, prior tasks, or remembered facts. Used to
+ * gate the FALLBACK_FLOOR recency fill in findRelevantMemories so that
+ * normal queries ("你好", "介绍你自己") don't trigger 3-5k of memory
+ * injection by default.
+ *
+ * The fallback fill is the largest single contributor to Abu's baseline
+ * overhead — for a user with 30+ memories it can easily inject 5k tokens
+ * of unrelated content into every turn. Score-matched memories still flow
+ * through; we only skip the recency-only floor.
+ *
+ * Trigger keywords intentionally conservative — better to over-trigger
+ * than miss a "我之前提到的那个" intent. The model can still call the
+ * `recall` tool explicitly when this heuristic misses.
+ */
+const RECALL_INTENT_RE = /上次|之前|那个|记得|你说过|跟你说过|刚才|忘了|还记得|提到过|聊过|讲过|昨天|前几天|我们/;
+
+export function hasRecallIntent(query: string): boolean {
+  return RECALL_INTENT_RE.test(query);
+}
+
+/**
  * Decide whether the query is "rich enough" to warrant Phase 2 injection.
  * Single-character or 2-char noise queries ("好", "ok", "继续") would
  * waste the budget on irrelevant matches.
@@ -163,10 +185,16 @@ export async function findRelevantMemories(
     .sort((a, b) => b.score - a.score || b.header.updated - a.header.updated);
 
   // 5. Build the selection: matched first, then fall back to recency for
-  //    floor-up to FALLBACK_FLOOR (so the agent always sees *some* context
-  //    if memories exist at all).
+  //    floor-up to FALLBACK_FLOOR — but ONLY when the user shows recall
+  //    intent (上次/之前/记得 etc). Normal queries like "你好" / "介绍你
+  //    自己" no longer trigger the recency fill, which used to silently
+  //    inject 3-5k tokens of unrelated context every turn.
+  //
+  //    Trade-off: users who want recall-like behavior on a query that
+  //    doesn't keyword-match any memory now need to phrase their question
+  //    with explicit intent words, OR the model can call the `recall` tool.
   const selected: ScoredHeader[] = matched.slice(0, MAX_SELECTED);
-  if (selected.length < FALLBACK_FLOOR) {
+  if (selected.length < FALLBACK_FLOOR && hasRecallIntent(query)) {
     const usedPaths = new Set(selected.map(s => s.header.filePath));
     const recent = candidates
       .filter(h => !usedPaths.has(h.filePath))

@@ -4,6 +4,7 @@ import {
   findRelevantMemories,
   formatRelevantMemoriesSection,
   extractQueryText,
+  hasRecallIntent,
   MAX_PER_MEMORY_BYTES,
   MAX_TURN_BYTES,
 } from './relevance';
@@ -72,6 +73,24 @@ describe('extractQueryText', () => {
   });
 });
 
+describe('hasRecallIntent', () => {
+  it('detects explicit recall keywords', () => {
+    expect(hasRecallIntent('上次的方案怎么样')).toBe(true);
+    expect(hasRecallIntent('之前提到的那个东西')).toBe(true);
+    expect(hasRecallIntent('你还记得吗')).toBe(true);
+    expect(hasRecallIntent('我们昨天聊过的')).toBe(true);
+    expect(hasRecallIntent('刚才说的那个')).toBe(true);
+    expect(hasRecallIntent('那个项目')).toBe(true);
+  });
+
+  it('returns false for plain queries without recall signals', () => {
+    expect(hasRecallIntent('你好')).toBe(false);
+    expect(hasRecallIntent('介绍你自己')).toBe(false);
+    expect(hasRecallIntent('帮我写一段代码')).toBe(false);
+    expect(hasRecallIntent('what is the weather')).toBe(false);
+  });
+});
+
 describe('findRelevantMemories', () => {
   it('returns empty when no memories exist', async () => {
     mockReadDir.mockResolvedValueOnce([]);
@@ -114,7 +133,24 @@ describe('findRelevantMemories', () => {
     expect(result[0].name).toBe('banana fact');
   });
 
-  it('falls back to recency when no keyword matches', async () => {
+  it('skips recency fallback when no keyword match AND no recall intent', async () => {
+    // Regression: previously this returned 3 recent memories regardless of
+    // query relevance — that fallback fill was injecting 3-5k tokens of
+    // unrelated context into every turn. Now gated by hasRecallIntent.
+    mockReadDir.mockResolvedValueOnce([
+      { name: 'old.md', isFile: true, isDirectory: false, isSymlink: false },
+      { name: 'new.md', isFile: true, isDirectory: false, isSymlink: false },
+    ] as Awaited<ReturnType<typeof readDir>>);
+    mockReadTextFile
+      .mockResolvedValueOnce(makeFile({ name: 'Old', description: 'old', updated: NOW - 100 * DAY }))
+      .mockResolvedValueOnce(makeFile({ name: 'New', description: 'new', updated: NOW - 1 * DAY }));
+
+    // Query has zero keyword matches AND no recall intent
+    const result = await findRelevantMemories('completely unrelated query xyzzy', null);
+    expect(result).toHaveLength(0);
+  });
+
+  it('falls back to recency when no keyword matches but query has recall intent', async () => {
     mockReadDir.mockResolvedValueOnce([
       { name: 'old.md', isFile: true, isDirectory: false, isSymlink: false },
       { name: 'new.md', isFile: true, isDirectory: false, isSymlink: false },
@@ -126,8 +162,8 @@ describe('findRelevantMemories', () => {
       .mockResolvedValueOnce(makeFile({ name: 'New', description: 'new', updated: NOW - 1 * DAY }))
       .mockResolvedValueOnce(makeFile({ name: 'Old', description: 'old', updated: NOW - 100 * DAY }));
 
-    // Query has zero keyword matches
-    const result = await findRelevantMemories('completely unrelated query xyzzy', null);
+    // Query has recall intent ("之前") — fallback fill engages even without keyword match
+    const result = await findRelevantMemories('我之前提到的那个东西是啥', null);
     expect(result.length).toBeGreaterThan(0);
     expect(result[0].name).toBe('New');
   });
@@ -141,6 +177,7 @@ describe('findRelevantMemories', () => {
       .mockResolvedValueOnce(makeFile({ name: 'Big', description: 'huge', body: big }))
       .mockResolvedValueOnce(makeFile({ name: 'Big', description: 'huge', body: big }));
 
+    // Query keyword-matches description ("huge") so it bypasses the recall-intent gate
     const result = await findRelevantMemories('huge memory', null);
     expect(result).toHaveLength(1);
     expect(result[0].truncated).toBe(true);
