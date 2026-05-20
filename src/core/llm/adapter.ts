@@ -37,6 +37,14 @@ export interface ChatOptions {
   builtinWebSearch?: BuiltinSearchMethod;
   // Abort controller for cancellation
   signal?: AbortSignal;
+  /**
+   * Callback invoked when the adapter reverse-engineers the model's
+   * true max_tokens limit from a 400 response (e.g. "max_tokens too
+   * large: 32768. This model supports at most 4096..."). agentLoop
+   * uses this to persist the discovered limit so future requests
+   * don't repeat the failed-roundtrip.
+   */
+  onMaxTokensLimitDiscovered?: (limit: number) => void;
 }
 
 export interface LLMAdapter {

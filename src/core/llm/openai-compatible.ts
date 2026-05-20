@@ -286,6 +286,9 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         if (!response.ok) {
           throw classifyError(response.status, await response.text());
         }
+        // Retry succeeded — surface the discovered limit so the caller can
+        // persist it. Next request will use the correct value pre-emptively.
+        options.onMaxTokensLimitDiscovered?.(retryLimit);
       } else {
         throw classifyError(response.status, errorText);
       }

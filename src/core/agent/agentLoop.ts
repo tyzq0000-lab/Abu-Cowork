@@ -7,6 +7,7 @@ import { getAllTools, type ConfirmationInfo, type FilePermissionCallback } from 
 import type { ToolDefinition } from '../../types';
 import { useChatStore, flushTokenBuffer } from '../../stores/chatStore';
 import { useSettingsStore, getEffectiveModel, getActiveApiKey, getActiveProvider, resolveAgentModel, providerRequiresApiKey } from '../../stores/settingsStore';
+import { useDiscoveredCapsStore } from '../../stores/discoveredCapabilitiesStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useTaskExecutionStore } from '../../stores/taskExecutionStore';
 import { createEventRouter } from './eventRouter';
@@ -951,15 +952,33 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       // Exclude the last empty assistant message we just added
       const historyMessages = messages.slice(0, -1);
 
-      // Resolve model capabilities from registry
+      // Resolve model capabilities: registry baseline, then overlay any
+      // runtime-discovered limits (e.g. from a previous max_tokens-too-large
+      // 400 response). Discovered values come from real API errors so they
+      // override the registry — but they don't override the *user's* setting,
+      // since the user may have a smaller budget on purpose.
       const modelCaps = resolveCapabilities(effectiveModelId);
+      const discoveredCaps = activeProvider
+        ? useDiscoveredCapsStore.getState().get(activeProvider.id, effectiveModelId)
+        : undefined;
+      const effectiveModelMaxOutput = discoveredCaps?.maxOutputTokens ?? modelCaps.maxOutputTokens;
+      const effectiveModelContext = discoveredCaps?.contextWindow ?? modelCaps.contextWindow;
 
-      // Determine dynamic maxTokens — use model caps as default, user settings as override
+      // Determine dynamic maxTokens — use model caps as default, user settings as override.
+      // When discovered caps say the model is smaller than the user setting, clamp to the
+      // discovered value to avoid a guaranteed 400 (saves a wasted roundtrip).
       const autoThinking = modelCaps.thinking === 'anthropic';
+      const userMaxOutput = freshSettings.maxOutputTokens ?? effectiveModelMaxOutput;
+      const cappedUserMaxOutput = discoveredCaps?.maxOutputTokens
+        ? Math.min(userMaxOutput, discoveredCaps.maxOutputTokens)
+        : userMaxOutput;
       let maxOutputTokens = autoThinking
-        ? Math.max(freshSettings.maxOutputTokens ?? modelCaps.maxOutputTokens, 16384)
-        : (freshSettings.maxOutputTokens ?? modelCaps.maxOutputTokens);
-      const contextWindowSize = freshSettings.contextWindowSize ?? modelCaps.contextWindow;
+        ? Math.max(cappedUserMaxOutput, 16384)
+        : cappedUserMaxOutput;
+      const userContextWindow = freshSettings.contextWindowSize ?? effectiveModelContext;
+      const contextWindowSize = discoveredCaps?.contextWindow
+        ? Math.min(userContextWindow, discoveredCaps.contextWindow)
+        : userContextWindow;
 
       // Escalate maxOutputTokens on first max_tokens recovery (CC pattern: 8k→64k)
       const escalation = escalateMaxOutputTokens(maxOutputTokens, contextWindowSize, maxOutputTokensRecoveryCount, maxOutputTokensEscalated);
@@ -1098,6 +1117,20 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         thinkingBudget: 10000,
         supportsVision: modelCaps.vision,
         builtinWebSearch,
+        // When the adapter's max_tokens auto-retry succeeds, persist the
+        // discovered limit so the next request uses it pre-emptively.
+        onMaxTokensLimitDiscovered: activeProvider
+          ? (limit: number) => {
+              useDiscoveredCapsStore
+                .getState()
+                .recordMaxOutputTokens(activeProvider.id, effectiveModelId, limit);
+              logger.info('Persisted discovered max_tokens limit', {
+                providerId: activeProvider.id,
+                modelId: effectiveModelId,
+                limit,
+              });
+            }
+          : undefined,
       };
 
       const chatFn = () => adapter.chat(preparedMessages, chatOptions, eventHandler);
@@ -1288,6 +1321,24 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // Stage 2: Hard truncation → retry
         // Stage 3: Surface error to user
         if (retryErr instanceof LLMError && retryErr.code === 'context_too_long') {
+          // Reverse-engineer the real context window from the error message
+          // and persist it. Pattern: "maximum context length is N tokens"
+          // (OpenAI-compatible style). Next request will use this as a cap.
+          const ctxMatch = /maximum context length is (\d+) tokens/i.exec(retryErr.message);
+          if (ctxMatch && activeProvider) {
+            const discoveredWindow = parseInt(ctxMatch[1], 10);
+            if (Number.isFinite(discoveredWindow) && discoveredWindow > 0) {
+              useDiscoveredCapsStore
+                .getState()
+                .recordContextWindow(activeProvider.id, effectiveModelId, discoveredWindow);
+              logger.info('Persisted discovered context window', {
+                providerId: activeProvider.id,
+                modelId: effectiveModelId,
+                contextWindow: discoveredWindow,
+              });
+            }
+          }
+
           chatStore.appendToLastMessage(
             conversationId,
             '\n*上下文过长，正在优化上下文...*',
