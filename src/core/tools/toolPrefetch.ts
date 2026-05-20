@@ -9,21 +9,25 @@
 import type { Skill } from '../../types';
 import { TOOL_NAMES } from './toolNames';
 
-/** Tools always present in every turn (~3000 tokens) */
+/**
+ * Tools always present in every turn (~1200 tokens — shrunk from 13 to 7).
+ *
+ * Trade-off: previously we shipped 13 always-on tools (~3k tokens). For the
+ * common "you ask Abu a casual question" turn, most of those tools were
+ * never invoked but still cost tokens. Pushed file-mutation / OS-shell /
+ * directory-listing / fetch / workspace / delegate to deferred; the model
+ * reaches them via `tool_search` (one-line summaries are in the system
+ * prompt's deferred-tools section).
+ *
+ * Keyword prefetch rules below auto-promote common cases back into the
+ * core set (e.g. "写文件" → write_file) so this doesn't add a roundtrip
+ * for typical agent tasks.
+ */
 export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
-  TOOL_NAMES.READ_FILE,
-  TOOL_NAMES.WRITE_FILE,
-  TOOL_NAMES.EDIT_FILE,
-  TOOL_NAMES.LIST_DIRECTORY,
-  TOOL_NAMES.SEARCH_FILES,
-  TOOL_NAMES.FIND_FILES,
-  TOOL_NAMES.RUN_COMMAND,
-  TOOL_NAMES.WEB_SEARCH,
-  TOOL_NAMES.HTTP_FETCH,
-  TOOL_NAMES.REQUEST_WORKSPACE,
-  TOOL_NAMES.USE_SKILL,
-  TOOL_NAMES.DELEGATE_TO_AGENT,
-  TOOL_NAMES.TOOL_SEARCH,
+  TOOL_NAMES.READ_FILE,        // read is by far the most common, keep core
+  TOOL_NAMES.WEB_SEARCH,       // chat-only "search and answer" is common
+  TOOL_NAMES.USE_SKILL,        // skill activation entry point
+  TOOL_NAMES.TOOL_SEARCH,      // meta-tool for discovering deferred tools
 ]);
 
 /** Keyword → tool mapping for demand-based loading */
@@ -31,6 +35,42 @@ const PREFETCH_RULES: ReadonlyArray<{
   keywords: readonly string[];
   tools: readonly string[];
 }> = [
+  // File mutation — pulled out of core in v0.18.6 to shrink baseline.
+  // These rules re-promote on common phrasing so typical workflows
+  // (write a file, edit, run command, list dir, search) don't pay the
+  // extra tool_search roundtrip.
+  {
+    keywords: ['写文件', '写入', '保存到', '创建文件', '新建文件', '另存', 'write file', 'save to', 'save as'],
+    tools: [TOOL_NAMES.WRITE_FILE],
+  },
+  {
+    keywords: ['编辑文件', '修改文件', '替换', '改一下', 'edit file', 'modify file', 'replace'],
+    tools: [TOOL_NAMES.EDIT_FILE],
+  },
+  {
+    keywords: ['执行命令', '运行命令', '跑一下', '终端', 'shell', 'bash', 'run command', 'execute', '命令行', 'cli'],
+    tools: [TOOL_NAMES.RUN_COMMAND],
+  },
+  {
+    keywords: ['列出', '目录', '文件夹', '看看里面', 'ls ', 'dir ', 'list directory', '有哪些文件'],
+    tools: [TOOL_NAMES.LIST_DIRECTORY],
+  },
+  {
+    keywords: ['搜索文件', '查找文件', '内容搜索', '全文搜索', 'grep', 'search files'],
+    tools: [TOOL_NAMES.SEARCH_FILES, TOOL_NAMES.FIND_FILES],
+  },
+  {
+    keywords: ['下载', '抓取', '请求接口', 'http', 'fetch ', 'curl', 'api 调用'],
+    tools: [TOOL_NAMES.HTTP_FETCH],
+  },
+  {
+    keywords: ['工作区', '工作目录', 'workspace', '当前项目'],
+    tools: [TOOL_NAMES.REQUEST_WORKSPACE],
+  },
+  {
+    keywords: ['委托', '派代理', '让代理', 'delegate', 'sub-agent', '子代理', '同时调研', '并行做'],
+    tools: [TOOL_NAMES.DELEGATE_TO_AGENT],
+  },
   {
     keywords: ['定时', '计划', '每天', '每周', '自动执行', 'schedule', 'cron'],
     tools: [TOOL_NAMES.MANAGE_SCHEDULED_TASK],

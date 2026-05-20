@@ -13,15 +13,25 @@ function makeCtx(overrides: Partial<PrefetchContext> = {}): PrefetchContext {
 
 describe('toolPrefetch', () => {
   describe('CORE_TOOL_NAMES', () => {
-    it('should contain 13 core tools', () => {
-      expect(CORE_TOOL_NAMES.size).toBe(13);
+    it('should contain 4 always-on core tools (shrunk from 13 in v0.18.6)', () => {
+      // Smaller core = smaller baseline tokens. Previously-core tools
+      // (write/edit/run_command/list/search/fetch/workspace/delegate) are
+      // now deferred and reached via tool_search + prefetch rules.
+      expect(CORE_TOOL_NAMES.size).toBe(4);
     });
 
-    it('should include essential tools', () => {
+    it('should include the always-needed essentials', () => {
       expect(CORE_TOOL_NAMES.has('read_file')).toBe(true);
-      expect(CORE_TOOL_NAMES.has('write_file')).toBe(true);
-      expect(CORE_TOOL_NAMES.has('run_command')).toBe(true);
       expect(CORE_TOOL_NAMES.has('web_search')).toBe(true);
+      expect(CORE_TOOL_NAMES.has('use_skill')).toBe(true);
+      expect(CORE_TOOL_NAMES.has('tool_search')).toBe(true);
+    });
+
+    it('should defer file-mutation and shell tools (loaded on keyword match)', () => {
+      expect(CORE_TOOL_NAMES.has('write_file')).toBe(false);
+      expect(CORE_TOOL_NAMES.has('edit_file')).toBe(false);
+      expect(CORE_TOOL_NAMES.has('run_command')).toBe(false);
+      expect(CORE_TOOL_NAMES.has('list_directory')).toBe(false);
     });
 
     it('should not include conditional tools', () => {
@@ -48,6 +58,27 @@ describe('toolPrefetch', () => {
     it('should not return report_plan after turn 3', () => {
       const result = prefetchTools(makeCtx({ userInput: '你好', turnCount: 4 }));
       expect(result).not.toContain('report_plan');
+    });
+
+    it('should prefetch write_file on save-related keywords (v0.18.6 deferred)', () => {
+      expect(prefetchTools(makeCtx({ userInput: '帮我写文件' }))).toContain('write_file');
+      expect(prefetchTools(makeCtx({ userInput: '把结果保存到 output.txt' }))).toContain('write_file');
+      expect(prefetchTools(makeCtx({ userInput: 'please write file foo.txt' }))).toContain('write_file');
+    });
+
+    it('should prefetch run_command on shell-related keywords', () => {
+      expect(prefetchTools(makeCtx({ userInput: '运行命令 ls -la' }))).toContain('run_command');
+      expect(prefetchTools(makeCtx({ userInput: '在终端跑一下 git status' }))).toContain('run_command');
+    });
+
+    it('should prefetch edit_file on edit-related keywords', () => {
+      expect(prefetchTools(makeCtx({ userInput: '修改文件中的某段代码' }))).toContain('edit_file');
+      expect(prefetchTools(makeCtx({ userInput: 'edit file foo.ts' }))).toContain('edit_file');
+    });
+
+    it('should prefetch list_directory on dir-related keywords', () => {
+      expect(prefetchTools(makeCtx({ userInput: '列出当前目录的文件' }))).toContain('list_directory');
+      expect(prefetchTools(makeCtx({ userInput: '看看里面有哪些文件' }))).toContain('list_directory');
     });
 
     it('should match schedule keywords', () => {
