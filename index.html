@@ -5,9 +5,73 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Abu</title>
+    <style>
+      /* Shown only until React mounts and replaces #root content */
+      #app-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #faf9f5;
+        color: #656358;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 14px;
+      }
+      /* Shown only if React fails to mount (JS crash before React renders) */
+      #app-error {
+        display: none;
+        padding: 40px;
+        background: #faf9f5;
+        color: #141413;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        min-height: 100vh;
+        box-sizing: border-box;
+      }
+      #app-error h2 { font-size: 18px; margin-bottom: 12px; color: #d97757; }
+      #app-error p  { font-size: 14px; color: #3d3929; line-height: 1.6; margin: 8px 0; }
+      #app-error pre {
+        margin-top: 16px;
+        padding: 12px;
+        background: #f0eee6;
+        border-radius: 8px;
+        font-size: 12px;
+        color: #656358;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      #app-error a { color: #d97757; }
+    </style>
+    <script>
+      // Catch fatal JS errors that occur before React mounts.
+      // These show an actionable error page instead of a blank white screen.
+      // Once React is running, React's own ErrorBoundary takes over.
+      window.__abuRootMounted = false;
+      window.onerror = function(msg, src, line, col, err) {
+        if (window.__abuRootMounted) return false; // React is up — let React handle it
+        var errEl = document.getElementById('app-error');
+        var loadEl = document.getElementById('app-loading');
+        if (!errEl) return false;
+        if (loadEl) loadEl.style.display = 'none';
+        errEl.style.display = 'block';
+        var detail = err ? (err.stack || String(err)) : (msg + ' (' + src + ':' + line + ')');
+        errEl.querySelector('pre').textContent = detail;
+        return false; // don't suppress default console output
+      };
+    </script>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="margin:0">
+    <div id="app-error">
+      <h2>Abu 启动失败</h2>
+      <p>应用加载时遇到了问题，请尝试重启 Abu。</p>
+      <p>如果问题持续出现，请前往
+        <a href="https://github.com/PM-Shawn/Abu/issues" target="_blank">GitHub Issues</a>
+        反馈，并附上以下技术信息（截图即可）：
+      </p>
+      <pre>（正在获取错误详情…）</pre>
+    </div>
+    <div id="root">
+      <div id="app-loading">Abu 正在启动…</div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

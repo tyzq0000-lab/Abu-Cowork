@@ -14,11 +14,19 @@ export async function uploadDiagnosticBundle(bytes: Uint8Array, filename: string
   formData.append('appVersion', APP_VERSION)
   formData.append('platform', getPlatform() ?? 'unknown')
 
-  const res = await fetch(`${CONSOLE_URL}/api/diagnostics/upload`, {
-    method: 'POST',
-    body: formData,
-    signal: AbortSignal.timeout(30_000),
-  })
+  // AbortSignal.timeout() requires Safari 16.4+; use AbortController for broader macOS 12 compat
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 30_000)
+  let res: Response
+  try {
+    res = await fetch(`${CONSOLE_URL}/api/diagnostics/upload`, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')

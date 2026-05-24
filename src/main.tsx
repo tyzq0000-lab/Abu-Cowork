@@ -19,8 +19,12 @@ import App from './App.tsx'
   }, true);
 })();
 
-createRoot(document.getElementById('root')!).render(
+// Signal to window.onerror in index.html that React is now mounted,
+// so the fallback error page is no longer needed.
+const root = createRoot(document.getElementById('root')!);
+root.render(
   <StrictMode>
     <App />
   </StrictMode>,
 );
+(window as typeof window & { __abuRootMounted: boolean }).__abuRootMounted = true;

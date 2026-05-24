@@ -41,9 +41,17 @@ export async function fetchUnseenAnnouncements(): Promise<AnnouncementItem[]> {
   if (!CONSOLE_URL) return []
 
   try {
-    const res = await fetch(`${CONSOLE_URL}/api/announcements?version=${APP_VERSION}`, {
-      signal: AbortSignal.timeout(8000),
-    })
+    // AbortSignal.timeout() requires Safari 16.4+; use AbortController for broader macOS 12 compat
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 8000)
+    let res: Response
+    try {
+      res = await fetch(`${CONSOLE_URL}/api/announcements?version=${APP_VERSION}`, {
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timer)
+    }
     if (!res.ok) return []
     const data = await res.json() as { items: AnnouncementItem[] }
     const seen = getSeenIds()
