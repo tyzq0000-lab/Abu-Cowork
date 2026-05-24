@@ -25,6 +25,15 @@ const STRIP_LOCAL_HEADERS = new Set(['origin', 'referer', 'host']);
 
 const LOCAL_URL_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?[/]/i;
 
+// Hard ceiling for the connect + response-header phase. tauri-plugin-http's
+// clientConfig.connectTimeout is undefined (no built-in timeout), and the
+// streaming idle-heartbeat in the LLM adapters only arms AFTER response.body
+// is obtained — so a server that accepts the TCP connection but never returns
+// headers would hang forever with zero protection. Headers come back when the
+// server starts responding (well before generation finishes), so 120s is
+// generous for even slow reasoning models while still bounding a true hang.
+const HEADER_TIMEOUT_MS = 120_000;
+
 /**
  * A fetch implementation that talks directly to tauri-plugin-http's IPC
  * commands, skipping the plugin's internal `new Request()` constructor.
@@ -83,12 +92,25 @@ async function localFetch(input: RequestInfo | URL, init?: RequestInit): Promise
   if (signal?.aborted) { void abort(); throw new Error('Request cancelled'); }
   signal?.addEventListener('abort', () => void abort());
 
-  // Step 2: send the request and receive response metadata
+  // Step 2: send the request and receive response metadata.
+  // Race against HEADER_TIMEOUT_MS so a server that never returns headers can't
+  // hang the request indefinitely (connectTimeout is undefined on the Rust side).
+  // On timeout we cancel the request resource so reqwest drops the connection.
+  let headerTimer: ReturnType<typeof setTimeout> | undefined;
+  const sendPromise = invoke<{ status: number; statusText: string; url: string; headers: [string, string][]; rid: number }>(
+    'plugin:http|fetch_send',
+    { rid },
+  );
   const { status, statusText, url: responseUrl, headers: responseHeaders, rid: responseRid } =
-    await invoke<{ status: number; statusText: string; url: string; headers: [string, string][]; rid: number }>(
-      'plugin:http|fetch_send',
-      { rid },
-    );
+    await Promise.race([
+      sendPromise,
+      new Promise<never>((_, reject) => {
+        headerTimer = setTimeout(() => {
+          void abort();
+          reject(new Error(`Request timed out after ${HEADER_TIMEOUT_MS / 1000}s waiting for response headers`));
+        }, HEADER_TIMEOUT_MS);
+      }),
+    ]).finally(() => clearTimeout(headerTimer));
 
   const dropBody = () => invoke('plugin:http|fetch_cancel_body', { rid: responseRid });
 

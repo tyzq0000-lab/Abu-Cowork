@@ -13,9 +13,16 @@
  *
  * Regression coverage for the GLM-5 read_file truncation incident.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Message, StreamEvent, ToolDefinition } from '../../types';
+import { LLMError } from './adapter';
 import type { ChatOptions } from './adapter';
+
+function abortError(): Error {
+  const e = new Error('Request cancelled');
+  e.name = 'AbortError';
+  return e;
+}
 
 // Mock getTauriFetch BEFORE importing the adapter so the singleton picks up the mock.
 const mockFetch = vi.fn();
@@ -356,5 +363,72 @@ describe('OpenAICompatibleAdapter streaming finish_reason handling', () => {
         expect('_parse_error' in tu.input).toBe(true);
       }
     });
+  });
+});
+
+describe('OpenAICompatibleAdapter hang timeouts (abort on no progress)', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('aborts and throws retryable error when headers never arrive (connect phase)', async () => {
+    // fetch never resolves until the request signal aborts — simulates a server
+    // that accepts the connection but never returns response headers. This is the
+    // phase the streaming idle-heartbeat can't cover (it only arms after body).
+    mockFetch.mockImplementation((_url: string, init?: { signal?: AbortSignal }) => {
+      const signal = init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        if (signal?.aborted) return reject(abortError());
+        signal?.addEventListener('abort', () => reject(abortError()), { once: true });
+      });
+    });
+
+    const adapter = new OpenAICompatibleAdapter();
+    const events: StreamEvent[] = [];
+    const chatPromise = adapter.chat([userMessage], makeOptions(), (e) => events.push(e));
+    let settled = false;
+    chatPromise.then(() => { settled = true; }, () => { settled = true; });
+
+    await vi.advanceTimersByTimeAsync(89_000);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(chatPromise).rejects.toMatchObject({ code: 'network_error', retryable: true });
+    await expect(chatPromise).rejects.toBeInstanceOf(LLMError);
+  });
+
+  it('aborts and throws retryable error when body stalls mid-stream (idle phase)', async () => {
+    // Headers arrive, but the body stream never emits data and only rejects when
+    // the request is aborted. The idle heartbeat must abort so reader.read()
+    // rejects and chat() can unwind (previously it emitted events but stayed hung).
+    mockFetch.mockImplementation((_url: string, init?: { signal?: AbortSignal }) => {
+      const signal = init?.signal;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (signal?.aborted) return controller.error(abortError());
+          signal?.addEventListener('abort', () => controller.error(abortError()), { once: true });
+        },
+      });
+      return Promise.resolve(new Response(body, {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      }));
+    });
+
+    const adapter = new OpenAICompatibleAdapter();
+    const events: StreamEvent[] = [];
+    const chatPromise = adapter.chat([userMessage], makeOptions(), (e) => events.push(e));
+    let settled = false;
+    chatPromise.then(() => { settled = true; }, () => { settled = true; });
+
+    await vi.advanceTimersByTimeAsync(89_000);
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await expect(chatPromise).rejects.toMatchObject({ code: 'network_error', retryable: true });
   });
 });

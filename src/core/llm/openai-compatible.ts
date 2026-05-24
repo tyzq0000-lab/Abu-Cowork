@@ -4,7 +4,7 @@ import type { Message, StreamEvent, ToolDefinition } from '../../types';
 import { getTauriFetch } from './tauriFetch';
 import { normalizeMessages } from './messageNormalizer';
 import type { PreparedTurn, PreparedContentBlock } from './messageNormalizer';
-import { createHeartbeat } from './heartbeat';
+import { createHeartbeat, DEFAULT_STREAM_HANG_TIMEOUT_MS as STREAM_HANG_TIMEOUT_MS } from './heartbeat';
 import { createLogger } from '../logging/logger';
 import { resolveOpenAIBaseUrl } from './urlUtils';
 
@@ -295,18 +295,45 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
       requestHeaders['Authorization'] = `Bearer ${options.apiKey}`;
     }
     const fetchFn = await getTauriFetch();
+
+    // Stream-level abort controller. The idle heartbeat (below) emits events
+    // but cannot make a hung `reader.read()` return — chat() would stay pending
+    // and the awaiting agent/subagent loop would hang forever. Aborting this
+    // controller drives the fetch's abort path (tauriFetch errors the body
+    // stream), which rejects the pending read and lets chat() unwind. Merge the
+    // caller's signal via AbortSignal.any so user-initiated cancels still reach
+    // the fetch (the merged signal is GC'd with chat() — no listener leak).
+    const streamAbort = new AbortController();
+    const effectiveSignal = options.signal
+      ? AbortSignal.any([options.signal, streamAbort.signal])
+      : streamAbort.signal;
+    let idleTimedOut = false;
+
+    // Connect/header-phase timeout: the idle heartbeat only arms after the body
+    // stream is obtained, so a server that accepts the connection but never
+    // returns headers would hang here unbounded. Abort once the ceiling is hit.
+    let connectTimedOut = false;
+    const connectTimer = setTimeout(() => {
+      connectTimedOut = true;
+      streamAbort.abort();
+    }, STREAM_HANG_TIMEOUT_MS);
     let response: Awaited<ReturnType<typeof fetchFn>>;
     try {
       response = await fetchFn(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: requestHeaders,
         body: JSON.stringify(body),
-        signal: options.signal,
+        signal: effectiveSignal,
       });
     } catch (fetchErr) {
       // Connection-level failure (DNS, timeout, refused) — not an agent bug
+      if (connectTimedOut) {
+        throw new LLMError(`连接超时：${STREAM_HANG_TIMEOUT_MS / 1000} 秒未收到服务器响应头`, 'network_error', { retryable: true, retryAfterMs: 2000 });
+      }
       const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
       throw new LLMError(msg, 'network_error', { retryable: true, retryAfterMs: 2000 });
+    } finally {
+      clearTimeout(connectTimer);
     }
 
     if (!response.ok) {
@@ -325,7 +352,7 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
           method: 'POST',
           headers: requestHeaders,
           body: JSON.stringify(body),
-          signal: options.signal,
+          signal: effectiveSignal,
         });
         if (!response.ok) {
           throw classifyError(response.status, await response.text());
@@ -411,9 +438,12 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
     if (!reader) throw new Error('No response body');
 
     // Idle timeout: if no data received for 90s, treat as network hang.
-    const heartbeat = createHeartbeat(90_000, () => {
-      onEvent({ type: 'error', error: 'Stream idle timeout: no data received for 90s' });
-      onEvent({ type: 'done', stopReason: 'end_turn' });
+    // Aborting streamAbort rejects the pending reader.read() so chat() can
+    // actually return; the catch below turns it into a retryable LLMError.
+    // (Emitting events alone, as before, left the read hung and chat() pending.)
+    const heartbeat = createHeartbeat(STREAM_HANG_TIMEOUT_MS, () => {
+      idleTimedOut = true;
+      streamAbort.abort();
     });
 
     const decoder = new TextDecoder();
@@ -760,6 +790,11 @@ export class OpenAICompatibleAdapter implements LLMAdapter {
         onEvent({ type: 'done', stopReason: toolCallBuffers.size > 0 ? 'tool_use' : 'end_turn' });
       }
     } catch (streamErr) {
+      // Idle-heartbeat abort: surface a clear retryable error (the underlying
+      // reject is a generic "Request cancelled" from the aborted body stream).
+      if (idleTimedOut) {
+        throw new LLMError(`连接空闲超时：${STREAM_HANG_TIMEOUT_MS / 1000} 秒未收到任何数据`, 'network_error', { retryable: true });
+      }
       // Wrap raw network/decode errors (e.g. "error decoding response body" from
       // gateway disconnects) as retryable LLMErrors so withRetry can handle them.
       if (!(streamErr instanceof LLMError)) {

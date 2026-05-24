@@ -5,7 +5,7 @@ import type { Message, StreamEvent, ToolDefinition } from '../../types';
 import { getTauriFetch } from './tauriFetch';
 import { normalizeMessages } from './messageNormalizer';
 import type { PreparedTurn, PreparedToolCall } from './messageNormalizer';
-import { createHeartbeat } from './heartbeat';
+import { createHeartbeat, DEFAULT_STREAM_HANG_TIMEOUT_MS as STREAM_HANG_TIMEOUT_MS } from './heartbeat';
 
 function convertTools(tools: ToolDefinition[]): Anthropic.Tool[] {
   return tools.map((t) => ({
@@ -238,8 +238,17 @@ export class ClaudeAdapter implements LLMAdapter {
       params.metadata = { user_id: options.metadata.userId };
     }
 
-    // Create stream with abort signal support
-    const streamOptions = options.signal ? { signal: options.signal } : {};
+    // Stream-level abort controller. The idle heartbeat emits events but cannot
+    // make the SDK's `for await` (or the initial create()) return — chat() would
+    // stay pending and the awaiting agent/subagent loop would hang forever.
+    // Aborting this controller cancels the SDK request so the await unwinds.
+    // Merge the caller's signal via AbortSignal.any so user cancels still apply.
+    const streamAbort = new AbortController();
+    const effectiveSignal = options.signal
+      ? AbortSignal.any([options.signal, streamAbort.signal])
+      : streamAbort.signal;
+    const streamOptions = { signal: effectiveSignal };
+    let hangTimedOut = false;
 
     let currentToolId = '';
     let currentToolName = '';
@@ -247,15 +256,24 @@ export class ClaudeAdapter implements LLMAdapter {
     let currentThinking = '';
     let isInThinkingBlock = false;
 
-    // Idle timeout: if no data received for 90s, treat as network hang.
-    // 90s is the CC-validated threshold — long enough for thinking models, short enough to detect hangs.
-    const heartbeat = createHeartbeat(90_000, () => {
-      onEvent({ type: 'error', error: 'Stream idle timeout: no data received for 90s' });
-      onEvent({ type: 'done', stopReason: 'end_turn' });
+    // Idle timeout: if no data received within the window, treat as network hang
+    // and abort so the pending stream rejects (emitting events alone left it hung).
+    const heartbeat = createHeartbeat(STREAM_HANG_TIMEOUT_MS, () => {
+      hangTimedOut = true;
+      streamAbort.abort();
     });
+
+    // Connect/header-phase timeout: the heartbeat is only reset once create()
+    // resolves, so a server that never returns headers would hang create()
+    // unbounded. Abort once the ceiling is hit.
+    const connectTimer = setTimeout(() => {
+      hangTimedOut = true;
+      streamAbort.abort();
+    }, STREAM_HANG_TIMEOUT_MS);
 
     try {
       const stream = await client.messages.create(params, streamOptions);
+      clearTimeout(connectTimer);
       heartbeat.reset();
 
       for await (const event of stream as AsyncIterable<Anthropic.MessageStreamEvent>) {
@@ -353,6 +371,12 @@ export class ClaudeAdapter implements LLMAdapter {
       onEvent({ type: 'done', stopReason: 'end_turn' });
     } catch (err) {
       heartbeat.clear();
+      clearTimeout(connectTimer);
+      // Hang-timeout abort surfaces as an AbortError too, but must be retryable —
+      // distinguish it from a genuine user cancel (which leaves options.signal aborted).
+      if (hangTimedOut) {
+        throw new LLMError(`连接空闲超时：${STREAM_HANG_TIMEOUT_MS / 1000} 秒未收到任何数据`, 'network_error', { retryable: true });
+      }
       // Handle abort errors gracefully
       if (err instanceof Error && err.name === 'AbortError') {
         onEvent({ type: 'done', stopReason: 'cancelled' });

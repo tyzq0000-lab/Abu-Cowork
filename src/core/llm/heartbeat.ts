@@ -15,6 +15,14 @@
  */
 
 /**
+ * Default idle/connect timeout (ms) for LLM streaming connections. 90s is the
+ * CC-validated threshold — long enough for slow reasoning models to produce a
+ * first token, short enough to detect a real network hang. Shared by both LLM
+ * adapters for the connect/header phase and the inter-chunk idle timeout.
+ */
+export const DEFAULT_STREAM_HANG_TIMEOUT_MS = 90_000;
+
+/**
  * Create a heartbeat timer that calls `onTimeout` if not reset within `timeoutMs`.
  */
 export function createHeartbeat(

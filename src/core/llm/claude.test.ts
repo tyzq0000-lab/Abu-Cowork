@@ -23,6 +23,13 @@ vi.mock('@anthropic-ai/sdk', () => {
 });
 
 import { ClaudeAdapter } from './claude';
+import { LLMError } from './adapter';
+
+function abortError(): Error {
+  const e = new Error('The operation was aborted');
+  e.name = 'AbortError';
+  return e;
+}
 
 describe('ClaudeAdapter', () => {
   beforeEach(() => {
@@ -35,54 +42,55 @@ describe('ClaudeAdapter', () => {
   });
 
   describe('stream idle timeout', () => {
-    it('emits error + done after 90s of no data', async () => {
-      // Create a controllable async iterator that hangs after creation
-      // The stream yields nothing — simulating a network hang after connection
-      let resolveHang: (() => void) | null = null;
-      const hangPromise = new Promise<void>(r => { resolveHang = r; });
-
-      const hangingStream = {
-        [Symbol.asyncIterator]: () => ({
-          next: () => hangPromise.then(() => ({ done: true as const, value: undefined })),
-        }),
-      };
-      mockCreate.mockResolvedValue(hangingStream);
+    it('aborts and throws a retryable error after the idle window with no data', async () => {
+      // Stream hangs after creation until the request signal aborts, then rejects
+      // (mirrors real SDK behavior — aborting the request cancels the iterator).
+      // The heartbeat must abort the request so chat() can actually reject rather
+      // than stay pending forever (emitting events alone would leave it hung).
+      mockCreate.mockImplementation((_params: unknown, options?: { signal?: AbortSignal }) => {
+        const signal = options?.signal;
+        const stream = {
+          [Symbol.asyncIterator]: () => ({
+            next: () => new Promise((_resolve, reject) => {
+              if (signal?.aborted) return reject(abortError());
+              signal?.addEventListener('abort', () => reject(abortError()), { once: true });
+              // otherwise hang forever (no data)
+            }),
+          }),
+        };
+        return Promise.resolve(stream);
+      });
 
       const events: Array<{ type: string; error?: string; stopReason?: string }> = [];
       const adapter = new ClaudeAdapter();
 
-      // Start chat — will enter the for-await loop and block on the hanging iterator
       const chatPromise = adapter.chat(
         [{ role: 'user', content: 'hello', id: '1', timestamp: Date.now() }],
         { apiKey: 'test-key', model: 'claude-sonnet-4-6', maxTokens: 1024 },
         (event) => events.push(event),
       );
+      // Attach a handler so the eventual rejection isn't flagged as unhandled,
+      // and track settle state to assert the timeout hasn't fired prematurely.
+      let settled = false;
+      chatPromise.then(() => { settled = true; }, () => { settled = true; });
 
-      // Let microtasks settle (mockCreate resolves, enters for-await)
+      // Enter the for-await loop (create resolves, heartbeat arms)
       await vi.advanceTimersByTimeAsync(0);
-
-      // No events yet (stream is hanging)
       expect(events).toHaveLength(0);
 
-      // Advance 89s — should NOT have timed out yet
+      // 89s — should NOT have timed out yet
       await vi.advanceTimersByTimeAsync(89_000);
-      expect(events).toHaveLength(0);
+      expect(settled).toBe(false);
 
-      // Advance past 90s — timeout should fire
+      // Past 90s — heartbeat aborts the request, chat() rejects with retryable error
       await vi.advanceTimersByTimeAsync(2_000);
-      expect(events.length).toBeGreaterThanOrEqual(2);
-      expect(events[0]).toEqual({
-        type: 'error',
-        error: 'Stream idle timeout: no data received for 90s',
+      await expect(chatPromise).rejects.toMatchObject({
+        code: 'network_error',
+        retryable: true,
       });
-      expect(events[1]).toEqual({
-        type: 'done',
-        stopReason: 'end_turn',
-      });
-
-      // Unblock the stream so the chat promise can settle
-      resolveHang!();
-      await chatPromise.catch(() => {});
+      // No error/done events emitted — the failure flows through the thrown error
+      expect(events.find((e) => e.type === 'done')).toBeUndefined();
+      await expect(chatPromise).rejects.toBeInstanceOf(LLMError);
     });
   });
 });
