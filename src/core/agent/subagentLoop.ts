@@ -57,6 +57,26 @@ export function extractParentConversationSummary(
   return lines.join('\n');
 }
 
+/**
+ * Detect a "no-progress" turn — one where the model produced nothing the loop
+ * can act on: either every tool call was unparseable (_parse_error), or the
+ * output was truncated (stopReason 'max_tokens') with no text and no tool calls.
+ * Tolerated once (the _parse_error tool result gives the model a retry); used to
+ * abort after several in a row so a weak model can't spin to maxTurns.
+ */
+export function isNoProgressTurn(params: {
+  toolCalls: Array<{ input: Record<string, unknown> }>;
+  turnText: string;
+  stopReason: string;
+}): boolean {
+  const { toolCalls, turnText, stopReason } = params;
+  const allToolsUnparseable = toolCalls.length > 0
+    && toolCalls.every((tc) => '_parse_error' in tc.input);
+  const truncatedEmpty = stopReason === 'max_tokens'
+    && turnText.trim() === '' && toolCalls.length === 0;
+  return allToolsUnparseable || truncatedEmpty;
+}
+
 export type SubagentProgressEvent =
   | { type: 'tool-start'; id: string; toolName: string; toolInput: Record<string, unknown> }
   | { type: 'tool-end'; id: string; toolName: string; result: string; error: boolean }
@@ -217,6 +237,14 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     const maxTurns = agent.maxTurns ?? globalMaxTurns ?? 200;
     let resultBuffer = '';
 
+    // Abort sustained no-progress (all tool calls unparseable, or truncated with
+    // no output) after this many consecutive turns. A single bad turn is tolerated
+    // so the model can recover from the _parse_error tool result; only a weak model
+    // that can't produce valid tool calls at all trips this — without it the loop
+    // would spin up to maxTurns (200) burning tokens.
+    const MAX_NO_PROGRESS_TURNS = 3;
+    let consecutiveNoProgress = 0;
+
     for (let turn = 0; turn < maxTurns; turn++) {
       if (signal?.aborted) {
         return new SubagentResult({
@@ -235,6 +263,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
       }> = [];
       let turnText = '';
       let shouldContinue = false;
+      let lastStopReason = '';
 
       // Apply context management to prevent subagent context overflow
       const contextWindowSize = settings.contextWindowSize ?? 200000;
@@ -296,6 +325,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
             totalOutputTokens += event.usage.outputTokens ?? 0;
             break;
           case 'done':
+            lastStopReason = event.stopReason ?? '';
             if (event.stopReason === 'tool_use' && collectedToolCalls.length > 0) {
               shouldContinue = true;
             }
@@ -317,6 +347,20 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
       // Accumulate text (append, not overwrite — preserve results from all turns)
       if (turnText) {
         resultBuffer = resultBuffer ? resultBuffer + '\n\n' + turnText : turnText;
+      }
+
+      // No-progress guard: abort a model that can't produce anything actionable
+      // (all tool calls unparseable, or truncated with no output) after several
+      // turns in a row — without this the loop spins to maxTurns (200) burning tokens.
+      if (isNoProgressTurn({ toolCalls: collectedToolCalls, turnText, stopReason: lastStopReason })) {
+        consecutiveNoProgress++;
+        if (consecutiveNoProgress >= MAX_NO_PROGRESS_TURNS) {
+          const note = '[子代理已停止：模型连续多次生成不完整的工具调用或输出被截断，可能是该模型能力不足或上下文过长，建议换用能力更强的模型重试。]';
+          resultBuffer = resultBuffer ? resultBuffer + '\n\n' + note : note;
+          break;
+        }
+      } else {
+        consecutiveNoProgress = 0;
       }
 
       if (!shouldContinue) {
