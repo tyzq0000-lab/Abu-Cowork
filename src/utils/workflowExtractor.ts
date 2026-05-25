@@ -390,6 +390,25 @@ function hasFileExtension(path: string): boolean {
   return /\.\w{1,10}$/.test(path);
 }
 
+/**
+ * Returns true if the path is inside an OS temporary directory.
+ *
+ * Used by 6b-ii (generic regex fallback) in deliverables mode to prevent
+ * intermediate buffers written to /tmp from becoming spurious file cards.
+ * Only applied to paths extracted from the command string itself (the weakest
+ * semantic signal) — NOT applied to write_file / MCP output_path / stdout
+ * announcement paths, which carry explicit intent.
+ */
+function isTempPath(p: string): boolean {
+  const norm = p.toLowerCase().replace(/\\/g, '/');
+  return (
+    norm.startsWith('/tmp/') ||
+    norm.startsWith('/private/tmp/') ||
+    /\/appdata\/local\/temp\//i.test(norm) ||
+    /\/windows\/temp\//i.test(norm)
+  );
+}
+
 /** Check if a command is read-only (should not extract file paths as outputs) */
 function isReadOnlyCommand(cmd: string): boolean {
   const trimmed = cmd.trim();
@@ -517,9 +536,25 @@ function parseCopyMoveCommand(cmd: string): { sources: string[]; destination: st
  */
 function extractPathsFromCommand(cmd: string, mode: ExtractMode): string[] {
   const paths: string[] = [];
-  const accept = (ext: string): boolean => {
+  const accept = (ext: string, path: string): boolean => {
     const lower = ext.toLowerCase();
-    if (mode === 'deliverables') return DOCUMENT_EXTENSIONS.has(lower);
+    if (mode === 'deliverables') {
+      if (!DOCUMENT_EXTENSIONS.has(lower)) return false;
+      // System temp dirs hold intermediate buffers, not user-facing deliverables.
+      // Legitimate /tmp/ outputs reach extractFileOutputs via other code paths
+      // (write_file input, MCP output_path, stdout keyword announcements) — not
+      // through command-string scanning. Filtering here avoids tools like the
+      // Cooper skill (which pipes output to /tmp/ for processing) from producing
+      // spurious file cards.
+      const p = path.toLowerCase();
+      if (
+        p.startsWith('/tmp/') ||
+        p.startsWith('/private/tmp/') ||
+        /[/\\]appdata[/\\]local[/\\]temp[/\\]/i.test(p) ||
+        /[/\\]windows[/\\]temp[/\\]/i.test(p)
+      ) return false;
+      return true;
+    }
     // file-ops: accept any extension that isn't noise
     return !NOISE_EXTENSIONS.has(lower);
   };
@@ -528,13 +563,13 @@ function extractPathsFromCommand(cmd: string, mode: ExtractMode): string[] {
   const quotedRegex = /["']((?:\/|~\/)[^"'\n]+\.(\w{1,10}))["']/g;
   let match: RegExpExecArray | null;
   while ((match = quotedRegex.exec(cmd)) !== null) {
-    if (accept(match[2])) paths.push(match[1]);
+    if (accept(match[2], match[1])) paths.push(match[1]);
   }
   // Match unquoted absolute paths
   if (paths.length === 0) {
     const unquotedRegex = /(?:^|\s)((?:\/|~\/)\S+\.(\w{1,10}))(?:\s|$)/g;
     while ((match = unquotedRegex.exec(cmd)) !== null) {
-      if (accept(match[2])) paths.push(match[1]);
+      if (accept(match[2], match[1])) paths.push(match[1]);
     }
   }
   return paths;
@@ -763,8 +798,25 @@ export function extractFileOutputs(
           }
         } else {
           // 6b-ii. Generic path: regex-extract paths from argv per mode.
-          const docPaths = extractPathsFromCommand(cmd, mode);
-          for (const p of docPaths) addFile(p, 'create');
+          //
+          // Compound commands (&&, ||, ;) are split into segments first.
+          // Each segment is evaluated independently: read-only segments
+          // (e.g. `wc -l /tmp/cooper_doc.txt`) are skipped. For deliverables
+          // mode, paths inside OS temp directories (/tmp, /private/tmp,
+          // %LOCALAPPDATA%\Temp) are also filtered out — they are intermediate
+          // buffers, not user-facing outputs. This prevents skills that redirect
+          // output to /tmp (e.g. Cooper's `mcporter ... > /tmp/cooper_doc.txt`)
+          // from producing spurious file cards.
+          const segments = /&&|\|\||;/.test(cmd) ? cmd.split(/&&|\|\||;/) : [cmd];
+          for (const seg of segments) {
+            const s = seg.trim();
+            if (!s || isReadOnlyCommand(s)) continue;
+            const segPaths = extractPathsFromCommand(s, mode);
+            for (const p of segPaths) {
+              if (mode === 'deliverables' && isTempPath(p)) continue;
+              addFile(p, 'create');
+            }
+          }
         }
       }
       continue;

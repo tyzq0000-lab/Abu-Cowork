@@ -429,6 +429,91 @@ describe('workflowExtractor', () => {
       expect(files).toHaveLength(0);
     });
 
+    // ── /tmp/ command-string intermediate buffer filter ──
+    // Regression: cooper skill (and similar tools) pipe output to /tmp/ as an
+    // intermediate processing buffer, then run wc/grep/python3 on it. None of
+    // these run_command calls should produce a file card or trigger a snapshot.
+    //
+    // The filter is applied ONLY inside extractPathsFromCommand (command-string
+    // scanning). Legitimate /tmp/ deliverables announced via stdout keywords or
+    // written explicitly via write_file / MCP output_path are unaffected.
+    describe('/tmp/ intermediate buffer suppression', () => {
+      it('does not emit file card for /tmp/ path in compound create command', () => {
+        const toolCalls: ToolCall[] = [{
+          id: 'tc1', name: 'run_command',
+          input: { command: 'mcporter call Cooper.readContent > /tmp/cooper_doc.txt && wc -l /tmp/cooper_doc.txt' },
+          result: 'stdout:\n1 /tmp/cooper_doc.txt\n\nexit code: 0',
+        }];
+        expect(extractFileOutputs(toolCalls)).toHaveLength(0);
+      });
+
+      it('does not emit file card for /tmp/ path in standalone grep command', () => {
+        const toolCalls: ToolCall[] = [{
+          id: 'tc1', name: 'run_command',
+          input: { command: "grep -o '客观成交率' /tmp/cooper_doc.txt | sort | uniq -c" },
+          result: 'stdout:\n20 客观成交率\n\nexit code: 0',
+        }];
+        expect(extractFileOutputs(toolCalls)).toHaveLength(0);
+      });
+
+      it('does not emit file card for /tmp/ path inside python3 -c inline script', () => {
+        const toolCalls: ToolCall[] = [{
+          id: 'tc1', name: 'run_command',
+          input: { command: "python3 -c \"with open('/tmp/cooper_doc.txt') as f: print(f.read()[:100])\"" },
+          result: 'stdout:\nsome content\n\nexit code: 0',
+        }];
+        expect(extractFileOutputs(toolCalls)).toHaveLength(0);
+      });
+
+      it('does not emit file card for all three cooper-pattern commands combined', () => {
+        // Full reproduction of the conversation that triggered the bug.
+        const toolCalls: ToolCall[] = [
+          {
+            id: 'tc1', name: 'run_command',
+            input: { command: 'mcporter call Cooper.readContent > /tmp/cooper_doc.txt && wc -l /tmp/cooper_doc.txt' },
+            result: 'stdout:\n1 /tmp/cooper_doc.txt\n\nexit code: 0',
+          },
+          {
+            id: 'tc2', name: 'run_command',
+            input: { command: "grep -o '客观成交率' /tmp/cooper_doc.txt | wc -l" },
+            result: 'stdout:\n26\n\nexit code: 0',
+          },
+          {
+            id: 'tc3', name: 'run_command',
+            input: { command: "python3 -c \"with open('/tmp/cooper_doc.txt') as f: print(f.read()[:100])\"" },
+            result: 'stdout:\nsome content\n\nexit code: 0',
+          },
+        ];
+        expect(extractFileOutputs(toolCalls)).toHaveLength(0);
+      });
+
+      it('still emits /tmp/ path announced via stdout keyword (not from command string)', () => {
+        // /tmp/ filter is in extractPathsFromCommand only. A process that
+        // explicitly announces "File saved to /tmp/result.pdf" in stdout is a
+        // legitimate deliverable and must not be suppressed.
+        const toolCalls: ToolCall[] = [{
+          id: 'tc1', name: 'run_command',
+          input: { command: 'python script.py' },
+          result: 'stdout:\nFile saved to /tmp/result.pdf\n\nexit code: 0',
+        }];
+        const files = extractFileOutputs(toolCalls);
+        expect(files).toHaveLength(1);
+        expect(files[0].path).toBe('/tmp/result.pdf');
+      });
+
+      it('still emits non-/tmp/ path from command string', () => {
+        // Sanity check: the filter must not suppress legitimate workspace paths.
+        const toolCalls: ToolCall[] = [{
+          id: 'tc1', name: 'run_command',
+          input: { command: 'echo "# Notes" >> /Users/me/workspace/notes.md' },
+          result: 'stdout:\n\nexit code: 0',
+        }];
+        const files = extractFileOutputs(toolCalls);
+        expect(files).toHaveLength(1);
+        expect(files[0].path).toBe('/Users/me/workspace/notes.md');
+      });
+    });
+
     // ── mv/cp destination-wins fast-path ──
     // Regression tests for the case where `mv source dest` both paths share a
     // basename. The generic extractor took the first match (source) and let
@@ -510,21 +595,50 @@ describe('workflowExtractor', () => {
         expect(files[0].path).toBe('/Users/me/Desktop/Test/my report.xlsx');
       });
 
-      it('complex command with pipe: falls back to generic extractor', () => {
-        // With a pipe the parser bails. Generic extractor still runs and
-        // returns the source path (legacy behavior) — we're not regressing it.
+      it('complex command with pipe: both paths in /tmp → no deliverable', () => {
+        // With a pipe the mv parser bails (contains |). The generic extractor
+        // then runs on the whole command string. Both /tmp/a.xlsx and
+        // /tmp/b.xlsx are temp paths, so isTempPath filters them out in
+        // deliverables mode. Result: no file card — which is correct, since
+        // mv-ing between /tmp locations doesn't produce a user-facing output.
         const toolCalls: ToolCall[] = [{
           id: 'tc1', name: 'run_command',
           input: { command: 'mv /tmp/a.xlsx /tmp/b.xlsx | tee log.txt' },
           result: 'stdout:\n\nexit code: 0',
         }];
         const files = extractFileOutputs(toolCalls);
-        // Generic fallback emits *something* — we just assert we didn't crash
-        // and emit a sensible .xlsx entry. Exact path may be source or dest
-        // depending on regex scan order; this is documented as pre-existing
-        // behavior, not what this test is protecting.
-        expect(files.length).toBeGreaterThanOrEqual(1);
-        expect(files[0].path).toMatch(/\.xlsx$/);
+        expect(files).toHaveLength(0);
+      });
+
+      // Regression: Cooper skill redirects MCP output to /tmp/cooper_doc.txt as
+      // an intermediate buffer. parseCopyMoveCommand bails on `>` and `&&`, so
+      // the generic regex fallback ran and produced a spurious file card for
+      // /tmp/cooper_doc.txt. The compound-command split + isTempPath guard fix
+      // this: the wc segment is read-only (skipped), and the redirect target
+      // /tmp/cooper_doc.txt is a temp path (filtered in deliverables mode).
+      it('Cooper skill: mcporter + wc compound command emits no file card', () => {
+        const toolCalls: ToolCall[] = [{
+          id: 'tc1', name: 'run_command',
+          input: { command: 'mcporter call "Cooper.readContent(doc_id=\'abc\')" --output text 2>&1 > /tmp/cooper_doc.txt && wc -l /tmp/cooper_doc.txt' },
+          result: 'stdout:\n1 /tmp/cooper_doc.txt\n\nexit code: 0',
+        }];
+        const files = extractFileOutputs(toolCalls);
+        // /tmp/cooper_doc.txt is an intermediate buffer, not a deliverable
+        expect(files).toHaveLength(0);
+      });
+
+      // Regression: if user explicitly asks to write to /tmp AND announces via
+      // stdout keyword, it should still show up (6a path is unaffected by
+      // isTempPath which only guards 6b-ii).
+      it('explicit /tmp output announced in stdout still shows (6a path unaffected)', () => {
+        const toolCalls: ToolCall[] = [{
+          id: 'tc1', name: 'run_command',
+          input: { command: 'python generate.py' },
+          result: 'stdout:\n已保存到 /tmp/result.pdf\n\nexit code: 0',
+        }];
+        const files = extractFileOutputs(toolCalls);
+        expect(files).toHaveLength(1);
+        expect(files[0].path).toBe('/tmp/result.pdf');
       });
 
       it('chained cd && mv: falls back to generic extractor', () => {
