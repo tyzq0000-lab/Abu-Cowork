@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Plus, ArrowUp, ArrowRight, Square, X, ChevronDown, FileText } from 'lucide-react';
+import { Plus, ArrowUp, Square, X, ChevronDown, FileText } from 'lucide-react';
 import { ModelSelector, CapabilityBadge } from '@/components/chat/ModelSelector';
 // AgentSelector hidden from UI; import kept for easy restore
 // import AgentSelector from '@/components/chat/AgentSelector';
@@ -779,19 +779,19 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
                 />
               </div>
 
-              <button
+              <Button
+                size="icon"
                 onClick={handleSend}
                 disabled={!hasContent}
                 className={cn(
-                  'btn-claude-primary flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-medium transition-colors',
+                  'h-7 w-7 rounded-lg transition-colors',
                   hasContent
                     ? 'bg-[var(--abu-clay)] hover:bg-[var(--abu-clay-hover)] text-white shadow-sm'
-                    : 'bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] cursor-not-allowed'
+                    : 'bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] cursor-not-allowed hover:bg-[var(--abu-bg-hover)]'
                 )}
               >
-                <span>{t.chat.start}</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
+                <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+              </Button>
             </div>
           ) : (
             /* Chat variant: [+] --- [Model ∨] [Stop/Send] */
