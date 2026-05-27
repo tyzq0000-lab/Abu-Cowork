@@ -19,6 +19,57 @@ const AUTO_SCREENSHOT_DELAY_MS = 800;
 let computerUseBatchMode = false;
 let skipAutoScreenshot = false;
 
+// ── AX session state ──────────────────────────────────────────────────────────
+// One session per get_ui call. Holds live AX element refs on the Rust side.
+// auto-closed when a new get_ui is called; survives multiple ax_click / ax_type.
+let currentAxSessionId: string | null = null;
+
+interface AxElement {
+  id: number;
+  role: string;
+  label: string | null;
+  value: string | null;
+  bounds: [number, number, number, number]; // [x, y, w, h]
+  actions: string[];
+  depth: number;
+}
+
+interface AxSnapshotResult {
+  session_id: string;
+  app: string | null;
+  total_visited: number;
+  truncated: boolean;
+  elements: AxElement[];
+}
+
+/** Release the current AX session (no-op if none). Call before taking a new snapshot. */
+async function closeCurrentAxSession(): Promise<void> {
+  if (currentAxSessionId) {
+    try { await invoke('ax_close_session', { sessionId: currentAxSessionId }); } catch { /* ignore */ }
+    currentAxSessionId = null;
+  }
+}
+
+/** Format AX elements as a numbered list for the model (Set-of-Mark style). */
+function formatAxElements(elements: AxElement[]): string {
+  if (elements.length === 0) return '（没有找到可交互元素）';
+  return elements
+    .slice(0, 120) // cap at 120 to stay within token budget
+    .map(e => {
+      const label = e.label ?? '—';
+      const val = e.value ? ` val="${e.value}"` : '';
+      const acts = e.actions.join(',');
+      const b = e.bounds;
+      return `[${e.id}] ${e.role} "${label}"${val}  actions=[${acts}]  bounds=(${Math.round(b[0])},${Math.round(b[1])} ${Math.round(b[2])}×${Math.round(b[3])})`;
+    })
+    .join('\n');
+}
+
+/** Export so agent loop can close session on conversation end. */
+export async function closeAxSession(): Promise<void> {
+  await closeCurrentAxSession();
+}
+
 export function setComputerUseBatchMode(value: boolean) { computerUseBatchMode = value; }
 export function setSkipAutoScreenshot(value: boolean) { skipAutoScreenshot = value; }
 
@@ -199,9 +250,18 @@ async function formatScreenshotResult(result: { base64: string; width: number; h
 
 export const computerTool: ToolDefinition = {
   name: TOOL_NAMES.COMPUTER,
-  description: `操控电脑屏幕：截图、鼠标和键盘操作。仅在必须看屏幕画面或操作 GUI 界面时才用，能用其他工具完成的不要用此工具。
+  description: `操控电脑屏幕：截图、无障碍树操作（推荐）、鼠标和键盘操作。仅在必须看屏幕画面或操作 GUI 界面时才用，能用其他工具完成的不要用此工具。
+
+【推荐工作流】先 get_ui 读无障碍树 → 再 ax_click / ax_type 操作元素。这条路径不移动鼠标、不抢焦点、丝滑无感知。只有 get_ui 拿不到元素（canvas/自绘 app）时再退回 screenshot + click(x,y)。
 
 操作类型（action）：
+
+无障碍树操作（AX 路径，推荐）：
+- get_ui：读取当前前台应用的无障碍树，返回可交互元素列表（id / role / label / bounds / actions）。不截图、不动鼠标。
+- ax_click：按元素 id 点击控件（AXPress），不移动光标。参数：element_id。可选降级坐标：x, y。
+- ax_type：按元素 id 设置文本（AXSetValue），不合成键盘事件。参数：element_id, text。
+
+像素坐标操作（降级路径，当 AX 不可用时使用）：
 - screenshot：截屏（阿布窗口不会出现在截图中）。可选 x, y, width, height 裁剪区域。
 - click：点击坐标。参数：x, y, button（left/right/middle/double，默认 left）。
 - move：移动鼠标。参数：x, y。
@@ -211,7 +271,7 @@ export const computerTool: ToolDefinition = {
 - key：按键组合。参数：key（如 Return, Tab, a）, modifiers（如 ["ctrl","shift"]）。
 - wait：等待指定毫秒数。参数：duration（默认 1000，最大 10000）。
 
-所有坐标使用截图像素坐标系（最大宽度 ${SCREENSHOT_MAX_WIDTH}px），自动映射回真实屏幕坐标。操作后自动截图返回以验证结果。`,
+像素坐标使用截图像素坐标系（最大宽度 ${SCREENSHOT_MAX_WIDTH}px），自动映射回真实屏幕坐标。`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -246,6 +306,8 @@ export const computerTool: ToolDefinition = {
       },
       // Wait
       duration: { type: 'number', description: 'Wait duration in ms (default 1000, max 10000)' },
+      // AX actions (get_ui / ax_click / ax_type)
+      element_id: { type: 'number', description: 'Element id from get_ui snapshot (for ax_click / ax_type)' },
       // Display control
       show_user: {
         type: 'boolean',
@@ -311,16 +373,19 @@ export const computerTool: ToolDefinition = {
       }
     }
 
-    // Hide Abu window during operations so it doesn't block click targets
-    // In batch mode, agentLoop handles window hide/show at batch level
-    const needsHideWindow = !computerUseBatchMode && ['click', 'move', 'scroll', 'drag', 'type', 'key'].includes(action);
+    // AX actions drive controls directly — no cursor movement, no window hide needed.
+    // Only pixel-based actions (click/move/scroll/drag/type/key) need window hide.
+    const isAxAction = ['get_ui', 'ax_click', 'ax_type'].includes(action);
+    const needsHideWindow = !computerUseBatchMode && !isAxAction &&
+      ['click', 'move', 'scroll', 'drag', 'type', 'key'].includes(action);
     if (needsHideWindow) {
       try { await invoke('window_hide'); } catch { /* ignore */ }
       await new Promise(r => setTimeout(r, 100)); // Let window animate away
     }
 
     // Actions that should auto-screenshot after execution
-    const autoScreenshotActions = ['click', 'type', 'key', 'scroll', 'drag'];
+    // AX actions also auto-screenshot so the model can verify the result.
+    const autoScreenshotActions = ['click', 'type', 'key', 'scroll', 'drag', 'ax_click', 'ax_type'];
 
     try {
       let actionResult: string;
@@ -398,8 +463,93 @@ export const computerTool: ToolDefinition = {
           });
           break;
 
+        // ── AX path (no cursor movement, no window hide) ───────────────────
+
+        case 'get_ui': {
+          // Close previous session before taking a fresh snapshot.
+          await closeCurrentAxSession();
+          try {
+            const snap = await invoke<AxSnapshotResult>('ax_snapshot');
+            currentAxSessionId = snap.session_id;
+            const formatted = formatAxElements(snap.elements);
+            const note = snap.truncated ? '\n⚠️ 元素列表已截断（树太大）。' : '';
+            actionResult =
+              `UI 树快照成功（${snap.app ?? 'unknown'}）` +
+              `，共 ${snap.elements.length} 个可交互元素，遍历 ${snap.total_visited} 个节点。${note}\n\n` +
+              `${formatted}\n\n` +
+              `要操作元素，使用 ax_click(element_id) 点击按钮/链接，或 ax_type(element_id, text) 输入文字。`;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            // AX unavailable (no permission, non-macOS, etc.) — tell model to fall back
+            actionResult =
+              `get_ui 不可用：${msg}\n` +
+              `请改用 screenshot 截图后再用 click(x, y) 进行像素坐标操作。`;
+          }
+          break;
+        }
+
+        case 'ax_click': {
+          const elemId = input.element_id as number;
+          if (currentAxSessionId == null) {
+            return 'Error: 需要先调用 get_ui 获取 UI 快照，再使用 ax_click。';
+          }
+          try {
+            await invoke('ax_press', { sessionId: currentAxSessionId, elementId: elemId });
+            actionResult = `ax_click 成功：元素 [${elemId}] 已按下（AXPress，光标未移动）`;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            // Fallback: pixel click if caller provided coordinates
+            if (input.x != null && input.y != null) {
+              const sc = toScreenCoords(input.x as number, input.y as number);
+              await invoke<string>('mouse_click', { x: sc.x, y: sc.y, button: undefined });
+              actionResult = `ax_click 失败（${msg}），已降级为像素点击 (${sc.x}, ${sc.y})`;
+            } else {
+              return `Error: ax_click 失败：${msg}。请尝试 screenshot 后用 click(x, y)。`;
+            }
+          }
+          break;
+        }
+
+        case 'ax_type': {
+          const elemId = input.element_id as number;
+          const text = input.text as string;
+          if (currentAxSessionId == null) {
+            return 'Error: 需要先调用 get_ui 获取 UI 快照，再使用 ax_type。';
+          }
+          try {
+            await invoke('ax_set_value', {
+              sessionId: currentAxSessionId,
+              elementId: elemId,
+              text,
+            });
+            actionResult = `ax_type 成功：元素 [${elemId}] 已设置文本（无键盘事件）`;
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            // Fallback: keyboard / clipboard
+            const hasNonAscii = /[^ -~\t\n\r]/.test(text);
+            if (hasNonAscii) {
+              let saved: string | null = null;
+              try { saved = await clipboardReadText(); } catch { /* empty */ }
+              try {
+                await clipboardWriteText(text);
+                await new Promise(r => setTimeout(r, 50));
+                await invoke<string>('keyboard_press', {
+                  key: 'v', modifiers: [isMacOS() ? 'meta' : 'ctrl'],
+                });
+                await new Promise(r => setTimeout(r, 150));
+              } finally {
+                if (saved != null) try { await clipboardWriteText(saved); } catch { /* ignore */ }
+              }
+            } else {
+              await invoke<string>('keyboard_type', { text });
+            }
+            actionResult = `ax_type 失败（${msg}），已降级为键盘输入`;
+          }
+          break;
+        }
+
         default:
-          return `Unknown action: ${action}. Valid actions: screenshot, click, move, scroll, drag, type, key, wait`;
+          return `Unknown action: ${action}. Valid actions: screenshot, click, move, scroll, drag, type, key, wait, get_ui, ax_click, ax_type`;
       }
 
       // Auto-screenshot after UI-affecting actions so the model can see the result.
