@@ -528,6 +528,39 @@ function parseCopyMoveCommand(cmd: string): { sources: string[]; destination: st
 }
 
 /**
+ * Resolve a cp/mv destination token and decide whether it lands OUTSIDE the
+ * given working directories. Used to suppress chat deliverable cards for files
+ * copied/moved out of the workspace boundary — a copy to an outside location is
+ * a duplicate of existing content, not a freshly-authored artifact worth a card.
+ *
+ * Conservative by design: a destination that can't be confidently resolved as
+ * absolute (a bare relative path, which resolves inside the command cwd =
+ * workspace) is treated as INSIDE — we never hide a card we're unsure about.
+ */
+function isDestinationOutside(rawDest: string, dirs: string[], home: string): boolean {
+  let p = normalizeSeparators(rawDest.trim());
+  if (!p) return false;
+  if (p === '~' || p.startsWith('~/')) {
+    p = normalizeSeparators(home) + (p === '~' ? '' : p.slice(1));
+  } else if (!p.startsWith('/') && !/^[A-Za-z]:\//.test(p)) {
+    return false; // relative → resolves inside the workspace cwd → inside
+  }
+  // Resolve . / .. segments and collapse duplicate slashes. Preserve a Windows
+  // drive prefix (C:) so the reconstructed path matches normalized working dirs.
+  const isWinDrive = /^[A-Za-z]:\//.test(p);
+  const drive = isWinDrive ? p.slice(0, 2) : '';
+  const body = isWinDrive ? p.slice(2) : p;
+  const out: string[] = [];
+  for (const seg of body.split('/')) {
+    if (seg === '..') out.pop();
+    else if (seg !== '.' && seg !== '') out.push(seg);
+  }
+  const abs = drive + '/' + out.join('/');
+  const normDirs = dirs.map((d) => normalizeSeparators(d).replace(/\/+$/, ''));
+  return !normDirs.some((d) => abs === d || abs.startsWith(d + '/'));
+}
+
+/**
  * Extract file paths from a shell command string.
  *
  * Mode controls which extensions count:
@@ -648,9 +681,20 @@ export function extractFilePathsFromText(text: string): string[] {
  */
 export function extractFileOutputs(
   toolCalls: ToolCall[],
-  options?: { mode?: ExtractMode; includeReads?: boolean }
+  options?: {
+    mode?: ExtractMode;
+    includeReads?: boolean;
+    /**
+     * When set, cp/mv destinations that resolve outside `dirs` are dropped
+     * (no card). Only the chat deliverable-card renderer passes this; the
+     * right-panel audit and snapshot capture omit it so they keep full
+     * transparency. `home` expands `~/...` destinations.
+     */
+    dropCopiesOutside?: { dirs: string[]; home: string };
+  }
 ): FileOutput[] {
   const mode: ExtractMode = options?.mode ?? 'deliverables';
+  const dropCopiesOutside = options?.dropCopiesOutside;
   // includeReads default depends on mode: file-ops shows reads (audit view),
   // deliverables doesn't (a read is not a "delivered" artifact).
   const includeReads = options?.includeReads ?? (mode === 'file-ops');
@@ -662,8 +706,9 @@ export function extractFileOutputs(
     if (!rawPath) return;
     // Normalize: strip markdown formatting chars + trailing punctuation, unify separators
     let path = rawPath
-      .replace(/^[*_`~]+/, '')          // leading markdown: **bold**, _italic_, `code`, ~~strike~~
-      .replace(/[*_`~)）\]】}"'。，,;；:：.]+$/, ''); // trailing markdown + punctuation
+      .replace(/^[*_`]+/, '')            // leading markdown: **bold**, _italic_, `code`.
+                                         // NOT `~` — it could be a home-relative ~/path (see MessageGroup precedent)
+      .replace(/[*_`~)）\]】}"'。，,;；:：.]+$/, ''); // trailing markdown + punctuation (~ safe here — paths never end in ~)
     path = normalizeSeparators(path.trim());
     if (!path) return;
 
@@ -793,6 +838,11 @@ export function extractFileOutputs(
               : joinPath(mv.destination, srcBase);
             const destExt = destPath.split('.').pop() || '';
             if (destAccepted(destExt)) {
+              // Copied/moved outside the workspace boundary → not a fresh
+              // deliverable; skip the card (right panel/snapshots still keep it).
+              if (dropCopiesOutside && isDestinationOutside(destPath, dropCopiesOutside.dirs, dropCopiesOutside.home)) {
+                continue;
+              }
               addFile(destPath, 'create');
             }
           }

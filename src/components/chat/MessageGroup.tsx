@@ -19,11 +19,26 @@ import { extractWorkflowSteps, extractFileOutputs, extractFilePathsFromText } fr
 import { parseSearchResults, stripSourcesBlock, parseSourcesFromText } from '@/utils/searchParser';
 import { snapshotToExecutionSteps } from '@/core/agent/executionSnapshot';
 import { runAgentLoop } from '@/core/agent/agentLoop';
+import { allWorkingDirectories } from '@/core/permissions/workingDirs';
+import { homeDir } from '@tauri-apps/api/path';
 import abuAvatar from '@/assets/abu-avatar.png';
 
 interface MessageGroupProps {
   messages: Message[];
   isLastGroup?: boolean;
+}
+
+// Home dir is resolved once per app session and cached at module level so the
+// common case (subsequent message groups) gets it synchronously. Used to expand
+// `~/...` cp/mv destinations when deciding whether a copy escaped the workspace.
+let cachedHome: string | null = null;
+function useHomeDir(): string | null {
+  const [home, setHome] = useState<string | null>(cachedHome);
+  useEffect(() => {
+    if (cachedHome !== null) return;
+    homeDir().then((h) => { cachedHome = h; setHome(h); }).catch(() => {});
+  }, []);
+  return home;
 }
 
 /** Collapsed fold-row summarising all patch/edit calls for one skill. */
@@ -189,6 +204,7 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
   const assistantMsgs = messages.filter((m) => m.role === 'assistant');
   const agentStatus = useChatStore((s) => s.agentStatus);
   const activeConv = useActiveConversation();
+  const home = useHomeDir();
 
   // Get loopId from messages (all messages in group share same loopId)
   const loopId = messages[0]?.loopId;
@@ -294,7 +310,13 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
   // never appear in toolCall.input.path (e.g. python subprocess writing files
   // not visible to the agent loop).
   const fileOutputs = useMemo(() => {
-    const files = extractFileOutputs(allToolCalls, { mode: 'deliverables' });
+    const files = extractFileOutputs(allToolCalls, {
+      mode: 'deliverables',
+      // Drop cards for files cp/mv'd outside the workspace boundary — those are
+      // duplicates at a location the user already knows, not fresh artifacts.
+      // Only applied here (chat cards); right-panel audit + snapshots keep them.
+      ...(home ? { dropCopiesOutside: { dirs: allWorkingDirectories(), home } } : {}),
+    });
     // Path-only dedup for the text fallback. basename dedup was removed
     // (cross-turn same-basename writes are legitimate, e.g. todo skill
     // writing 2026-04-{28,29,30}.md).
@@ -321,7 +343,7 @@ export default function MessageGroup({ messages, isLastGroup: isLastGroupProp = 
       }
     }
     return files;
-  }, [allToolCalls, assistantMsgs]);
+  }, [allToolCalls, assistantMsgs, home]);
 
   // Check if any tool is executing
   const isAnyExecuting = allToolCalls.some((tc) => tc.isExecuting);
