@@ -1327,6 +1327,8 @@ pub fn run() {
             accessibility::get_ui_snapshot,
             accessibility::test_ax_snapshot,
             accessibility::ax_diagnose,
+            accessibility::ax_probe_text,
+            accessibility::ax_enable_electron_a11y,
             accessibility::ax_snapshot,
             accessibility::ax_press,
             accessibility::ax_set_value,

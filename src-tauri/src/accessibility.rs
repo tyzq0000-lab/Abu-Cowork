@@ -124,6 +124,22 @@ pub struct AxDiagSnapshot {
     pub walk_elements: usize,
 }
 
+/// Diagnostic: one text-bearing node found anywhere in the tree (no role filter).
+/// Used to discover whether semantic text (contact names, message bodies) exists
+/// in a poorly-labelled Electron app's AX tree but is being filtered out by the
+/// normal interactable-only walk.
+#[derive(Serialize)]
+pub struct AxTextNode {
+    pub role: String,
+    /// Non-empty text from AXValue / AXTitle / AXDescription (whichever hit first).
+    pub text: String,
+    /// Which attribute the text came from: "AXValue" / "AXTitle" / "AXDescription".
+    pub source: String,
+    pub depth: u32,
+    /// Whether this node itself advertises AXPress (directly clickable).
+    pub pressable: bool,
+}
+
 /// Capture a read-only snapshot of the currently focused application's UI tree.
 ///
 /// macOS only. Requires Accessibility permission (the same TCC grant used by the
@@ -173,6 +189,41 @@ pub async fn ax_diagnose(app_name: String) -> Result<AxDiagReport, String> {
     {
         let _ = app_name;
         Err("ax_diagnose is only supported on macOS".to_string())
+    }
+}
+
+/// Diagnostic: dump every text-bearing node (no role filter) for `app_name`, or the
+/// frontmost app when omitted. Reveals whether semantic text exists in the tree but
+/// is filtered out by the normal interactable-only walk. Developer-only.
+///   `window.__TAURI__.core.invoke('ax_probe_text', { appName: 'D-Chat' })`
+#[tauri::command]
+pub fn ax_probe_text(app_name: Option<String>) -> Result<Vec<AxTextNode>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::ax_probe_text_impl(app_name)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_name;
+        Err("ax_probe_text is only supported on macOS".to_string())
+    }
+}
+
+/// Diagnostic: force-enable Chromium/Electron accessibility (set AXManualAccessibility +
+/// AXEnhancedUserInterface on the app), wait, then dump text nodes. Electron apps build
+/// no AX tree until an assistive tech requests it — this is the standard way to turn it on.
+/// Developer-only.
+///   `window.__TAURI__.core.invoke('ax_enable_electron_a11y', { appName: 'D-Chat' })`
+#[tauri::command]
+pub async fn ax_enable_electron_a11y(app_name: String) -> Result<Vec<AxTextNode>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::ax_enable_electron_a11y_impl(app_name).await
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app_name;
+        Err("ax_enable_electron_a11y is only supported on macOS".to_string())
     }
 }
 
@@ -252,7 +303,7 @@ pub fn ax_close_session(session_id: String) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use super::{AxDiagReport, AxDiagSnapshot, AxQualityReport, UiElement, UiSnapshot};
+    use super::{AxDiagReport, AxDiagSnapshot, AxQualityReport, AxTextNode, UiElement, UiSnapshot};
     use core_foundation::base::TCFType;
     use core_foundation::boolean::CFBoolean;
     use core_foundation::dictionary::CFDictionary;
@@ -891,6 +942,130 @@ mod macos {
             before,
             after,
         })
+    }
+
+    /// Walk EVERY node (no role filter) collecting any with non-empty text. Caps output
+    /// at MAX_ELEMENTS text nodes / MAX_VISITED visited to stay bounded.
+    unsafe fn walk_text(el: CFTypeRef, depth: u32, out: &mut Vec<AxTextNode>, visited: &mut usize) {
+        if depth > MAX_DEPTH || out.len() >= MAX_ELEMENTS || *visited >= MAX_VISITED {
+            return;
+        }
+        *visited += 1;
+
+        let role = attr_string(el, "AXRole").unwrap_or_default();
+        // Probe text from the three usual carriers, in priority order.
+        let (text, source) = if let Some(v) = attr_string(el, "AXValue") {
+            (v, "AXValue")
+        } else if let Some(t) = attr_string(el, "AXTitle") {
+            (t, "AXTitle")
+        } else if let Some(d) = attr_string(el, "AXDescription") {
+            (d, "AXDescription")
+        } else {
+            (String::new(), "")
+        };
+
+        if !text.is_empty() {
+            let pressable = action_names(el).iter().any(|a| a == "AXPress");
+            out.push(AxTextNode {
+                role: role.clone(),
+                text,
+                source: source.to_string(),
+                depth,
+                pressable,
+            });
+        }
+
+        let kids = children(el);
+        for k in kids {
+            walk_text(k, depth + 1, out, visited);
+            CFRelease(k);
+        }
+    }
+
+    /// Diagnostic: dump all text-bearing nodes for the target app (or frontmost).
+    pub fn ax_probe_text_impl(target_app: Option<String>) -> Result<Vec<AxTextNode>, String> {
+        unsafe {
+            if !ax_is_trusted_with_prompt() {
+                return Err("需要辅助功能权限".to_string());
+            }
+            let (app, _name) = if let Some(ref name) = target_app {
+                get_app_element_by_name(name)?
+            } else {
+                get_frontmost_app_element()?
+            };
+            let mut out = Vec::new();
+            let mut visited = 0usize;
+            walk_text(app, 0, &mut out, &mut visited);
+            CFRelease(app);
+            Ok(out)
+        }
+    }
+
+    /// Set a boolean AX attribute on an element (best-effort; ignores errors).
+    unsafe fn set_bool_attr(el: CFTypeRef, name: &str, val: bool) {
+        let attr = CFString::new(name);
+        let b = if val { CFBoolean::true_value() } else { CFBoolean::false_value() };
+        AXUIElementSetAttributeValue(
+            el,
+            attr.as_concrete_TypeRef(),
+            b.as_concrete_TypeRef() as CFTypeRef,
+        );
+    }
+
+    /// Find a Regular app's pid by name/bundle (same matching as get_app_element_by_name).
+    fn find_regular_app_pid(name: &str) -> Option<i32> {
+        let needle = name.to_lowercase();
+        let all = running_apps();
+        let apps: Vec<&RunningApp> = all.iter().filter(|a| a.is_regular).collect();
+        apps.iter()
+            .find(|a| a.name.to_lowercase() == needle)
+            .or_else(|| {
+                apps.iter()
+                    .find(|a| a.bundle_id.to_lowercase().rsplit('.').next() == Some(needle.as_str()))
+            })
+            .or_else(|| apps.iter().find(|a| a.name.to_lowercase().contains(&needle)))
+            .or_else(|| apps.iter().find(|a| a.bundle_id.to_lowercase().contains(&needle)))
+            .map(|a| a.pid)
+    }
+
+    /// Diagnostic: force Chromium/Electron to build its accessibility tree, then dump text.
+    /// Note: must not hold a raw CFTypeRef across .await (non-Send) — so we resolve the pid,
+    /// do CF work in sync blocks, and re-create the element from the pid after the sleep.
+    pub async fn ax_enable_electron_a11y_impl(app_name: String) -> Result<Vec<AxTextNode>, String> {
+        unsafe {
+            if !ax_is_trusted_with_prompt() {
+                return Err("需要辅助功能权限".to_string());
+            }
+        }
+        let pid = find_regular_app_pid(&app_name)
+            .ok_or_else(|| format!("App '{}' not running (regular apps only)", app_name))?;
+
+        // Set the Chromium switch (AXManualAccessibility) + the older AppKit one. Sync block.
+        unsafe {
+            let app = AXUIElementCreateApplication(pid);
+            if !app.is_null() {
+                set_bool_attr(app, "AXManualAccessibility", true);
+                set_bool_attr(app, "AXEnhancedUserInterface", true);
+                CFRelease(app);
+            }
+        }
+
+        // Chromium needs a moment to build the tree after the flag flips.
+        tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+
+        // Re-create the element and dump text. Sync block.
+        let out = unsafe {
+            let app = AXUIElementCreateApplication(pid);
+            if app.is_null() {
+                return Err(format!("AXUIElementCreateApplication({}) returned null", pid));
+            }
+            let mut out = Vec::new();
+            let mut visited = 0usize;
+            walk_text(app, 0, &mut out, &mut visited);
+            CFRelease(app);
+            out
+        };
+        Ok(out)
     }
 
     /// Launch `app_name`, wait for it to gain focus, snapshot its AX tree, and
