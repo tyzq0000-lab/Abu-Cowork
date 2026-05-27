@@ -530,8 +530,14 @@ export const computerTool: ToolDefinition = {
                 return `Error: click 失败：${msg}。请提供 x,y 坐标或先调用 get_app_state。`;
               }
             }
+          } else if (elemId !== undefined) {
+            // element_id provided but no active AX session — caller forgot get_app_state
+            return 'Error: click(element_id=N) 需要先调用 get_app_state 获取 UI 快照（当前无活动 session）。请先调用 get_app_state，再使用 click(element_id=N)。';
           } else {
-            // Pixel-only path (no element_id or session expired)
+            // Pixel-only path (no element_id)
+            if (input.x == null || input.y == null) {
+              return 'Error: click 需要提供 element_id（来自 get_app_state）或 x,y 像素坐标。';
+            }
             const sc = toScreenCoords(input.x as number, input.y as number);
             actionResult = await invoke<string>('mouse_click', { x: sc.x, y: sc.y, button: btn });
           }
@@ -565,6 +571,9 @@ export const computerTool: ToolDefinition = {
               return `Error: scroll: element_id ${elemId} 不在当前快照，请提供 x,y 坐标或先调用 get_app_state。`;
             }
           } else {
+            if (input.x == null || input.y == null) {
+              return 'Error: scroll 需要提供 element_id（来自 get_app_state）或 x,y 像素坐标。';
+            }
             const sc = toScreenCoords(input.x as number, input.y as number);
             actionResult = await invoke<string>('mouse_scroll', { x: sc.x, y: sc.y, direction: dir, amount: amt });
           }
