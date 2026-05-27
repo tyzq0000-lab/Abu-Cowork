@@ -392,9 +392,12 @@ export const computerTool: ToolDefinition = {
       await new Promise(r => setTimeout(r, 100)); // Let window animate away
     }
 
-    // Actions that should auto-screenshot after execution
-    // AX actions also auto-screenshot so the model can verify the result.
-    const autoScreenshotActions = ['click', 'type', 'key', 'scroll', 'drag', 'ax_click', 'ax_type'];
+    // Actions that should auto-screenshot after execution.
+    // AX actions (ax_click / ax_type) are intentionally excluded: they return structured
+    // text feedback directly and don't need a screenshot to verify. Auto-screenshotting
+    // after AX actions also fails for non-vision models ("No endpoints found that
+    // support image input"). The model can call get_ui or screenshot explicitly if needed.
+    const autoScreenshotActions = ['click', 'type', 'key', 'scroll', 'drag'];
 
     try {
       let actionResult: string;

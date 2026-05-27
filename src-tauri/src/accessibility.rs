@@ -240,6 +240,10 @@ mod macos {
         /// affects manually-added unsigned debug binaries.
         fn AXIsProcessTrustedWithOptions(options: CFDictionaryRef) -> bool;
         fn AXUIElementCreateSystemWide() -> CFTypeRef;
+        /// Create an AX element for a specific process by PID.
+        /// Use instead of AXFocusedApplication when you need the visually frontmost
+        /// window regardless of which app holds keyboard focus.
+        fn AXUIElementCreateApplication(pid: i32) -> CFTypeRef;
         fn AXUIElementCopyAttributeValue(
             element: CFTypeRef,
             attribute: CFStringRef,
@@ -516,6 +520,45 @@ mod macos {
         }
     }
 
+    /// Get an AX element for the visually frontmost application.
+    ///
+    /// Uses `AXUIElementCreateApplication(pid)` with the PID of the frontmost process,
+    /// obtained via AppleScript `unix id of first process whose frontmost is true`.
+    ///
+    /// This is more reliable than `AXFocusedApplication` (which tracks keyboard focus —
+    /// Abu itself holds keyboard focus after the user types a message, causing
+    /// `AXFocusedApplication` to return Abu's own process instead of Notes/Safari/etc.).
+    ///
+    /// Returns the element (caller must CFRelease) and the app name, or an error string.
+    fn get_frontmost_app_element() -> Result<(CFTypeRef, Option<String>), String> {
+        // Step 1: Get frontmost process PID via AppleScript.
+        // "unix id" is the POSIX PID; "frontmost is true" matches the visually-front app.
+        let script =
+            "tell application \"System Events\" to unix id of first process whose frontmost is true";
+        let output = std::process::Command::new("osascript")
+            .args(["-e", script])
+            .output()
+            .map_err(|e| format!("osascript failed: {}", e))?;
+
+        let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let pid: i32 = pid_str
+            .parse()
+            .map_err(|_| format!("Could not parse PID from osascript output: {:?}", pid_str))?;
+
+        // Step 2: Create an AX element for that PID and extract the app name.
+        unsafe {
+            let app = AXUIElementCreateApplication(pid);
+            if app.is_null() {
+                return Err(format!(
+                    "AXUIElementCreateApplication({}) returned null",
+                    pid
+                ));
+            }
+            let app_name = attr_string(app, "AXTitle");
+            Ok((app, app_name))
+        }
+    }
+
     pub fn get_ui_snapshot_impl() -> Result<UiSnapshot, String> {
         unsafe {
             // Use AXIsProcessTrustedWithOptions(prompt=true) — the Apple-recommended
@@ -531,24 +574,13 @@ mod macos {
                 );
             }
 
-            let sys = AXUIElementCreateSystemWide();
-            if sys.is_null() {
-                return Err("AXUIElementCreateSystemWide returned null".to_string());
-            }
-
-            let app = match copy_attr(sys, "AXFocusedApplication") {
-                Some(a) => a,
-                None => {
-                    CFRelease(sys);
-                    return Err(
-                        "拿不到当前焦点应用（AXFocusedApplication）。请确认有一个普通 App 在前台。"
-                            .to_string(),
-                    );
-                }
-            };
-
-            // App element exposes its name via AXTitle.
-            let app_name = attr_string(app, "AXTitle");
+            let (app, app_name) = get_frontmost_app_element().map_err(|e| {
+                format!(
+                    "get_ui 不可用：{}。请确认有一个普通 App 在前台。\
+                     请改用 screenshot 截图后再用 click(x, y) 进行像素坐标操作。",
+                    e
+                )
+            })?;
 
             let mut st = WalkState {
                 elements: Vec::new(),
@@ -558,7 +590,6 @@ mod macos {
             walk(app, 0, &mut st);
 
             CFRelease(app);
-            CFRelease(sys);
 
             Ok(UiSnapshot {
                 app: app_name,
@@ -699,23 +730,13 @@ mod macos {
                 );
             }
 
-            let sys = AXUIElementCreateSystemWide();
-            if sys.is_null() {
-                return Err("AXUIElementCreateSystemWide returned null".to_string());
-            }
-
-            let app = match copy_attr(sys, "AXFocusedApplication") {
-                Some(a) => a,
-                None => {
-                    CFRelease(sys);
-                    return Err(
-                        "拿不到当前焦点应用（AXFocusedApplication）。请确认有一个普通 App 在前台。"
-                            .to_string(),
-                    );
-                }
-            };
-
-            let app_name = attr_string(app, "AXTitle");
+            let (app, app_name) = get_frontmost_app_element().map_err(|e| {
+                format!(
+                    "get_ui 不可用：{}。请确认有一个普通 App 在前台。\
+                     请改用 screenshot 截图后再用 click(x, y) 进行像素坐标操作。",
+                    e
+                )
+            })?;
 
             let mut st = WalkStateWithCache {
                 elements: Vec::new(),
@@ -726,7 +747,6 @@ mod macos {
             walk_and_cache(app, 0, &mut st);
 
             CFRelease(app);
-            CFRelease(sys);
 
             // Store in the global session cache.
             let session_id = new_session_id();
