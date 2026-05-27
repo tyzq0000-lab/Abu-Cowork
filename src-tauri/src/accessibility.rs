@@ -522,102 +522,124 @@ mod macos {
         }
     }
 
-    /// Get an AX element for a named application process (by partial, case-insensitive name).
+    /// A running GUI app: pid + its localized name + bundle identifier.
+    struct RunningApp {
+        pid: i32,
+        /// Localized display name, e.g. "备忘录" on a Chinese system.
+        name: String,
+        /// Bundle id, e.g. "com.apple.Notes" — useful for matching the model's
+        /// English app name against a localized display name.
+        bundle_id: String,
+    }
+
+    /// Enumerate running GUI apps via NSWorkspace.
+    ///
+    /// Uses the native AppKit API — does NOT require Automation (Apple Events) permission,
+    /// unlike AppleScript `tell application "System Events"`, which fails with error -1743
+    /// when that separate TCC grant is missing. We already hold Accessibility permission,
+    /// which is all that AXUIElementCreateApplication needs.
+    fn running_apps() -> Vec<RunningApp> {
+        use objc2_app_kit::NSWorkspace;
+        let workspace = NSWorkspace::sharedWorkspace();
+        let apps = workspace.runningApplications();
+        let mut out = Vec::new();
+        for app in apps.iter() {
+            out.push(RunningApp {
+                pid: app.processIdentifier() as i32,
+                name: app.localizedName().map(|s| s.to_string()).unwrap_or_default(),
+                bundle_id: app.bundleIdentifier().map(|s| s.to_string()).unwrap_or_default(),
+            });
+        }
+        out
+    }
+
+    /// Get an AX element for a named application process.
+    ///
+    /// Matches `name` (case-insensitive) against BOTH the localized display name and the
+    /// bundle identifier. This matters on localized systems: on a Chinese macOS, Notes'
+    /// localizedName is "备忘录", but its bundle id "com.apple.Notes" still contains "notes",
+    /// so the model's English `app_name: "Notes"` resolves correctly.
     ///
     /// The app does NOT need to be in the foreground — AX APIs work on any running process.
-    /// This is the primary path when the model specifies `app_name` in a `get_ui` call,
-    /// which lets the user continue using their computer while Abu controls a background app.
     fn get_app_element_by_name(name: &str) -> Result<(CFTypeRef, Option<String>), String> {
-        // AppleScript: find the first application process whose name contains `name`.
-        // `unix id` returns the POSIX PID; we then create an AX element for that PID.
-        let script = format!(
-            r#"tell application "System Events"
-    set appProcs to every application process whose name contains "{name}"
-    if (count of appProcs) is 0 then
-        error "No running application found matching: {name}"
-    end if
-    set foundApp to item 1 of appProcs
-    return (unix id of foundApp) as text
-end tell"#,
-            name = name.replace('"', "")  // sanitise — no escaping in AppleScript strings
-        );
+        let needle = name.to_lowercase();
+        let apps = running_apps();
 
-        let output = std::process::Command::new("osascript")
-            .args(["-e", &script])
-            .output()
-            .map_err(|e| format!("osascript failed to launch: {}", e))?;
+        let matches = |a: &RunningApp| {
+            let n = a.name.to_lowercase();
+            let b = a.bundle_id.to_lowercase();
+            (n, b)
+        };
 
-        let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        // Priority: exact name → name substring → bundle-id substring.
+        let matched = apps
+            .iter()
+            .find(|a| matches(a).0 == needle)
+            .or_else(|| apps.iter().find(|a| matches(a).0.contains(&needle)))
+            .or_else(|| apps.iter().find(|a| matches(a).1.contains(&needle)));
 
-        if output.status.success() && !pid_str.is_empty() {
-            if let Ok(pid) = pid_str.parse::<i32>() {
-                unsafe {
-                    let app = AXUIElementCreateApplication(pid);
-                    if !app.is_null() {
-                        let app_name = attr_string(app, "AXTitle");
-                        return Ok((app, app_name));
-                    }
+        match matched {
+            Some(found) => unsafe {
+                let app = AXUIElementCreateApplication(found.pid);
+                if app.is_null() {
+                    return Err(format!(
+                        "AXUIElementCreateApplication({}) returned null for '{}'",
+                        found.pid, found.name
+                    ));
                 }
+                // Prefer AXTitle, then the NSWorkspace localized name (AXTitle is often
+                // empty for background apps that have no focused window).
+                let ax_title = attr_string(app, "AXTitle");
+                Ok((app, ax_title.or_else(|| Some(found.name.clone()))))
+            },
+            None => {
+                let available: Vec<&str> = apps
+                    .iter()
+                    .filter(|a| !a.name.is_empty())
+                    .map(|a| a.name.as_str())
+                    .collect();
+                Err(format!(
+                    "未找到名为 '{}' 的运行中应用。当前运行的应用：{}",
+                    name,
+                    available.join("、")
+                ))
             }
         }
-
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        Err(format!(
-            "App '{}' not found or not running. stderr: {:?}",
-            name, stderr
-        ))
     }
 
     /// Get an AX element for the visually frontmost application.
     ///
-    /// Uses `AXUIElementCreateApplication(pid)` with the PID of the frontmost process,
-    /// obtained via AppleScript (same "application process whose frontmost is true"
-    /// pattern used by window_info::get_active_window).
-    ///
-    /// Falls back to `AXFocusedApplication` if the AppleScript path fails (e.g. when
-    /// Automation → System Events permission has not been granted yet).
+    /// Uses `NSWorkspace.frontmostApplication` (native AppKit — no Automation permission)
+    /// to get the frontmost app's PID, then `AXUIElementCreateApplication(pid)`.
+    /// Falls back to `AXFocusedApplication` (keyboard focus) if NSWorkspace returns nothing.
     ///
     /// Returns the element (caller must CFRelease) and the app name, or an error string.
     fn get_frontmost_app_element() -> Result<(CFTypeRef, Option<String>), String> {
-        // Multi-line AppleScript matching the pattern in window_info::get_active_window.
-        // One-liner form ("tell … to …") can return empty on some macOS versions / permission
-        // states; block form is more robust.
-        let script = r#"tell application "System Events"
-    set frontApp to first application process whose frontmost is true
-    return (unix id of frontApp) as text
-end tell"#;
+        use objc2_app_kit::NSWorkspace;
 
-        let output = std::process::Command::new("osascript")
-            .args(["-e", script])
-            .output()
-            .map_err(|e| format!("osascript failed to launch: {}", e))?;
+        // Primary: NSWorkspace.frontmostApplication — the visually-front app.
+        let workspace = NSWorkspace::sharedWorkspace();
+        let front: Option<(i32, Option<String>)> = workspace.frontmostApplication().map(|app| {
+            let pid = app.processIdentifier() as i32;
+            let name = app.localizedName().map(|s| s.to_string());
+            (pid, name)
+        });
 
-        let pid_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
-
-        // If AppleScript succeeded and returned a PID, use it.
-        if output.status.success() && !pid_str.is_empty() {
-            if let Ok(pid) = pid_str.parse::<i32>() {
-                unsafe {
-                    let app = AXUIElementCreateApplication(pid);
-                    if !app.is_null() {
-                        let app_name = attr_string(app, "AXTitle");
-                        return Ok((app, app_name));
-                    }
+        if let Some((pid, name)) = front {
+            unsafe {
+                let app = AXUIElementCreateApplication(pid);
+                if !app.is_null() {
+                    let ax_title = attr_string(app, "AXTitle");
+                    return Ok((app, ax_title.or(name)));
                 }
             }
         }
 
-        // Fallback: AXFocusedApplication (tracks keyboard focus — less ideal but works
-        // when System Events Automation permission is absent or when the AppleScript
-        // returns something unexpected).
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        // Fallback: AXFocusedApplication (keyboard focus).
         unsafe {
             let sys = AXUIElementCreateSystemWide();
             if sys.is_null() {
-                return Err(format!(
-                    "osascript returned {:?} (stderr: {:?}); AXUIElementCreateSystemWide also null",
-                    pid_str, stderr
-                ));
+                return Err("AXUIElementCreateSystemWide returned null".to_string());
             }
             match copy_attr(sys, "AXFocusedApplication") {
                 Some(app) => {
@@ -627,11 +649,11 @@ end tell"#;
                 }
                 None => {
                     CFRelease(sys);
-                    Err(format!(
-                        "osascript returned {:?} (stderr: {:?}); AXFocusedApplication also null — \
-                         no app appears to be in focus. Click the target app window and try again.",
-                        pid_str, stderr
-                    ))
+                    Err(
+                        "no frontmost app found (NSWorkspace.frontmostApplication and \
+                         AXFocusedApplication both empty)."
+                            .to_string(),
+                    )
                 }
             }
         }
