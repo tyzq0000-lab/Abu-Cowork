@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Copy, Pencil, Trash2, RefreshCw, Check, Brain, Wand2, AtSign, FileText, FolderOpen, ImageOff, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, Copy, Pencil, Trash2, RefreshCw, Check, Brain, Wand2, AtSign, FileText, FolderOpen, ImageOff, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import type { Message, MessageContent } from '@/types';
 import MarkdownRenderer from './MarkdownRenderer';
@@ -15,6 +15,10 @@ import abuAvatar from '@/assets/abu-avatar.png';
 
 // Regex to match [Attachment: `path`] patterns in user messages
 const ATTACHMENT_PATTERN = /\[Attachment:\s*`([^`]+)`\]/g;
+
+// Threshold for auto-collapsing long user messages
+const LONG_TEXT_CHARS = 500;
+const LONG_TEXT_LINES = 8;
 
 /** Extract attachment paths and clean text from user message content */
 function extractAttachments(text: string): { cleanText: string; attachmentPaths: string[] } {
@@ -391,6 +395,7 @@ export default function MessageBubble({
   const { t } = useI18n();
   const isUser = message.role === 'user';
   const [isEditing, setIsEditing] = useState(false);
+  const [isTextExpanded, setIsTextExpanded] = useState(false);
   const activeConv = useActiveConversation();
   const isConvRunning = activeConv?.status === 'running';
 
@@ -553,11 +558,38 @@ export default function MessageBubble({
                       <span className="text-[11px] font-medium">/{message.skill.name}</span>
                     </div>
                   )}
-                  {userCleanText && (
-                    <div className="text-[14.5px] leading-relaxed break-words select-text">
-                      <MarkdownRenderer content={userCleanText} variant="user" />
-                    </div>
-                  )}
+                  {userCleanText && (() => {
+                    const isLongText =
+                      userCleanText.length > LONG_TEXT_CHARS ||
+                      (userCleanText.match(/\n/g) ?? []).length >= LONG_TEXT_LINES;
+                    return (
+                      <div className="text-[14.5px] leading-relaxed break-words select-text">
+                        {isLongText ? (
+                          <>
+                            <div className={cn('relative', !isTextExpanded && 'max-h-32 overflow-hidden')}>
+                              <MarkdownRenderer content={userCleanText} variant="user" />
+                              {!isTextExpanded && (
+                                <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[var(--abu-bg-active)] to-transparent pointer-events-none" />
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIsTextExpanded(v => !v)}
+                              className="mt-1.5 flex items-center gap-1 text-[var(--abu-clay)] hover:opacity-75 text-[12px] font-medium transition-opacity"
+                            >
+                              {isTextExpanded ? (
+                                <><ChevronUp className="h-3 w-3" />{t.chat.userMessageCollapse}</>
+                              ) : (
+                                <><ChevronDown className="h-3 w-3" />{t.chat.userMessageShowMore}</>
+                              )}
+                            </button>
+                          </>
+                        ) : (
+                          <MarkdownRenderer content={userCleanText} variant="user" />
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
               {/* Actions + timestamp row below bubble */}
