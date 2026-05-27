@@ -567,6 +567,7 @@ const enUS: TranslationDict = {
     deleteProviderConfirm: 'Are you sure you want to delete this service?',
     noProviders: 'No AI services yet',
     noProvidersHint: 'Add an AI service to get started',
+    noProvidersAction: 'Model Settings',
     auxiliary: 'Auxiliary Capabilities',
     auxiliarySearch: 'Web Search',
     auxiliaryImageGen: 'Image Generation',

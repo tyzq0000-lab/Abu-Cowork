@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Globe, Wrench, Brain, Eye, Image, Search, Star, Clock, Settings, BookOpen } from 'lucide-react';
+import { Check, Globe, Wrench, Brain, Eye, Image, Search, Star, Clock, BookOpen } from 'lucide-react';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
@@ -118,7 +118,7 @@ export function ModelSelector({ open, onClose, anchorRef }: ModelSelectorProps) 
   const favoriteModels = useSettingsStore((s) => s.favoriteModels);
   const selectModel = useSettingsStore((s) => s.selectModel);
   const toggleFavorite = useSettingsStore((s) => s.toggleFavorite);
-  const toggleSettings = useSettingsStore((s) => s.toggleSettings);
+  const openSystemSettings = useSettingsStore((s) => s.openSystemSettings);
 
   const [query, setQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
@@ -264,7 +264,7 @@ export function ModelSelector({ open, onClose, anchorRef }: ModelSelectorProps) 
     <div
       ref={panelRef}
       className={cn(
-        'absolute bottom-full left-0 mb-1.5 z-50',
+        'absolute bottom-full right-0 mb-1.5 z-50',
         'w-72 max-h-96 rounded-lg shadow-lg',
         'bg-[var(--abu-bg-base)] border border-[var(--abu-border)]',
         'flex flex-col overflow-hidden'
@@ -290,14 +290,13 @@ export function ModelSelector({ open, onClose, anchorRef }: ModelSelectorProps) 
           <p className="text-sm text-[var(--abu-text-tertiary)]">{t.settings.noProviders}</p>
           <p className="text-xs text-[var(--abu-text-muted)] mt-1">{t.settings.noProvidersHint}</p>
           <button
-            className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--abu-clay)] hover:underline"
+            className="mt-2 text-xs text-[var(--abu-clay)] hover:underline"
             onClick={() => {
               onClose();
-              toggleSettings();
+              openSystemSettings('ai-services');
             }}
           >
-            <Settings className="h-3 w-3" />
-            {t.common.appName} {t.settings?.title ?? 'Settings'}
+            {t.settings.noProvidersAction}
           </button>
         </div>
       ) : (

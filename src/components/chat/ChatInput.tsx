@@ -141,7 +141,10 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
   // Chat-only derived state
   const isRunning = activeConv?.status === 'running';
   const isStreaming = !isWelcome && isRunning;
-  const hasActiveProvider = useSettingsStore((s) => !!getActiveProvider(s));
+  const hasActiveProvider = useSettingsStore((s) => {
+    const p = getActiveProvider(s);
+    return !!p && p.enabled;
+  });
   const availableModels = useSettingsStore((s) => getActiveProvider(s)?.models ?? []);
   const activeModelInfo = availableModels.find((m) => m.id === currentModel);
   const modelDisplay = !hasActiveProvider
@@ -765,7 +768,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
                   )}
                 >
                   <span className="truncate">{modelDisplay}</span>
-                  {modelCaps.length > 0 && (
+                  {hasActiveProvider && modelCaps.length > 0 && (
                     <span className="flex items-center gap-0.5 ml-0.5 shrink-0">
                       {modelCaps.map((cap) => <CapabilityBadge key={cap} cap={cap} size="xs" />)}
                     </span>
@@ -832,7 +835,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
                     )}
                   >
                     <span className="truncate">{modelDisplay}</span>
-                    {modelCaps.length > 0 && (
+                    {hasActiveProvider && modelCaps.length > 0 && (
                       <span className="flex items-center gap-0.5 ml-0.5 shrink-0">
                         {modelCaps.map((cap) => <CapabilityBadge key={cap} cap={cap} size="xs" />)}
                       </span>

@@ -559,6 +559,7 @@ export interface TranslationDict {
     deleteProviderConfirm: string;
     noProviders: string;
     noProvidersHint: string;
+    noProvidersAction: string;
     auxiliary: string;
     auxiliarySearch: string;
     auxiliaryImageGen: string;

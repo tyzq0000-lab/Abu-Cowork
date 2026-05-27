@@ -567,6 +567,7 @@ const zhCN: TranslationDict = {
     deleteProviderConfirm: '确定要删除这个服务吗？',
     noProviders: '还没有 AI 服务',
     noProvidersHint: '添加一个 AI 服务开始使用',
+    noProvidersAction: '模型设置',
     auxiliary: '辅助能力',
     auxiliarySearch: '联网搜索',
     auxiliaryImageGen: '图片生成',
