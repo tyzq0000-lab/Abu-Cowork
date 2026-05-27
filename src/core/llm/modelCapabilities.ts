@@ -155,6 +155,9 @@ export function resolveCapabilities(modelId: string): ModelCapabilities {
   if (/doubao|seed/i.test(id)) return { ...GPT_MODERN_DEFAULT, maxOutputTokens: 8192 };
   if (/minimax.*m2\.7/i.test(id)) return { vision: true, thinking: false, toolResultImages: 'workaround', documentBlock: false, maxOutputTokens: 8192, contextWindow: 204800 };
   if (/minimax/i.test(id)) return { vision: false, thinking: false, toolResultImages: 'workaround', documentBlock: false, maxOutputTokens: 8192, contextWindow: 204800 };
+  // Xiaomi MiMo: MiMo-VL variants support vision; the base text models (e.g. mimo-v2.5-pro) do not.
+  if (/mimo.*vl/i.test(id)) return { ...FALLBACK_DEFAULT, vision: true, toolResultImages: 'workaround' };
+  if (/mimo/i.test(id)) return { ...FALLBACK_DEFAULT, vision: false, toolResultImages: 'none' };
   if (/moonshot|kimi/i.test(id)) return { ...FALLBACK_DEFAULT, vision: false };
   if (/gemma3/i.test(id)) return { vision: true, thinking: false, toolResultImages: 'none', documentBlock: false, maxOutputTokens: 8192, contextWindow: 128000 };
   if (/gemma/i.test(id)) return { ...FALLBACK_DEFAULT, vision: false, toolResultImages: 'none' };

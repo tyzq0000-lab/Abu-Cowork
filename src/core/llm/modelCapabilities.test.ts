@@ -36,6 +36,23 @@ describe('modelCapabilities', () => {
     });
   });
 
+  describe('resolveCapabilities — vision classification', () => {
+    // Regression: Xiaomi mimo-v2.5-pro is text-only. It was hitting FALLBACK_DEFAULT
+    // (vision:true), so computer-use screenshots were sent and rejected by the provider
+    // ("No endpoints found that support image input"), crashing the agent turn.
+    it('mimo base models are non-vision; MiMo-VL variants are vision', () => {
+      expect(resolveCapabilities('mimo-v2.5-pro').vision).toBe(false);
+      expect(resolveCapabilities('mimo-7b').vision).toBe(false);
+      expect(resolveCapabilities('MiMo-VL-7B').vision).toBe(true);
+    });
+
+    it('known non-vision Chinese/local models resolve to vision:false', () => {
+      expect(resolveCapabilities('glm-5').vision).toBe(false);
+      expect(resolveCapabilities('qwen3-max').vision).toBe(false);
+      expect(resolveCapabilities('deepseek-chat').vision).toBe(false);
+    });
+  });
+
   describe('computeReasoningParams — content floor', () => {
     it('qwen: reserves the content floor below max_tokens via thinking_budget', () => {
       const caps = resolveCapabilities('qwen3.7-max');

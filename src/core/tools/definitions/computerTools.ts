@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ToolDefinition, ToolResult, ToolResultContent } from '../../../types';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { useWorkspaceStore } from '../../../stores/workspaceStore';
+import { resolveCapabilities } from '../../llm/modelCapabilities';
 import { joinPath } from '../../../utils/pathUtils';
 import { isMacOS } from '../../../utils/platform';
 import { TOOL_NAMES } from '../toolNames';
@@ -325,6 +326,15 @@ export const computerTool: ToolDefinition = {
 
     const action = input.action as string;
 
+    // Whether the active model can understand images. Non-vision models (many
+    // Chinese / local models, e.g. GLM, Qwen, MiMo) reject image inputs — sending
+    // a screenshot makes the provider fail the whole request ("No endpoints found
+    // that support image input"), crashing the agent turn. For those models the
+    // pixel/screenshot path is useless; we steer to the AX path instead.
+    const modelSupportsVision = resolveCapabilities(
+      useSettingsStore.getState().activeModel.modelId,
+    ).vision;
+
     // Check session limits (max steps / timeout)
     const limitError = checkCUSessionLimits();
     if (limitError) return limitError;
@@ -404,6 +414,9 @@ export const computerTool: ToolDefinition = {
       let actionResult: string;
       switch (action) {
         case 'screenshot':
+          if (!modelSupportsVision) {
+            return '当前模型不支持图片识别，截图对它没有意义。请改用无障碍树路径：get_ui（可加 app_name 指定应用）读取界面元素，再用 ax_click(element_id) / ax_type(element_id, text) 操作。\n\nThe current model has no vision capability — screenshots are useless to it. Use the accessibility path instead: get_ui (optionally with app_name) to read elements, then ax_click / ax_type to operate.';
+          }
           return await executeScreenshot(input);
 
         case 'click': {
@@ -569,7 +582,9 @@ export const computerTool: ToolDefinition = {
       // Auto-screenshot after UI-affecting actions so the model can see the result.
       // Window stays HIDDEN during the wait + capture — don't show it prematurely!
       // In batch mode, intermediate tools skip auto-screenshot (only last computer tool takes one).
-      if (autoScreenshotActions.includes(action) && !skipAutoScreenshot) {
+      // Skip entirely for non-vision models — they can't read the image and the provider
+      // would reject the request, crashing the turn.
+      if (modelSupportsVision && autoScreenshotActions.includes(action) && !skipAutoScreenshot) {
         const screenshotContent = await takeAutoScreenshot();
         return [
           { type: 'text', text: actionResult },
