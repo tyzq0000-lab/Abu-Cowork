@@ -4,16 +4,16 @@ import type { PermissionMode } from '@/core/permissions/permissionMode';
 import { getAuthorizedWritablePaths, revokeWorkspace } from '@/core/tools/pathSafety';
 import { useI18n } from '@/i18n';
 import { isMacOS } from '@/utils/platform';
-import { Shield, ShieldAlert, Globe, Plus, X, Info, Lock, Unlock, ShieldCheck, FolderOpen, Trash2 } from 'lucide-react';
+import { Shield, ShieldAlert, Globe, Plus, X, Info, Rocket, Bot, ShieldCheck, FolderOpen, Trash2 } from 'lucide-react';
 import { Toggle } from '@/components/ui/toggle';
 import { cn } from '@/lib/utils';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { syncNetworkWhitelist } from '@/core/sandbox/config';
 
 const PERMISSION_MODES: { value: PermissionMode; icon: typeof Shield; color: string }[] = [
-  { value: 'default', icon: ShieldCheck, color: 'text-blue-500' },
-  { value: 'auto', icon: Unlock, color: 'text-emerald-500' },
-  { value: 'strict', icon: Lock, color: 'text-amber-500' },
+  { value: 'standard', icon: ShieldCheck, color: 'text-blue-500' },
+  { value: 'smart', icon: Bot, color: 'text-violet-500' },
+  { value: 'autonomous', icon: Rocket, color: 'text-amber-500' },
 ];
 
 export default function SandboxSection() {
@@ -400,9 +400,9 @@ function PermissionModeSelector() {
   const setPermissionMode = useSettingsStore(s => s.setPermissionMode);
 
   const labels: Record<PermissionMode, { name: string; desc: string }> = {
-    default: { name: t.settings.permissionModeDefault, desc: t.settings.permissionModeDefaultDesc },
-    auto: { name: t.settings.permissionModeAuto, desc: t.settings.permissionModeAutoDesc },
-    strict: { name: t.settings.permissionModeStrict, desc: t.settings.permissionModeStrictDesc },
+    standard: { name: t.settings.permissionModeStandard, desc: t.settings.permissionModeStandardDesc },
+    smart: { name: t.settings.permissionModeSmart, desc: t.settings.permissionModeSmartDesc },
+    autonomous: { name: t.settings.permissionModeAutonomous, desc: t.settings.permissionModeAutonomousDesc },
   };
 
   return (

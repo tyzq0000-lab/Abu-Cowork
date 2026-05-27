@@ -194,6 +194,9 @@ export interface TranslationDict {
     sources: string;
     showAllSources: string;
     collapseSources: string;
+    userMessageShowMore: string;
+    userMessageCollapse: string;
+    noModelConfigured: string;
     scrollToBottom: string;
     codeBlockExpand: string;
     codeBlockCollapse: string;
@@ -484,12 +487,12 @@ export interface TranslationDict {
     contentGuardDesc: string;
     contentGuardDisableTitle: string;
     contentGuardDisableMessage: string;
-    permissionModeDefault: string;
-    permissionModeDefaultDesc: string;
-    permissionModeAuto: string;
-    permissionModeAutoDesc: string;
-    permissionModeStrict: string;
-    permissionModeStrictDesc: string;
+    permissionModeStandard: string;
+    permissionModeStandardDesc: string;
+    permissionModeSmart: string;
+    permissionModeSmartDesc: string;
+    permissionModeAutonomous: string;
+    permissionModeAutonomousDesc: string;
     // ModelConfigSection
     currentConfig: string;
     configured: string;
@@ -1570,6 +1573,7 @@ export interface TranslationDict {
     confirm: string;
     blocked: string;
     userCancelled: string;
+    aiDenied: string;
   };
 
   // Tool error messages (used in core/tools/registry.ts)

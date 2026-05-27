@@ -7,7 +7,18 @@ import { getI18n } from '../../i18n';
 import { truncateToolResult } from '../context/truncation';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { getPermissionStrategy } from '../permissions/permissionMode';
+import { analyzeCommandBoundary, type CmdBoundary } from '../permissions/commandBoundary';
+import { reviewAction } from '../safety/reviewer';
+import { getLoopContext } from '../agent/permissionBridge';
+import { homeDir } from '@tauri-apps/api/path';
 import { TOOL_NAMES } from './toolNames';
+
+// Cache home dir for command-boundary resolution (only resolved on first safe write command).
+let cachedHomeDir: string | null = null;
+async function getCachedHomeDir(): Promise<string> {
+  if (cachedHomeDir === null) cachedHomeDir = await homeDir();
+  return cachedHomeDir;
+}
 
 /**
  * Extract text-only representation from a ToolResult.
@@ -234,16 +245,45 @@ export async function executeAnyTool(
         return `Error: ${t.commandConfirm.blocked}: ${analysis.reason}`;
       }
 
-      // Check if confirmation is needed based on permission mode
-      const needsConfirm = strategy.shouldConfirmCommand(
+      // Best-effort boundary check: only matters for safe, non-read-only commands
+      // (risky commands already gate on content; autonomous never gates). Detects
+      // commands that write outside the working dirs (e.g. `cp secret ~/Desktop/x`).
+      let boundary: CmdBoundary = 'unknown';
+      if (!analysis.readOnly && analysis.level === 'safe' && permissionMode !== 'autonomous') {
+        const cwd = (input.cwd as string | undefined) || toolContext?.workspacePath || undefined;
+        boundary = analyzeCommandBoundary(command, cwd, await getCachedHomeDir());
+      }
+
+      // Decide how this command is gated. 'review' (smart tier) routes to the AI reviewer.
+      const decision = strategy.decideCommand(
         { command, level: analysis.level, reason: analysis.reason },
         analysis.readOnly,
+        boundary,
       );
-      if (needsConfirm && onRequireConfirmation) {
+      let outcome: 'allow' | 'confirm' | 'deny' = decision === 'review' ? 'confirm' : decision;
+      let reviewReason = '';
+      if (decision === 'review') {
+        const verdict = await reviewAction(
+          {
+            kind: 'command',
+            detail: command,
+            staticReason: analysis.reason || (boundary === 'outside' ? '写入工作区外' : ''),
+            conversationId: toolContext?.conversationId,
+          },
+          toolContext?.loopId ? getLoopContext(toolContext.loopId)?.signal : undefined,
+        );
+        if (verdict.decision === 'deny') {
+          return `${t.commandConfirm.aiDenied}: ${verdict.reason}`;
+        }
+        outcome = verdict.decision === 'allow' ? 'allow' : 'confirm';
+        // Surface the reviewer's reasoning so an escalated confirm explains itself.
+        reviewReason = verdict.reason;
+      }
+      if (outcome === 'confirm' && onRequireConfirmation) {
         const confirmed = await onRequireConfirmation({
           command,
           level: analysis.level,
-          reason: analysis.reason,
+          reason: reviewReason || analysis.reason,
         });
         if (!confirmed) {
           return t.commandConfirm.userCancelled;
@@ -266,17 +306,31 @@ export async function executeAnyTool(
 
       if (!pathCheck.allowed) {
         if (pathCheck.needsPermission && pathCheck.permissionPath) {
-          // Check if confirmation is needed based on permission mode
-          const needsFileConfirm = strategy.shouldConfirmFileAccess(
-            pathCheck.capability || pathInfo.capability,
-            true,
-          );
-          if (needsFileConfirm) {
+          // Decide gating based on permission mode.
+          const cap = pathCheck.capability || pathInfo.capability;
+          let fileDecision = strategy.decideFileAccess(cap, true);
+          // smart tier → AI reviewer resolves to allow / confirm / deny.
+          if (fileDecision === 'review') {
+            const verdict = await reviewAction(
+              {
+                kind: cap === 'read' ? 'file-read' : 'file-write',
+                detail: pathCheck.permissionPath,
+                staticReason: '访问工作区外路径',
+                conversationId: toolContext?.conversationId,
+              },
+              toolContext?.loopId ? getLoopContext(toolContext.loopId)?.signal : undefined,
+            );
+            if (verdict.decision === 'deny') {
+              return `${t.commandConfirm.aiDenied}: ${verdict.reason}`;
+            }
+            fileDecision = verdict.decision === 'allow' ? 'allow' : 'confirm';
+          }
+          if (fileDecision === 'confirm') {
             // Needs user permission — ask via callback
             if (onRequireFilePermission) {
               const granted = await onRequireFilePermission({
                 path: pathCheck.permissionPath,
-                capability: pathCheck.capability || pathInfo.capability,
+                capability: cap,
                 toolName: name,
               });
               if (!granted) {
@@ -292,7 +346,7 @@ export async function executeAnyTool(
               return `Error: ${t.toolErrors.needsAuthorization} ${pathCheck.permissionPath}`;
             }
           } else {
-            // Auto mode: auto-authorize the workspace for this path
+            // allow → auto-authorize the workspace for this path
             authorizeWorkspace(pathCheck.permissionPath);
           }
         } else {

@@ -679,6 +679,85 @@ describe('workflowExtractor', () => {
         const files = extractFileOutputs(toolCalls);
         expect(files).toHaveLength(0);
       });
+
+      // Regression: addFile's leading-markdown strip used to eat the `~` of a
+      // home-relative destination, turning ~/Desktop/leak.txt into
+      // /Desktop/leak.txt — a path that doesn't exist, so the file card resolved
+      // to "文件已不可访问" even though the copy succeeded. The `~` must survive.
+      describe('home-relative (~) destination preserved', () => {
+        it('cp to ~/Desktop/<file>: keeps leading ~', () => {
+          const toolCalls: ToolCall[] = [{
+            id: 'tc1', name: 'run_command',
+            input: { command: 'cp hello.txt ~/Desktop/leak.txt' },
+            result: 'stdout:\n\nexit code: 0',
+          }];
+          const files = extractFileOutputs(toolCalls);
+          expect(files).toHaveLength(1);
+          expect(files[0].path).toBe('~/Desktop/leak.txt');
+        });
+
+        it('cp to ~/<dir>/ (trailing slash): joins basename, keeps ~', () => {
+          const toolCalls: ToolCall[] = [{
+            id: 'tc1', name: 'run_command',
+            input: { command: 'cp hello.txt ~/Documents/abu-out222/' },
+            result: 'stdout:\n\nexit code: 0',
+          }];
+          const files = extractFileOutputs(toolCalls);
+          expect(files).toHaveLength(1);
+          expect(files[0].path).toBe('~/Documents/abu-out222/hello.txt');
+        });
+      });
+
+      // Change: cp/mv destinations outside the workspace boundary are dropped
+      // from chat cards (a copy elsewhere is a duplicate, not a fresh artifact).
+      // Only active when dropCopiesOutside is passed (chat-card renderer only).
+      describe('dropCopiesOutside boundary filter', () => {
+        const home = '/Users/me';
+        const dirs = ['/Users/me/workspace', '/tmp'];
+
+        it('outside workspace: card suppressed', () => {
+          const toolCalls: ToolCall[] = [{
+            id: 'tc1', name: 'run_command',
+            input: { command: 'cp report.docx ~/Desktop/report.docx' },
+            result: 'stdout:\n\nexit code: 0',
+          }];
+          const files = extractFileOutputs(toolCalls, { mode: 'deliverables', dropCopiesOutside: { dirs, home } });
+          expect(files).toHaveLength(0);
+        });
+
+        it('inside workspace: card kept', () => {
+          const toolCalls: ToolCall[] = [{
+            id: 'tc1', name: 'run_command',
+            input: { command: 'cp report.docx /Users/me/workspace/out/report.docx' },
+            result: 'stdout:\n\nexit code: 0',
+          }];
+          const files = extractFileOutputs(toolCalls, { mode: 'deliverables', dropCopiesOutside: { dirs, home } });
+          expect(files).toHaveLength(1);
+          expect(files[0].path).toBe('/Users/me/workspace/out/report.docx');
+        });
+
+        it('relative destination treated as inside (conservative): card kept', () => {
+          const toolCalls: ToolCall[] = [{
+            id: 'tc1', name: 'run_command',
+            input: { command: 'cp report.docx out/report.docx' },
+            result: 'stdout:\n\nexit code: 0',
+          }];
+          const files = extractFileOutputs(toolCalls, { mode: 'deliverables', dropCopiesOutside: { dirs, home } });
+          expect(files).toHaveLength(1);
+          expect(files[0].path).toBe('out/report.docx');
+        });
+
+        it('without the option: outside copies still produce a card (audit/snapshot path)', () => {
+          const toolCalls: ToolCall[] = [{
+            id: 'tc1', name: 'run_command',
+            input: { command: 'cp report.docx ~/Desktop/report.docx' },
+            result: 'stdout:\n\nexit code: 0',
+          }];
+          const files = extractFileOutputs(toolCalls, { mode: 'deliverables' });
+          expect(files).toHaveLength(1);
+          expect(files[0].path).toBe('~/Desktop/report.docx');
+        });
+      });
     });
 
     // ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Plus, ArrowUp, ArrowRight, Square, X, ChevronDown, FileText } from 'lucide-react';
+import { Plus, ArrowUp, Square, X, ChevronDown, FileText } from 'lucide-react';
 import { ModelSelector, CapabilityBadge } from '@/components/chat/ModelSelector';
-import AgentSelector from '@/components/chat/AgentSelector';
+// AgentSelector hidden from UI; import kept for easy restore
+// import AgentSelector from '@/components/chat/AgentSelector';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
 import { useFileDragDrop } from '@/hooks/useFileDragDrop';
@@ -140,10 +141,12 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
   // Chat-only derived state
   const isRunning = activeConv?.status === 'running';
   const isStreaming = !isWelcome && isRunning;
+  const hasActiveProvider = useSettingsStore((s) => !!getActiveProvider(s));
   const availableModels = useSettingsStore((s) => getActiveProvider(s)?.models ?? []);
   const activeModelInfo = availableModels.find((m) => m.id === currentModel);
-  const modelDisplay = activeModelInfo?.label
-    ?? (currentModel ? currentModel.split('/').pop()?.split('-').slice(0, 2).join(' ') : 'Claude');
+  const modelDisplay = !hasActiveProvider
+    ? t.chat.noModelConfigured
+    : (activeModelInfo?.label ?? (currentModel ? currentModel.split('/').pop()?.split('-').slice(0, 2).join(' ') : 'Claude'));
   const modelCaps = activeModelInfo?.capabilities ?? [];
   const [showModelPicker, setShowModelPicker] = useState(false);
   const modelPickerRef = useRef<HTMLDivElement>(null);
@@ -494,7 +497,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
         setSelectedIndex((prev) => (prev + 1) % suggestions.length);
         return;
       }
-      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !composingRef.current)) {
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !e.altKey && !composingRef.current)) {
         e.preventDefault();
         applySuggestion(suggestions[selectedIndex]);
         return;
@@ -518,7 +521,25 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
         return;
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey && !composingRef.current) {
+    // Option/Alt + Enter → insert newline at cursor position (Mac: Option+Enter, Win: Alt+Enter)
+    if (e.key === 'Enter' && e.altKey && !composingRef.current) {
+      e.preventDefault();
+      const textarea = textareaRef.current;
+      if (textarea) {
+        const start = textarea.selectionStart ?? text.length;
+        const end = textarea.selectionEnd ?? text.length;
+        const newVal = text.substring(0, start) + '\n' + text.substring(end);
+        setText(newVal);
+        requestAnimationFrame(() => {
+          if (textareaRef.current) {
+            textareaRef.current.selectionStart = start + 1;
+            textareaRef.current.selectionEnd = start + 1;
+          }
+        });
+      }
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !composingRef.current) {
       e.preventDefault();
       handleSend();
     }
@@ -705,35 +726,15 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
 
           {/* Bottom Toolbar */}
           {isWelcome ? (
-            /* Welcome variant: Model picker + FolderSelector + [+] + --- + Start button */
+            /* Welcome variant: FolderSelector + [+] + --- + [Model ∨] + Start button */
             <div className="flex items-center gap-2 px-5 pb-3.5">
-              {/* Model picker (same as chat variant) */}
-              <div className="relative" ref={modelPickerRef}>
-                <button
-                  onClick={() => setShowModelPicker(!showModelPicker)}
-                  title={modelDisplay}
-                  className="btn-ghost flex items-center gap-1 px-2 py-1 text-[12px] text-[var(--abu-text-tertiary)] font-medium hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-md transition-colors max-w-[180px]"
-                >
-                  <span className="truncate">{modelDisplay}</span>
-                  {modelCaps.length > 0 && (
-                    <span className="flex items-center gap-0.5 ml-0.5 shrink-0">
-                      {modelCaps.map((cap) => <CapabilityBadge key={cap} cap={cap} size="xs" />)}
-                    </span>
-                  )}
-                  <ChevronDown className={cn('h-3 w-3 transition-transform shrink-0', showModelPicker && 'rotate-180')} />
-                </button>
-                <ModelSelector
-                  open={showModelPicker}
-                  onClose={() => setShowModelPicker(false)}
-                  anchorRef={modelPickerRef as React.RefObject<HTMLElement>}
-                />
-              </div>
-              <AgentSelector
+              {/* AgentSelector entry hidden from UI; multi-agent logic remains intact */}
+              {/* <AgentSelector
                 agents={agents}
                 selectedName={selectedAgent?.name ?? null}
                 onSelect={setSelectedAgent}
                 disabledAgentSet={disabledAgentSet}
-              />
+              /> */}
               <FolderSelector
                 currentPath={localWorkspace}
                 recentPaths={recentPaths}
@@ -751,31 +752,84 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
               </Button>
               <div className="flex-1" />
 
-              <button
+              {/* Model picker — right-aligned, before Start button */}
+              <div className="relative" ref={modelPickerRef}>
+                <button
+                  onClick={() => setShowModelPicker(!showModelPicker)}
+                  title={modelDisplay}
+                  className={cn(
+                    'btn-ghost flex items-center gap-1 px-2 py-1 text-[12px] font-medium rounded-md transition-colors max-w-[180px]',
+                    hasActiveProvider
+                      ? 'text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
+                      : 'text-[var(--abu-clay)] hover:text-[var(--abu-clay-hover)] hover:bg-[var(--abu-clay-bg)]'
+                  )}
+                >
+                  <span className="truncate">{modelDisplay}</span>
+                  {modelCaps.length > 0 && (
+                    <span className="flex items-center gap-0.5 ml-0.5 shrink-0">
+                      {modelCaps.map((cap) => <CapabilityBadge key={cap} cap={cap} size="xs" />)}
+                    </span>
+                  )}
+                  <ChevronDown className={cn('h-3 w-3 transition-transform shrink-0', showModelPicker && 'rotate-180')} />
+                </button>
+                <ModelSelector
+                  open={showModelPicker}
+                  onClose={() => setShowModelPicker(false)}
+                  anchorRef={modelPickerRef as React.RefObject<HTMLElement>}
+                />
+              </div>
+
+              <Button
+                size="icon"
                 onClick={handleSend}
                 disabled={!hasContent}
                 className={cn(
-                  'btn-claude-primary flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-medium transition-colors',
+                  'h-7 w-7 rounded-lg transition-colors',
                   hasContent
                     ? 'bg-[var(--abu-clay)] hover:bg-[var(--abu-clay-hover)] text-white shadow-sm'
-                    : 'bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] cursor-not-allowed'
+                    : 'bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] cursor-not-allowed hover:bg-[var(--abu-bg-hover)]'
                 )}
               >
-                <span>{t.chat.start}</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </button>
+                <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+              </Button>
             </div>
           ) : (
-            /* Chat variant: Model label + [+] + --- + Stop/Send */
+            /* Chat variant: [+] --- [Model ∨] [Stop/Send] */
             <div className="flex items-center justify-between px-4 pb-2.5 pt-0.5">
               {/* Left Actions */}
               <div className="flex items-center gap-0.5">
+                {/* AgentSelector entry hidden from UI; multi-agent logic remains intact */}
+                {/* <AgentSelector
+                  agents={agents}
+                  selectedName={selectedAgent?.name ?? null}
+                  onSelect={setSelectedAgent}
+                  disabledAgentSet={disabledAgentSet}
+                /> */}
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleAttach}
+                  aria-label={t.chat.addAttachment}
+                  className="btn-ghost h-7 w-7 text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-lg"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Right Actions: Model picker + Send / Stop */}
+              <div className="flex items-center gap-1">
                 {/* Model picker */}
                 <div className="relative" ref={modelPickerRef}>
                   <button
                     onClick={() => setShowModelPicker(!showModelPicker)}
                     title={modelDisplay}
-                    className="btn-ghost flex items-center gap-1 px-2 py-1 text-[12px] text-[var(--abu-text-tertiary)] font-medium hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-md transition-colors max-w-[180px]"
+                    className={cn(
+                      'btn-ghost flex items-center gap-1 px-2 py-1 text-[12px] font-medium rounded-md transition-colors max-w-[180px]',
+                      hasActiveProvider
+                        ? 'text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
+                        : 'text-[var(--abu-clay)] hover:text-[var(--abu-clay-hover)] hover:bg-[var(--abu-clay-bg)]'
+                    )}
                   >
                     <span className="truncate">{modelDisplay}</span>
                     {modelCaps.length > 0 && (
@@ -792,50 +846,32 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
                   />
                 </div>
 
-                <AgentSelector
-                  agents={agents}
-                  selectedName={selectedAgent?.name ?? null}
-                  onSelect={setSelectedAgent}
-                  disabledAgentSet={disabledAgentSet}
-                />
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleAttach}
-                  aria-label={t.chat.addAttachment}
-                  className="btn-ghost h-7 w-7 text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-lg"
-                >
-                  <Plus className="h-4 w-4" />
-                </Button>
+                {isStreaming ? (
+                  <Button
+                    size="icon"
+                    onClick={handleStop}
+                    aria-label={t.chat.stop}
+                    className="h-7 w-7 rounded-lg border border-[var(--abu-border)] bg-transparent text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] hover:border-[var(--abu-border-hover)] transition-colors"
+                    title={t.chat.stop}
+                  >
+                    <Square className="h-3 w-3" fill="currentColor" />
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    onClick={handleSend}
+                    disabled={!hasContent || disabled}
+                    className={cn(
+                      'h-7 w-7 rounded-lg transition-colors',
+                      hasContent && !disabled
+                        ? 'bg-[var(--abu-clay)] hover:bg-[var(--abu-clay-hover)] text-white shadow-sm'
+                        : 'bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] cursor-not-allowed hover:bg-[var(--abu-bg-hover)]'
+                    )}
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  </Button>
+                )}
               </div>
-
-              {/* Send / Stop Button */}
-              {isStreaming ? (
-                <Button
-                  size="icon"
-                  onClick={handleStop}
-                  aria-label={t.chat.stop}
-                  className="h-7 w-7 rounded-lg border border-[var(--abu-border)] bg-transparent text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] hover:border-[var(--abu-border-hover)] transition-colors"
-                  title={t.chat.stop}
-                >
-                  <Square className="h-3 w-3" fill="currentColor" />
-                </Button>
-              ) : (
-                <Button
-                  size="icon"
-                  onClick={handleSend}
-                  disabled={!hasContent || disabled}
-                  className={cn(
-                    'h-7 w-7 rounded-lg transition-colors',
-                    hasContent && !disabled
-                      ? 'bg-[var(--abu-clay)] hover:bg-[var(--abu-clay-hover)] text-white shadow-sm'
-                      : 'bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] cursor-not-allowed hover:bg-[var(--abu-bg-hover)]'
-                  )}
-                >
-                  <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.5} />
-                </Button>
-              )}
             </div>
           )}
         </div>
