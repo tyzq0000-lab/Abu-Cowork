@@ -237,7 +237,7 @@ async function openMacOSSettings(panel: 'ScreenCapture' | 'Accessibility'): Prom
   }
 }
 
-async function executeScreenshot(input: Record<string, unknown>): Promise<ToolResult> {
+async function executeScreenshot(input: Record<string, unknown>, workspacePath: string | null | undefined): Promise<ToolResult> {
   // Permission is already checked in the main execute() entry point.
   // Capture screenshot excluding Abu + overlay windows (no need to hide/show).
   // Falls back to old capture_screen with window_hide if exclusion is unavailable.
@@ -245,15 +245,15 @@ async function executeScreenshot(input: Record<string, unknown>): Promise<ToolRe
 
   if (excludeId != null) {
     // macOS: use capture_screen_excluding — Abu window stays visible to user
-    return captureWithExclusion(excludeId, input);
+    return captureWithExclusion(excludeId, input, workspacePath);
   } else {
     // Fallback (Windows / error): hide window, capture, show window
-    return captureWithWindowHide(input);
+    return captureWithWindowHide(input, workspacePath);
   }
 }
 
 /** Screenshot via CGWindowListCreateImage excluding Abu window. No window hide needed. */
-async function captureWithExclusion(abuWindowId: number, input: Record<string, unknown>): Promise<ToolResult> {
+async function captureWithExclusion(abuWindowId: number, input: Record<string, unknown>, workspacePath: string | null | undefined): Promise<ToolResult> {
   // Crop coords (input.x/y/...) are display-relative LOGICAL POINTS: screenshot-coord ×
   // points-per-pixel. Rust converts back to pixels via the display backing scale.
   const anchor = currentAxAnchor();
@@ -268,11 +268,11 @@ async function captureWithExclusion(abuWindowId: number, input: Record<string, u
   });
   applyScreenshotResult(result);
 
-  return formatScreenshotResult(result);
+  return formatScreenshotResult(result, workspacePath);
 }
 
 /** Fallback: hide Abu window → capture → show window. Used on Windows or when exclusion fails. */
-async function captureWithWindowHide(input: Record<string, unknown>): Promise<ToolResult> {
+async function captureWithWindowHide(input: Record<string, unknown>, workspacePath: string | null | undefined): Promise<ToolResult> {
   try { await invoke('window_hide'); } catch { /* ignore */ }
   await new Promise(r => setTimeout(r, 300));
 
@@ -286,19 +286,18 @@ async function captureWithWindowHide(input: Record<string, unknown>): Promise<To
     });
     applyScreenshotResult(result);
 
-    return formatScreenshotResult(result);
+    return formatScreenshotResult(result, workspacePath);
   } finally {
     try { await invoke('window_show'); } catch { /* ignore */ }
   }
 }
 
 /** Format screenshot result with saved file path. */
-async function formatScreenshotResult(result: ScreenshotResult): Promise<ToolResultContent[]> {
+async function formatScreenshotResult(result: ScreenshotResult, workspacePath: string | null | undefined): Promise<ToolResultContent[]> {
   // Save screenshot — prefer workspace, then desktop
   let savedPath = '';
   try {
-    const workspacePath = useWorkspaceStore.getState().currentPath;
-    const saveDir = workspacePath || await desktopDir();
+    const saveDir = (workspacePath ?? useWorkspaceStore.getState().currentPath) || await desktopDir();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const fileName = `screenshot-${timestamp}.png`;
     const filePath = joinPath(saveDir, fileName);
@@ -400,7 +399,7 @@ export const computerTool: ToolDefinition = {
     },
     required: ['action'],
   },
-  execute: async (input): Promise<ToolResult> => {
+  execute: async (input, context): Promise<ToolResult> => {
     // Auto-enable Computer Use on first call — no need for user to find the toggle
     if (!useSettingsStore.getState().computerUseEnabled) {
       useSettingsStore.getState().setComputerUseEnabled(true);
@@ -504,7 +503,7 @@ export const computerTool: ToolDefinition = {
           if (!modelSupportsVision) {
             return '当前模型不支持图片识别，截图对它没有意义。请改用 get_app_state（可加 app 参数指定应用）读取 AX 元素，再用 click(element_id) / type(element_id, text) 操作。\n\nThe current model has no vision capability. Use get_app_state to read AX elements, then click(element_id) / type(element_id, text) to operate.';
           }
-          return await executeScreenshot(input);
+          return await executeScreenshot(input, context?.workspacePath);
 
         // ── Bring an app to the foreground (native, no Apple Events) ──────────
         case 'activate_app':

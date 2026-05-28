@@ -174,9 +174,18 @@ export function normalizeMessages(
         };
       });
 
+      // Ghost message: placeholder written to disk before any content arrived
+      // (network error, server error, or crash before streaming started).
+      // Replace with a tombstone so the turn stays syntactically valid for all
+      // providers — dropping it entirely would produce consecutive user messages,
+      // which Claude's API rejects.
+      const effectiveText = !text.trim() && preparedToolCalls.length === 0 && !msg.thinking
+        ? '[未收到响应]'
+        : text;
+
       turns.push({
         kind: 'assistant',
-        text,
+        text: effectiveText,
         thinking: msg.thinking,
         toolCalls: preparedToolCalls,
       });

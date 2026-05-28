@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Wrench, ChevronDown, ChevronRight, CheckCircle2, Loader2, Circle, Maximize2 } from 'lucide-react';
-import type { ToolCall, ToolResultContent } from '@/types';
+import type { ToolCall, ToolResultContent, Message } from '@/types';
+import { TOOL_NAMES } from '@/core/tools/toolNames';
+import { useChatStore } from '@/stores/chatStore';
+import { getBaseName } from '@/utils/pathUtils';
 import { cn } from '@/lib/utils';
 
 interface ToolCallsGroupProps {
@@ -187,8 +190,12 @@ function ToolCallItem({ toolCall, isLast }: { toolCall: ToolCall; isLast: boolea
           {toolCall.result !== undefined && (
             <div className="border-t border-white/10 pt-2">
               <div className="text-[9px] font-semibold text-white/30 uppercase tracking-wider mb-1">Output</div>
-              {/* Screenshot thumbnail from resultContent */}
-              {toolCall.resultContent?.some(b => b.type === 'image') && !toolCall.hideScreenshot && (
+              {/* Screenshot thumbnail from resultContent — Computer Use only.
+                  Non-computer image results (e.g. read_file PNGs / QR codes) render
+                  inline in the message bubble via InlineToolResultImages instead. */}
+              {toolCall.name === TOOL_NAMES.COMPUTER
+                && toolCall.resultContent?.some(b => b.type === 'image')
+                && !toolCall.hideScreenshot && (
                 <ScreenshotThumbnail resultContent={toolCall.resultContent} />
               )}
               {toolCall.result.includes('[sandbox-blocked]') ? (
@@ -256,5 +263,110 @@ function ScreenshotThumbnail({ resultContent }: { resultContent: ToolResultConte
         </div>
       )}
     </>
+  );
+}
+
+/** A single inline image (from a non-computer tool result) — sized for viewing/scanning, click to expand. */
+function InlineImage({ src }: { src: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <div
+        className="relative group cursor-pointer inline-block rounded-lg overflow-hidden border border-[var(--abu-border)] bg-white"
+        onClick={() => setExpanded(true)}
+      >
+        <img
+          src={src}
+          alt="Image"
+          className="block w-auto max-w-[240px] max-h-[240px] object-contain"
+        />
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+          <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-90 transition-opacity drop-shadow" />
+        </div>
+      </div>
+      {expanded && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-8 cursor-pointer"
+          onClick={() => setExpanded(false)}
+        >
+          <img
+            src={src}
+            alt="Image (full)"
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+/** File references the user themselves brought into the conversation. */
+interface UserFileRefs {
+  /** Raw text from user messages (matched as substrings against basenames). */
+  texts: string[];
+  /** Basenames of files the user uploaded as attachments. */
+  uploads: Set<string>;
+}
+
+/** Collect file references the user supplied — message text + uploaded image filenames. */
+function collectUserFileRefs(messages: Message[]): UserFileRefs {
+  const texts: string[] = [];
+  const uploads = new Set<string>();
+  for (const m of messages) {
+    if (m.role !== 'user') continue;
+    if (typeof m.content === 'string') {
+      texts.push(m.content);
+    } else {
+      for (const c of m.content) {
+        if (c.type === 'text') texts.push(c.text);
+        else if (c.type === 'image' && c.filePath) uploads.add(getBaseName(c.filePath));
+      }
+    }
+  }
+  return { texts, uploads };
+}
+
+/** Whether a read_file basename was supplied by the user (so it shouldn't be re-shown). */
+function isUserProvided(basename: string, refs: UserFileRefs): boolean {
+  if (refs.uploads.has(basename)) return true;
+  return refs.texts.some((t) => t.includes(basename));
+}
+
+/**
+ * Renders images returned by non-Computer-Use tool results inline in the message
+ * bubble, so they stay visible in the conversation flow instead of being buried
+ * in the collapsible tool panel.
+ *
+ * Only surfaces images Abu fetched/produced on its own (e.g. a QR code it
+ * generated via CLI, then read back). Images whose path the user supplied —
+ * either by naming the file or uploading it — are skipped: the user already has
+ * that file, so re-posting it is noise. Computer Use screenshots are also
+ * excluded; they keep their own thumbnail UX inside ToolCallsGroup.
+ */
+export function InlineToolResultImages({ toolCalls, conversationId }: { toolCalls: ToolCall[]; conversationId?: string }) {
+  const messages = useChatStore((s) => (conversationId ? s.conversations[conversationId]?.messages : undefined));
+  const userRefs = useMemo(() => collectUserFileRefs(messages ?? []), [messages]);
+
+  const images: string[] = [];
+  for (const tc of toolCalls) {
+    if (tc.hidden || tc.name === TOOL_NAMES.COMPUTER) continue;
+    if (!tc.resultContent?.some((b) => b.type === 'image')) continue;
+    const path = typeof tc.input?.path === 'string' ? tc.input.path : '';
+    const base = path ? getBaseName(path) : '';
+    if (base && isUserProvided(base, userRefs)) continue;
+    for (const block of tc.resultContent) {
+      if (block.type === 'image') {
+        images.push(`data:${block.source.media_type};base64,${block.source.data}`);
+      }
+    }
+  }
+  if (images.length === 0) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {images.map((src, i) => (
+        <InlineImage key={i} src={src} />
+      ))}
+    </div>
   );
 }

@@ -55,6 +55,11 @@ export const PROVIDER_GUIDES: Record<string, ProviderGuideInfo> = {
     url: 'https://portal.qiniu.com/developer/ak-sk',
     urlLabel: '七牛云控制台',
   },
+  xiaomi: {
+    hint: '在小米 MiMo 平台订阅后获取 API Key（格式：tp-xxxxx）',
+    url: 'https://platform.xiaomimimo.com/subscription',
+    urlLabel: '小米 MiMo 平台',
+  },
   openrouter: {
     hint: '在 OpenRouter 创建 API Key',
     url: 'https://openrouter.ai/keys',

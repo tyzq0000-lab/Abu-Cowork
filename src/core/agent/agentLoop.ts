@@ -603,9 +603,13 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // Build static system prompt sections once (active skills are injected dynamically per-turn)
   const systemPromptSections = await buildSystemPromptSections(route, getCapabilityPrompt(), conversationId, options?.imContext, 0);
 
-  // Build tool execution context — provides resolved workspace for tools like update_memory
+  // Build tool execution context — provides resolved workspace for tools like update_memory.
+  // Priority: IM-injected path > conversation's own stored path > global store fallback.
+  // Using the conversation record rather than the global store prevents cross-conversation
+  // workspace leakage when multiple conversations are open simultaneously.
+  const _convForContext = useChatStore.getState().conversations[conversationId];
   const toolContext: ToolExecutionContext = {
-    workspacePath: options?.imContext?.workspacePath ?? useWorkspaceStore.getState().currentPath,
+    workspacePath: options?.imContext?.workspacePath ?? _convForContext?.workspacePath ?? useWorkspaceStore.getState().currentPath,
     loopId,
     conversationId,
   };
@@ -1660,7 +1664,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // Auto-extract memories from desktop conversations (non-blocking).
         // IM conversations have their own extraction in channelRouter.ts.
         if (interactiveDesktop) {
-          const wsPath = useWorkspaceStore.getState().currentPath;
+          const wsPath = convRecord?.workspacePath ?? useWorkspaceStore.getState().currentPath;
           import('../memdir/extractor').then(({ extractMemoriesFromConversation }) =>
             extractMemoriesFromConversation(conversationId, wsPath)
           ).catch(() => {});
@@ -1675,7 +1679,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // The gate logic (interactiveDesktop + workspace bound) lives
         // in `shouldComputeProposalSignal` so it's unit-testable. Full
         // rationale in that function's docstring (Task #49 + #51).
-        const wsPath = useWorkspaceStore.getState().currentPath;
+        const wsPath = convRecord?.workspacePath ?? useWorkspaceStore.getState().currentPath;
         if (
           exitReason === 'completed' &&
           shouldComputeProposalSignal(options, convRecord, wsPath)

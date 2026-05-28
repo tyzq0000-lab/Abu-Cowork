@@ -37,7 +37,7 @@ export const runCommandTool: ToolDefinition = {
     },
     required: ['command'],
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const command = input.command as string;
     const cwd = input.cwd as string | undefined;
     const background = input.background as boolean | undefined;
@@ -55,8 +55,9 @@ export const runCommandTool: ToolDefinition = {
         : /^\s*open\s/.test(resolvedCommand);
       const sandbox = isLauncherCmd ? false : isSandboxEnabled();
 
-      // Allow writes to workspace + user-authorized directories under sandbox
-      const workspacePath = useWorkspaceStore.getState().currentPath;
+      // Use conversation-scoped workspace from context; fall back to global store
+      // only if context is absent (e.g. direct invocation outside agent loop).
+      const workspacePath = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
       const authorizedPaths = sandbox ? getAuthorizedWritablePaths() : [];
       const extraWritablePaths = [
         ...(workspacePath ? [workspacePath] : []),

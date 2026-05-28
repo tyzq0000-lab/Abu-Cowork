@@ -28,7 +28,7 @@ export const generateImageTool: ToolDefinition = {
     },
     required: ['prompt'],
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const prompt = input.prompt as string;
     const size = (input.size as string) || '1024x1024';
     const style = (input.style as string) || 'vivid';
@@ -110,7 +110,7 @@ export const generateImageTool: ToolDefinition = {
       // Determine save path: explicit > workspace > downloads
       let finalPath = savePath;
       if (!finalPath) {
-        const workspacePath = useWorkspaceStore.getState().currentPath;
+        const workspacePath = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
         const baseDir = workspacePath || await downloadDir();
         const timestamp = Date.now();
         finalPath = joinPath(baseDir, `abu-image-${timestamp}.png`);

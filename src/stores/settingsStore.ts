@@ -206,6 +206,17 @@ export const PROVIDER_CONFIGS = {
       { id: 'claude-4.6-opus', label: 'Claude 4.6 Opus' },
     ],
   },
+  xiaomi: {
+    name: '小米 MiMo (Xiaomi)',
+    baseUrl: 'https://token-plan-cn.xiaomimimo.com/v1',
+    format: 'openai-compatible',
+    models: [
+      { id: 'mimo-v2.5-pro', label: 'MiMo V2.5 Pro' },
+      { id: 'mimo-v2.5', label: 'MiMo V2.5' },
+      { id: 'mimo-v2-omni', label: 'MiMo V2 Omni' },
+      { id: 'mimo-v2-flash', label: 'MiMo V2 Flash' },
+    ],
+  },
   openrouter: {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',

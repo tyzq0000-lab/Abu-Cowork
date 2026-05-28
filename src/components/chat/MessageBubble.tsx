@@ -2,7 +2,7 @@ import { ChevronDown, ChevronRight, ChevronUp, Copy, Pencil, Trash2, RefreshCw, 
 import { useState, useEffect } from 'react';
 import type { Message, MessageContent } from '@/types';
 import MarkdownRenderer from './MarkdownRenderer';
-import ToolCallsGroup from './ToolCallsGroup';
+import ToolCallsGroup, { InlineToolResultImages } from './ToolCallsGroup';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
 import { sendFeedback } from '@/utils/consoleFeedback';
 import { cn } from '@/lib/utils';
@@ -628,6 +628,10 @@ export default function MessageBubble({
         {message.toolCalls && message.toolCalls.length > 0 && (
           <ToolCallsGroup toolCalls={message.toolCalls} />
         )}
+        {/* Inline images from non-CU tool results (e.g. read_file QR codes) */}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <InlineToolResultImages toolCalls={message.toolCalls} conversationId={convId} />
+        )}
         {message.isStreaming && <span className="streaming-cursor" />}
 
         {/* Token usage display */}
@@ -678,6 +682,10 @@ export default function MessageBubble({
         {/* Tool calls - grouped in a single collapsible block */}
         {message.toolCalls && message.toolCalls.length > 0 && (
           <ToolCallsGroup toolCalls={message.toolCalls} />
+        )}
+        {/* Inline images from non-CU tool results (e.g. read_file QR codes) */}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <InlineToolResultImages toolCalls={message.toolCalls} conversationId={convId} />
         )}
         {message.isStreaming && <span className="streaming-cursor" />}
 

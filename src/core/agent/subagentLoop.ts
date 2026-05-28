@@ -166,7 +166,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     // Load and inject persistent memory from memdir
     try {
       const { scanMemoryFiles, loadMemoryIndex } = await import('../memdir/scan');
-      const wsPath = useWorkspaceStore.getState().currentPath;
+      const wsPath = workspacePath;
 
       const [globalHeaders, wsHeaders, globalIndex] = await Promise.all([
         scanMemoryFiles(null),
