@@ -258,7 +258,7 @@ describe('messageNormalizer', () => {
         expect(normalizeMessages([])).toEqual([]);
       });
 
-      it('handles assistant with no tool calls and no text', () => {
+      it('replaces empty ghost assistant message with tombstone', () => {
         const messages: Message[] = [
           makeMessage({ role: 'assistant', content: '' }),
         ];
@@ -266,9 +266,25 @@ describe('messageNormalizer', () => {
         const turns = normalizeMessages(messages);
         expect(turns).toHaveLength(1);
         if (turns[0].kind === 'assistant') {
-          expect(turns[0].text).toBe('');
+          expect(turns[0].text).toBe('[未收到响应]');
           expect(turns[0].toolCalls).toEqual([]);
         }
+      });
+
+      it('replaces ghost assistant between two user messages without consecutive-user violation', () => {
+        const messages: Message[] = [
+          makeMessage({ role: 'user', content: '整理桌面' }),
+          makeMessage({ role: 'assistant', content: '' }),
+          makeMessage({ role: 'user', content: '再试一次' }),
+        ];
+
+        const turns = normalizeMessages(messages);
+        expect(turns).toHaveLength(3);
+        expect(turns[0].kind).toBe('user');
+        if (turns[1].kind === 'assistant') {
+          expect(turns[1].text).toBe('[未收到响应]');
+        }
+        expect(turns[2].kind).toBe('user');
       });
 
       it('generates unique IDs per tool call', () => {

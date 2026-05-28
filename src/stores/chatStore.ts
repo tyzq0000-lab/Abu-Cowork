@@ -29,6 +29,24 @@ function sanitizeImportedMessage(msg: Message): Message {
   };
 }
 
+/** Strip ghost assistant messages and clear stale isStreaming flags after loading from disk.
+ * Ghost messages are empty assistant placeholders written before content arrived
+ * (crash / network failure before streaming started). They must not reach the LLM. */
+function sanitizeLoadedMessages(messages: Message[]): Message[] {
+  return messages
+    .map(msg => msg.isStreaming ? { ...msg, isStreaming: false } : msg)
+    .filter(msg => {
+      if (msg.role !== 'assistant') return true;
+      const text = typeof msg.content === 'string'
+        ? msg.content
+        : msg.content.filter(c => c.type === 'text').map(c => (c as { type: 'text'; text: string }).text).join('');
+      return text.trim().length > 0
+        || (msg.toolCalls?.length ?? 0) > 0
+        || (msg.toolCallsForContext?.length ?? 0) > 0
+        || !!msg.thinking;
+    });
+}
+
 /** Build an in-memory Conversation + Meta from a validated ShareBundle.
  * Intentionally drops external references (workspacePath, scheduledTaskId,
  * triggerId, projectId, imChannelId/imPlatform, activeSkills,
@@ -372,9 +390,14 @@ export const useChatStore = create<ChatStore>()(
         import('../core/session/conversationStorage').then(({ updateIndexEntry }) => {
           updateIndexEntry(meta).catch(() => {});
         });
-        // Sync global workspace to match the new conversation
-        if (workspacePath && !options?.skipActivate) {
-          useWorkspaceStore.getState().setWorkspace(workspacePath);
+        // Sync global workspace to match the new conversation.
+        // Clear when no workspace so UI doesn't show a stale path from a previous conversation.
+        if (!options?.skipActivate) {
+          if (workspacePath) {
+            useWorkspaceStore.getState().setWorkspace(workspacePath);
+          } else {
+            useWorkspaceStore.getState().clearWorkspace();
+          }
         }
         return id;
       },
@@ -1229,7 +1252,7 @@ export const useChatStore = create<ChatStore>()(
 
         try {
           const { loadMessages } = await import('../core/session/conversationStorage');
-          const messages = await loadMessages(convId);
+          const messages = sanitizeLoadedMessages(await loadMessages(convId));
           const meta = get().conversationIndex[convId];
           if (!meta) return;
 
