@@ -23,6 +23,7 @@ import { useTaskExecutionStore } from '../../stores/taskExecutionStore';
 import { setLoopContext, clearLoopContext } from './permissionBridge';
 import type { EventRouter } from './eventRouter';
 import { createLogger } from '../logging/logger';
+import { startToolSpan } from '../observability/langfuse';
 
 const logger = createLogger('toolExecutor');
 
@@ -166,6 +167,8 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
     }
 
     const startTime = Date.now();
+    // Observability: record this tool execution as a span (no-op when disabled)
+    const toolSpan = startToolSpan(conversationId, { name: tc.name, input: effectiveInput });
     try {
       // Race tool execution against abort signal so stop button works during long-running tools (e.g. MCP)
       const rawResult: ToolResult = await new Promise<ToolResult>((resolve, reject) => {
@@ -218,10 +221,12 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
         durationMs,
       });
       logger.info('Tool executed', { toolName: tc.name, durationMs, error: false });
+      toolSpan.end({ output: resultStr });
       return { id: tc.id, result: resultStr, resultContent, error: false, duration: durationMs / 1000 };
     } catch (err) {
       // Re-throw AbortError so outer catch handles cancellation properly
       if (err instanceof Error && err.name === 'AbortError') {
+        toolSpan.end({ output: '[aborted]', level: 'ERROR', statusMessage: 'aborted' });
         throw err;
       }
       const durationMs = Date.now() - startTime;
@@ -242,6 +247,7 @@ export async function executeToolBatch(params: ToolBatchParams): Promise<ToolBat
         durationMs,
       });
       logger.info('Tool executed', { toolName: tc.name, durationMs, error: true });
+      toolSpan.end({ output: `Error: ${errorMsg}`, level: 'ERROR', statusMessage: errorMsg });
       return { id: tc.id, result: `Error: ${errorMsg}`, resultContent: undefined, error: true, duration: durationMs / 1000 };
     }
   };

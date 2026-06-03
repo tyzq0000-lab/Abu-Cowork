@@ -1,5 +1,7 @@
 # Abu (阿布) — AI Desktop Office Assistant
 
+> 父目录 `../CLAUDE.md` 有跨端共享上下文（Abu 产品全景、与 console 控制台的关系、两仓库 git 分开/勿合并/脱敏约定）。
+
 ## Project Overview
 Local AI office assistant desktop app built with Tauri 2.0 + React + TypeScript.
 Inspired by Claude Code's Cowork mode. Features multi-agent architecture with extensible Skills and Subagents.
@@ -58,6 +60,12 @@ Inspired by Claude Code's Cowork mode. Features multi-agent architecture with ex
 - ❌ `git push --force` 到 `main` 或 `dev`（除非用户明确要求）。
 - ❌ 提交未通过 build 的代码。
 - ❌ 跳过 pre-commit 检查（`--no-verify`）。
+
+### Observability Keys (Langfuse) — 防泄露红线
+- Langfuse 观测靠 `VITE_LANGFUSE_PUBLIC_KEY` / `VITE_LANGFUSE_SECRET_KEY` / `VITE_LANGFUSE_BASE_URL`，**只放 `.env.local`**（已 gitignore），绝不提交、绝不硬编码到源码。
+- 缺 key 时观测自动 no-op（`src/core/observability/langfuse.ts` 的 `getLangfuse()` 返回 `null`）。**开源版默认零采集**——这是开源/隐私底线，不要破坏。
+- 🔴 **绝不用带 `.env.local` 的本机环境打“对外分发”包**：`VITE_*` 会在 build 时编进前端 bundle，任何人都能从安装包里扒出 key。官方发布只走 CI（无 `.env.local`）才安全；本机 `npm run tauri build` 出的包仅供自用，不可分发。
+- 真要做面向终端用户的线上遥测（Phase B）必须：**opt-in + 服务端中转（secret key 不下发客户端）+ 脱敏**。
 
 ## Key Commands
 - `npm run dev` — Start Vite dev server (frontend only)

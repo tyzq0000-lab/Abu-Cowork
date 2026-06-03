@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './styles/index.css'
 import App from './App.tsx'
 
+// Dev-only: registers window.__abuLangfuseSpike() for the Phase A transport test.
+if (import.meta.env.DEV) void import('./core/observability/langfuse')
+
 // Overlay scrollbar: show only while scrolling, then fade out
 ;(() => {
   const timers = new WeakMap<HTMLElement, number>();

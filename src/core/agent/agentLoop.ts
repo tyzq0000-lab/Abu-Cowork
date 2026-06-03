@@ -36,6 +36,8 @@ import { emitHook } from './lifecycleHooks';
 import { getI18n, format } from '../../i18n';
 import { clearAllSkillHooks } from '../tools/builtins';
 import { executeToolBatch } from './toolExecutor';
+import { startConversationTrace, endConversationTrace, startGeneration } from '../observability/langfuse';
+import { calculateTurnCost } from '../llm/costTracker';
 import { formatTodosForPrompt } from './todoManager';
 import { isWindows } from '../../utils/platform';
 import { getBuiltinSearchConfig } from '../capabilities';
@@ -805,6 +807,13 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     loopId,
   });
 
+  // Observability: open a trace for this run (no-op when Langfuse disabled)
+  startConversationTrace(conversationId, {
+    name: route.name ?? 'abu',
+    input: userMessage,
+    metadata: { loopId, model: effectiveModelId, routeType: route.type },
+  });
+
   let continueLoop = true;
   let exitReason: AgentLoopExitReason = 'completed';
   let exitError: string | undefined;
@@ -1324,6 +1333,9 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
           }
         };
 
+      // Observability: mark when this turn's LLM call begins (for generation latency)
+      const genStartTime = Date.now();
+
       // Execute with retry and context-too-long recovery
       try {
         await withRetry(
@@ -1437,6 +1449,24 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         } else {
           throw retryErr;
         }
+      }
+
+      // Observability: record this turn's LLM call as a generation (no-op when disabled)
+      {
+        const turnMsg = useChatStore.getState().conversations[conversationId]?.messages.find(m => m.id === assistantMsgId);
+        startGeneration(conversationId, {
+          name: `turn-${turnCount}`,
+          model: effectiveModelId,
+          input: preparedMessages,
+          startTime: new Date(genStartTime),
+        }).end({
+          output: {
+            content: turnMsg?.content,
+            toolCalls: collectedToolCalls.map(tc => ({ name: tc.name, input: tc.input })),
+          },
+          usage: finalUsage,
+          costUsd: finalUsage ? calculateTurnCost(effectiveModelId, finalUsage) : undefined,
+        });
       }
 
       // Update usage on message if available
@@ -1753,6 +1783,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // Set status back to idle on cancel
         chatStore.setConversationStatus(conversationId, 'idle');
 
+        endConversationTrace(conversationId, { output: { reason: 'aborted' } });
         return { reason: 'aborted' as const };
       }
 
@@ -1817,5 +1848,6 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       continueLoop = false;
     }
   }
+  endConversationTrace(conversationId, { output: { reason: exitReason }, error: exitError });
   return { reason: exitReason, error: exitError };
 }
