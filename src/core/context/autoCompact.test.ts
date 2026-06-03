@@ -142,5 +142,26 @@ describe('autoCompact', () => {
       expect(level).toBe(2);
       expect(tracker.getLastLevel()).toBe(2);
     });
+
+    it('reflects post-compression tokens, not raw history', () => {
+      // Scenario: a long conversation where raw history exceeds maxInput,
+      // but cached compression brings the actual sent payload down to a
+      // safe level. The warning level the UI sees must be based on the
+      // payload actually sent — i.e. POST compression — so the user is
+      // not perpetually warned about a state that no longer exists.
+      const tracker = new AutoCompactTracker();
+      const maxInput = 192_000;
+
+      // Raw history would be Level 3 (critical, >85%)
+      const preCompressionTokens = 200_000;
+      const preLevel = tracker.updateLevel(preCompressionTokens, maxInput);
+      expect(preLevel).toBe(3);
+
+      // After compression we drop to ~30k — should be Level 0 (<60%)
+      const postCompressionTokens = 30_000;
+      const postLevel = tracker.updateLevel(postCompressionTokens, maxInput);
+      expect(postLevel).toBe(0);
+      expect(tracker.getLastLevel()).toBe(0);
+    });
   });
 });
