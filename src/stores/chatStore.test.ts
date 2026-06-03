@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useChatStore, flushTokenBuffer } from './chatStore';
-import type { Conversation } from '@/types';
+import type { Conversation } from '../types';
 
 // Stable workspace store mock — Task #34 regression tests need to assert
 // that clearWorkspace is NOT called on start/switch flows, so the fn
@@ -887,15 +887,15 @@ describe('chatStore', () => {
 
   describe('context indicator ephemeral state', () => {
     beforeEach(() => {
-      useChatStore.setState({ conversations: {
-        c1: {
-          id: 'c1',
-          title: 't',
-          messages: [],
-          createdAt: 0,
-          updatedAt: 0,
-        } as Conversation,
-      } });
+      const conv: Conversation = {
+        id: 'c1',
+        title: 't',
+        messages: [],
+        createdAt: 0,
+        updatedAt: 0,
+        status: 'idle',
+      };
+      useChatStore.setState({ conversations: { c1: conv } });
     });
 
     it('setContextUsage writes and clears usage on the conversation', () => {
