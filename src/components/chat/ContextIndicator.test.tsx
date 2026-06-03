@@ -3,8 +3,8 @@
 import { render, screen, cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ContextIndicator from './ContextIndicator';
-import { useChatStore } from '@/stores/chatStore';
-import type { Conversation } from '@/types';
+import { useChatStore } from '../../stores/chatStore';
+import type { Conversation } from '../../types';
 
 const baseConv: Conversation = {
   id: 'c1',
