@@ -5,9 +5,11 @@ import { useChatStore } from '@/stores/chatStore';
 import { calculateWarningLevel } from '@/core/context/autoCompact';
 import { cn } from '@/lib/utils';
 
-const RING_SIZE = 16;
-const RING_RADIUS = 6;
+const RING_SIZE = 22;
+const RING_RADIUS = 8;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+const VIEWBOX = '0 0 22 22';
+const CENTER = 11;
 
 function formatK(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -16,7 +18,7 @@ function formatK(n: number): string {
 
 function levelColorClass(level: 0 | 1 | 2 | 3): string {
   switch (level) {
-    case 0: return 'text-zinc-400/40';
+    case 0: return 'text-[var(--abu-text-muted)]';
     case 1: return 'text-yellow-500';
     case 2: return 'text-orange-500';
     case 3: return 'text-red-500 animate-pulse';
@@ -59,24 +61,24 @@ export default function ContextIndicator({ conversationId }: { conversationId: s
             {isCompressing ? (
               <Loader2 className="text-purple-400 animate-spin" style={{ width: RING_SIZE, height: RING_SIZE }} />
             ) : (
-              <svg width={RING_SIZE} height={RING_SIZE} viewBox="0 0 16 16">
+              <svg width={RING_SIZE} height={RING_SIZE} viewBox={VIEWBOX}>
                 <circle
-                  cx="8" cy="8" r={RING_RADIUS}
+                  cx={CENTER} cy={CENTER} r={RING_RADIUS}
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="1.5"
-                  className="text-zinc-500/25"
+                  strokeWidth="2"
+                  className="text-[var(--abu-text-muted)] opacity-30"
                 />
                 {usage && (
                   <circle
-                    cx="8" cy="8" r={RING_RADIUS}
+                    cx={CENTER} cy={CENTER} r={RING_RADIUS}
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.5"
+                    strokeWidth="2"
                     strokeLinecap="round"
                     strokeDasharray={RING_CIRCUMFERENCE}
                     strokeDashoffset={dashOffset}
-                    transform="rotate(-90 8 8)"
+                    transform={`rotate(-90 ${CENTER} ${CENTER})`}
                     className={cn('transition-[stroke-dashoffset,color] duration-300', levelColorClass(level))}
                   />
                 )}
