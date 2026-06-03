@@ -5,6 +5,7 @@ import { ModelSelector, CapabilityBadge } from '@/components/chat/ModelSelector'
 // import AgentSelector from '@/components/chat/AgentSelector';
 import { open } from '@tauri-apps/plugin-dialog';
 import { readFile } from '@tauri-apps/plugin-fs';
+import { invoke } from '@tauri-apps/api/core';
 import { useFileDragDrop } from '@/hooks/useFileDragDrop';
 import { uint8ArrayToBase64 } from '@/utils/base64';
 import { getBaseName, IMAGE_MIME_MAP } from '@/utils/pathUtils';
@@ -166,14 +167,57 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showModelPicker]);
 
-  // Handle pasting images from clipboard
+  // Handle pasting from clipboard.
+  //
+  // Two distinct sources land here:
+  //   (a) Files copied from Finder/Explorer (Cmd/Ctrl+C on a file) — we want
+  //       chips identical to drag-drop, which means we need the *real OS
+  //       path*. The browser ClipboardEvent never exposes that, so we ask
+  //       the Rust side to read the native pasteboard (NSPasteboard /
+  //       CF_HDROP) and then reuse the same processFilePaths pipeline that
+  //       handles drag-drop.
+  //   (b) Raw bitmaps with no backing file (screenshots taken with
+  //       Cmd+Shift+Ctrl+4 on macOS, snipping-tool pastes on Windows). These
+  //       have no file URL on the pasteboard, so we fall back to the legacy
+  //       getAsFile() image path.
+  //
+  // The preventDefault MUST run synchronously the moment we see any
+  // `kind === 'file'` item — once we hit `await`, the textarea will have
+  // already swallowed the default paste (which is what causes filename text
+  // to leak into the input on the current build).
   const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
 
+    const hasFileItem = Array.from(items).some((it) => it.kind === 'file');
+    if (!hasFileItem) return; // plain text / html → let textarea handle it
+
+    e.preventDefault();
+
+    // (a) Try OS pasteboard for real file paths — full parity with drag-drop.
+    let paths: string[] = [];
+    try {
+      paths = await invoke<string[]>('read_clipboard_file_paths');
+    } catch {
+      // Native command unavailable or failed — fall through to bitmap branch.
+    }
+
+    if (paths.length > 0) {
+      await processFilePaths(
+        paths,
+        (imgs) => setImages((prev) => [...prev, ...imgs]),
+        (newFiles) => setFiles((prev) => {
+          const existing = new Set(prev.map((f) => f.path));
+          const deduped = newFiles.filter((f) => !existing.has(f.path));
+          return deduped.length > 0 ? [...prev, ...deduped] : prev;
+        }),
+      );
+      return;
+    }
+
+    // (b) Bitmap-only fallback (screenshots etc.).
     for (const item of Array.from(items)) {
       if (SUPPORTED_IMAGE_TYPES.includes(item.type)) {
-        e.preventDefault();
         const file = item.getAsFile();
         if (!file) continue;
         const { data, mediaType } = await readFileAsBase64(file);

@@ -23,6 +23,7 @@ mod atomic_write;
 mod notice;
 mod notice_db;
 mod sleep_prevention;
+mod clipboard_files;
 
 /// Maximum number of output lines to collect from a shell command.
 /// Prevents OOM when commands produce unbounded output.
@@ -1367,7 +1368,8 @@ pub fn run() {
             atomic_write::atomic_write_with_backup,
             atomic_write::restore_from_backup,
             atomic_write::cleanup_old_backups,
-            sleep_prevention::set_prevent_sleep
+            sleep_prevention::set_prevent_sleep,
+            clipboard_files::read_clipboard_file_paths
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
