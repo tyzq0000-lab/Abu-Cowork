@@ -71,4 +71,51 @@ describe('ContextIndicator', () => {
     expect(label).toMatch(/1\.5k|1460/);
     expect(label).toMatch(/2\.0k|2000/);
   });
+
+  it('derives usage from messages when contextUsage has not been published yet (restart / history view)', () => {
+    // Simulates the just-restarted state: messages are loaded from JSONL,
+    // but agentLoop has not yet run a turn so `contextUsage` is undefined.
+    // The indicator should still show a derived water-level from messages
+    // alone (+ a fallback overhead constant).
+    setConv({
+      messages: [
+        { id: 'm1', role: 'user', content: 'Hello world.', timestamp: 0 },
+        { id: 'm2', role: 'assistant', content: 'Hi there. ' + 'x'.repeat(2000), timestamp: 0 },
+      ],
+      contextUsage: undefined,
+    });
+    render(<ContextIndicator conversationId="c1" />);
+    const indicator = screen.getByTestId('context-indicator');
+    // Progress arc should now render (track + arc = 2 circles) — proving the
+    // derive fired even without a published usage value.
+    expect(indicator.querySelectorAll('circle').length).toBe(2);
+  });
+
+  it('derive uses contextUsage.overhead when published, so live tokens = overhead + estimateMessageTokens(messages)', () => {
+    // Streaming-style scenario: agentLoop published one turn ago with
+    // tokensUsed=8000, overhead=7000 (1000 of messages then). The user's
+    // assistant message has since grown by ~6000 tokens of fresh output.
+    // The indicator should reflect overhead (7000) + current messages tokens,
+    // NOT remain stuck on the stale 8000 published snapshot.
+    const heavyContent = 'x'.repeat(24_000); // ~6000 tokens at ~4 chars/token
+    setConv({
+      messages: [
+        { id: 'm1', role: 'user', content: 'Write me a long essay.', timestamp: 0 },
+        { id: 'm2', role: 'assistant', content: heavyContent, timestamp: 0 },
+      ],
+      contextUsage: {
+        percent: 4,
+        tokensUsed: 8000,
+        tokensMax: 200_000,
+        overhead: 7000,
+      },
+    });
+    render(<ContextIndicator conversationId="c1" />);
+    const label = screen.getByTestId('context-indicator').getAttribute('aria-label') || '';
+    // Expect a percent meaningfully higher than the stale 4% from the published snapshot.
+    const percentMatch = label.match(/(\d+)%/);
+    expect(percentMatch).not.toBeNull();
+    const shownPercent = Number(percentMatch![1]);
+    expect(shownPercent).toBeGreaterThan(4);
+  });
 });

@@ -41,7 +41,7 @@ import { calculateTurnCost } from '../llm/costTracker';
 import { formatTodosForPrompt } from './todoManager';
 import { isWindows } from '../../utils/platform';
 import { getBuiltinSearchConfig } from '../capabilities';
-import { resolveCapabilities, computeReasoningParams, type ModelCapabilities } from '../llm/modelCapabilities';
+import { resolveCapabilities, resolveEffectiveContextWindow, computeReasoningParams, type ModelCapabilities } from '../llm/modelCapabilities';
 import { TOOL_NAMES } from '../tools/toolNames';
 import { prefetchTools } from '../tools/toolPrefetch';
 import { classifyTools, buildDeferredToolsSummary } from '../tools/toolSearch';
@@ -1006,10 +1006,15 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         freshSettings.maxOutputTokens ?? effectiveModelMaxOutput,
       );
       let maxOutputTokens = reasoningParams.maxTokens;
-      const userContextWindow = freshSettings.contextWindowSize ?? effectiveModelContext;
-      const contextWindowSize = discoveredCaps?.contextWindow
-        ? Math.min(userContextWindow, discoveredCaps.contextWindow)
-        : userContextWindow;
+      // Effective context window = min(model published cap, user setting, runtime-discovered).
+      // This prevents the UI/agent from claiming more capacity than the model actually
+      // supports — e.g. mimo/gpt-4o/kimi at 128k were silently being reported as 200k
+      // because the project default settingsStore.contextWindowSize is 200k.
+      const contextWindowSize = resolveEffectiveContextWindow(
+        effectiveModelId,
+        freshSettings.contextWindowSize,
+        discoveredCaps?.contextWindow,
+      );
 
       // Escalate maxOutputTokens on max_tokens recovery (legacy CC pattern),
       // clamped to the model's real ceiling so we never re-ask above a known limit.
@@ -1131,11 +1136,21 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       // previously left the UI stuck in the red Critical state.
       // Update tracker (its lastLevel may be read elsewhere downstream)
       autoCompactTracker.updateLevel(postCompressionTokens, maxInputTokens);
-      // Publish usage to chatStore for UI consumption
+      // Publish usage to chatStore for UI consumption.
+      // tokensMax uses the FULL contextWindow (not the maxInputTokens budget)
+      // so the denominator the user sees matches the model's published context
+      // window (e.g. 200k for Claude / mimo-v2.5-pro), which is the mental
+      // model users have. The maxInputTokens budget (contextWindow - output
+      // reservation) is an internal compression-trigger detail.
+      // overhead = system prompt + tool schema tokens. Published so the indicator
+      // can compute live = overhead + estimateMessageTokens(messagesNow) without
+      // waiting for the next loop iteration (fixes streaming + post-restart UX).
+      const systemAndToolsOverhead = estimateTokens(effectiveSystemPrompt) + toolTokens;
       useChatStore.getState().setContextUsage(conversationId, {
-        percent: usagePercent,
+        percent: getUsagePercent(postCompressionTokens, contextWindowSize),
         tokensUsed: postCompressionTokens,
-        tokensMax: maxInputTokens,
+        tokensMax: contextWindowSize,
+        overhead: systemAndToolsOverhead,
       });
       const trimmedMessages = trimOldScreenshots(messagesForContext, usagePercent);
 

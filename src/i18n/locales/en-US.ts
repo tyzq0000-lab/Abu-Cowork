@@ -277,11 +277,13 @@ const enUS: TranslationDict = {
     contextTooltipIdle: 'Context usage',
     contextTooltipCompressing: 'Compressing…',
     contextTooltipUsage: '{percent}% used · {used} / {max} tokens',
+    contextTooltipSubtitle: 'Context water level · Local estimate',
     maxTurnsReached: 'Completed {n} turns. Send a new message to continue if the task is not finished.',
     usageChipInput: 'Input',
     usageChipOutput: 'Output',
     usageChipCache: 'cache',
     usageChipRequests: 'requests',
+    usageChipSubtitle: 'Cumulative API usage · Model-reported',
   },
 
   share: {

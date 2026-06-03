@@ -277,11 +277,13 @@ const zhCN: TranslationDict = {
     contextTooltipIdle: '上下文使用情况',
     contextTooltipCompressing: '正在压缩…',
     contextTooltipUsage: '{percent}% 已用 · {used} / {max} tokens',
+    contextTooltipSubtitle: '上下文水位 · 本地估算',
     maxTurnsReached: '已完成 {n} 轮执行。如果任务尚未完成，直接发送消息即可继续。',
     usageChipInput: '输入',
     usageChipOutput: '输出',
     usageChipCache: 'cache',
     usageChipRequests: '次请求',
+    usageChipSubtitle: '累计调用 · 模型上报',
   },
 
   share: {
