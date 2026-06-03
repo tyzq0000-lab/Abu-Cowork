@@ -1,7 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { useI18n } from '@/i18n';
-import { format } from '@/i18n';
+import { useI18n, format } from '@/i18n';
 import { useChatStore } from '@/stores/chatStore';
 import { calculateWarningLevel } from '@/core/context/autoCompact';
 import { cn } from '@/lib/utils';
