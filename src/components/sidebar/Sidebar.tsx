@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { getPlatformShortLabel } from '@/core/im/platformLabels';
 import type { ConversationStatus } from '@/types';
 import ProjectsSection from '@/components/sidebar/ProjectsSection';
-import abuAvatar from '@/assets/abu-avatar.png';
+import DefaultUserAvatar from '@/components/common/DefaultUserAvatar';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import ShareExportDialog from '@/components/share/ShareExportDialog';
@@ -433,14 +433,25 @@ export default function Sidebar() {
             className="w-8 h-8 rounded-full overflow-hidden shrink-0 hover:ring-2 hover:ring-[var(--abu-clay-40)] transition-shadow"
             title={t.sidebar.editProfile}
           >
-            <img src={userAvatar || abuAvatar} alt="Avatar" className="w-full h-full object-cover" />
+            {userAvatar ? (
+              <img src={userAvatar} alt="Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <DefaultUserAvatar />
+            )}
           </button>
           <button
             onClick={() => setProfileOpen(true)}
             className="flex-1 min-w-0 text-left"
             title={t.sidebar.editProfile}
           >
-            <div className="text-[13px] font-semibold text-[var(--abu-text-primary)] truncate">
+            <div
+              className={cn(
+                'text-[13px] font-semibold truncate',
+                userNickname
+                  ? 'text-[var(--abu-text-primary)]'
+                  : 'text-[var(--abu-text-tertiary)]'
+              )}
+            >
               {userNickname || t.sidebar.defaultNickname}
             </div>
           </button>

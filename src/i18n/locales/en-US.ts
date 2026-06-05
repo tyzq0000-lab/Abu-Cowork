@@ -122,7 +122,7 @@ const enUS: TranslationDict = {
     nicknamePlaceholder: 'Enter your nickname',
     avatar: 'Avatar',
     changeAvatar: 'Change Avatar',
-    defaultNickname: 'Abu',
+    defaultNickname: 'Me',
     resetProfile: 'Reset to Default',
     personalMemory: 'Personal Memory',
     personalMemoryTitle: 'Personal Memory',

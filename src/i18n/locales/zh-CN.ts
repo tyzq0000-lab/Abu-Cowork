@@ -122,7 +122,7 @@ const zhCN: TranslationDict = {
     nicknamePlaceholder: '输入你的昵称',
     avatar: '头像',
     changeAvatar: '更换头像',
-    defaultNickname: '阿布',
+    defaultNickname: '我',
     resetProfile: '恢复默认',
     personalMemory: '记忆',
     personalMemoryTitle: '记忆',
