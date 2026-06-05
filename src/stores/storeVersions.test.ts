@@ -17,6 +17,7 @@ const PERSISTED_STORES = [
   { key: 'abu-diagnostic-store', minVersion: 1 },
   { key: 'abu-usage-stats', minVersion: 2 },
   { key: 'abu-discovered-caps', minVersion: 1 },
+  { key: 'abu-todos', minVersion: 1 },
 ] as const;
 
 // Import all stores to trigger persist initialization
@@ -35,6 +36,7 @@ beforeAll(async () => {
   await import('./diagnosticStore');
   await import('./usageStatsStore');
   await import('./discoveredCapabilitiesStore');
+  await import('./todosStore');
 });
 
 describe('Store version compliance', () => {
