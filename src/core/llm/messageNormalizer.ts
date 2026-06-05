@@ -52,6 +52,31 @@ export interface NormalizeOptions {
 
 const ORPHAN_PLACEHOLDER = '[Tool execution was interrupted]';
 
+/**
+ * Tombstone for assistant turns that streamed nothing usable (no text, no
+ * tool_use, no thinking). Kept syntactically valid for all providers.
+ *
+ * Exported so callers can detect "the model just echoed our tombstone back" —
+ * a degenerate behavior that should be treated as no real output.
+ */
+export const EMPTY_RESPONSE_TOMBSTONE = '[未收到响应]';
+
+/**
+ * Did this assistant message produce real output worth keeping its reasoning
+ * trace for? Real = any tool_call, OR text that is non-empty AND isn't just
+ * the model echoing our own tombstone.
+ *
+ * The tombstone-echo case appears when a prior turn streamed empty, the
+ * normalizer injected EMPTY_RESPONSE_TOMBSTONE into the LLM context, and the
+ * model parroted it back verbatim in the next turn — a strong signal that the
+ * turn's thinking is degenerate and would re-prime the same loop if kept.
+ */
+function producedRealOutput(text: string, toolCallCount: number): boolean {
+  if (toolCallCount > 0) return true;
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed !== EMPTY_RESPONSE_TOMBSTONE;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 function getTextContent(content: string | MessageContent[]): string {
@@ -134,6 +159,29 @@ export function normalizeMessages(
   const supportsVision = options?.supportsVision !== false;
   const turns: PreparedTurn[] = [];
 
+  // Find the most-recent assistant turn whose thinking is worth re-feeding.
+  // Rule: it must HAVE thinking AND have produced real output (text or
+  // tool_call). All other assistant turns lose their thinking when sent to
+  // the LLM. This:
+  //   - Prevents cross-turn priming when a reasoning model loops in its
+  //     thinking trace and emits no text/tool_call (the failed turn's
+  //     thinking would otherwise re-trigger the same loop next time).
+  //   - Aligns with industry practice (OpenAI o-series doesn't return
+  //     reasoning at all; DeepSeek-R1 model card says not to include prior
+  //     <think> in multi-turn input).
+  //   - Saves 10-50% of context on long sessions.
+  let keepThinkingIdx = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== 'assistant' || !m.thinking) continue;
+    const text = getTextContent(m.content);
+    const toolCount = (m.toolCallsForContext?.length ?? m.toolCalls?.length ?? 0);
+    if (producedRealOutput(text, toolCount)) {
+      keepThinkingIdx = i;
+      break;
+    }
+  }
+
   for (let mi = 0; mi < messages.length; mi++) {
     const msg = messages[mi];
     if (msg.role === 'system') continue;
@@ -174,19 +222,22 @@ export function normalizeMessages(
         };
       });
 
+      const keepThinking = mi === keepThinkingIdx;
+
       // Ghost message: placeholder written to disk before any content arrived
-      // (network error, server error, or crash before streaming started).
-      // Replace with a tombstone so the turn stays syntactically valid for all
-      // providers — dropping it entirely would produce consecutive user messages,
-      // which Claude's API rejects.
-      const effectiveText = !text.trim() && preparedToolCalls.length === 0 && !msg.thinking
-        ? '[未收到响应]'
+      // (network error, server error, or crash before streaming started). Also
+      // covers reasoning-model loops that exhausted max_tokens with no text or
+      // tool_use — once we strip the degenerate thinking, those turns become
+      // truly empty too. Replace with a tombstone so the turn stays syntactically
+      // valid for all providers (Claude's API rejects consecutive user messages).
+      const effectiveText = !text.trim() && preparedToolCalls.length === 0 && !keepThinking
+        ? EMPTY_RESPONSE_TOMBSTONE
         : text;
 
       turns.push({
         kind: 'assistant',
         text: effectiveText,
-        thinking: msg.thinking,
+        thinking: keepThinking ? msg.thinking : undefined,
         toolCalls: preparedToolCalls,
       });
     }

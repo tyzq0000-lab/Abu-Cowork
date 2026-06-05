@@ -50,6 +50,120 @@ describe('messageNormalizer', () => {
       }
     });
 
+    describe('thinking strip (prevents cross-turn reasoning loops)', () => {
+      it('keeps thinking only on the most-recent assistant turn that produced output', () => {
+        const messages: Message[] = [
+          makeMessage({ role: 'user', content: 'Q1' }),
+          makeMessage({ role: 'assistant', content: 'A1', thinking: 'reasoning 1' }),
+          makeMessage({ role: 'user', content: 'Q2' }),
+          makeMessage({ role: 'assistant', content: 'A2', thinking: 'reasoning 2' }),
+        ];
+
+        const turns = normalizeMessages(messages);
+        // 4 turns total
+        expect(turns).toHaveLength(4);
+        // First assistant turn (idx 1) loses thinking
+        if (turns[1].kind === 'assistant') {
+          expect(turns[1].thinking).toBeUndefined();
+          expect(turns[1].text).toBe('A1');
+        }
+        // Most-recent assistant turn (idx 3) keeps thinking
+        if (turns[3].kind === 'assistant') {
+          expect(turns[3].thinking).toBe('reasoning 2');
+        }
+      });
+
+      it('strips thinking from latest assistant turn when it produced no text and no tool_use', () => {
+        // Simulates a reasoning-model loop that exhausted max_tokens with only
+        // repeated thinking output. The degenerate thinking must be stripped so
+        // it does not re-prime the same loop on the next API call.
+        const messages: Message[] = [
+          makeMessage({ role: 'user', content: 'Q1' }),
+          makeMessage({
+            role: 'assistant',
+            content: '',
+            thinking: '让我列所有文件。让我列所有文件。让我列所有文件。',
+          }),
+        ];
+
+        const turns = normalizeMessages(messages);
+        expect(turns).toHaveLength(2);
+        if (turns[1].kind === 'assistant') {
+          expect(turns[1].thinking).toBeUndefined();
+          // Tombstone restored since thinking is gone and turn is otherwise empty
+          expect(turns[1].text).toBe('[未收到响应]');
+        }
+      });
+
+      it('strips thinking when latest turn text is the echoed tombstone string', () => {
+        // The model parroted '[未收到响应]' from prior normalizer-injected
+        // history — same degenerate signal as an empty turn.
+        const messages: Message[] = [
+          makeMessage({ role: 'user', content: 'Q1' }),
+          makeMessage({
+            role: 'assistant',
+            content: '\n\n\n[未收到响应]',
+            thinking: 'looping reasoning',
+          }),
+        ];
+
+        const turns = normalizeMessages(messages);
+        if (turns[1].kind === 'assistant') {
+          expect(turns[1].thinking).toBeUndefined();
+        }
+      });
+
+      it('falls back to a prior output turn when later turns are empty', () => {
+        // Bug case shape: one healthy turn, then several degenerate-empty turns.
+        // The healthy turn's thinking should be preserved; the empty turns'
+        // thinking should be stripped.
+        const messages: Message[] = [
+          makeMessage({ role: 'user', content: 'Q1' }),
+          makeMessage({
+            role: 'assistant',
+            content: 'Real answer',
+            thinking: 'productive reasoning',
+          }),
+          makeMessage({ role: 'user', content: 'Q2' }),
+          makeMessage({
+            role: 'assistant',
+            content: '',
+            thinking: 'looping reasoning',
+          }),
+        ];
+
+        const turns = normalizeMessages(messages);
+        if (turns[1].kind === 'assistant') {
+          expect(turns[1].thinking).toBe('productive reasoning');
+        }
+        if (turns[3].kind === 'assistant') {
+          expect(turns[3].thinking).toBeUndefined();
+          expect(turns[3].text).toBe('[未收到响应]');
+        }
+      });
+
+      it('keeps thinking on a turn that has tool_calls but empty text', () => {
+        // tool_use alone is a valid "produced output" — its thinking is the
+        // reasoning that led to the tool call and is worth preserving.
+        const messages: Message[] = [
+          makeMessage({ role: 'user', content: 'Read a file' }),
+          makeMessage({
+            role: 'assistant',
+            content: '',
+            thinking: 'I should call read_file',
+            toolCallsForContext: [
+              { name: 'read_file', input: { path: '/a' }, result: 'content' },
+            ],
+          }),
+        ];
+
+        const turns = normalizeMessages(messages);
+        if (turns[1].kind === 'assistant') {
+          expect(turns[1].thinking).toBe('I should call read_file');
+        }
+      });
+    });
+
     describe('tool call pairing', () => {
       it('normalizes tool calls with results (from toolCallsForContext)', () => {
         const messages: Message[] = [
