@@ -218,6 +218,45 @@ describe('buildSystemPrompt - structure', () => {
   });
 });
 
+describe('buildSystemPrompt - employee skill gating', () => {
+  const basePrompt = '你叫阿布，测试用基础 prompt。';
+
+  it('shows an employee skill only when its owning employee is the active agent', async () => {
+    const { skillLoader } = await import('../skill/loader');
+    vi.mocked(skillLoader.getAvailableSkills).mockReturnValue([
+      { name: 'humanizer', description: '去AI味', source: 'employee' },
+      { name: 'novel-writer', description: '写小说', source: 'employee' },
+      { name: 'writing-helper', description: '通用写作', source: 'user' },
+    ] as never);
+
+    // Active agent = the content-creator employee, which owns only humanizer.
+    const route = {
+      ...routeInput('你好'),
+      name: 'content-creator',
+      definition: { name: 'content-creator', systemPrompt: '你是文爆爆', skills: ['humanizer'] },
+    };
+
+    const prompt = await buildSystemPrompt(route as never, basePrompt, 'test-conv');
+    expect(prompt).toContain('humanizer');        // owned employee skill → shown
+    expect(prompt).toContain('writing-helper');   // non-employee skill → always global
+    expect(prompt).not.toContain('novel-writer'); // another employee's skill → hidden
+  });
+
+  it('hides all employee skills for the default agent (owns no employee skills)', async () => {
+    const { skillLoader } = await import('../skill/loader');
+    vi.mocked(skillLoader.getAvailableSkills).mockReturnValue([
+      { name: 'humanizer', description: '去AI味', source: 'employee' },
+      { name: 'writing-helper', description: '通用写作', source: 'user' },
+    ] as never);
+
+    // routeInput('你好') resolves definition to the builtin abu (no skills),
+    // so ownedEmployeeSkills is empty and every employee skill is gated out.
+    const prompt = await buildSystemPrompt(routeInput('你好'), basePrompt, 'test-conv');
+    expect(prompt).toContain('writing-helper');
+    expect(prompt).not.toContain('humanizer');
+  });
+});
+
 describe('routeInput', () => {
   it('returns general route for plain text', () => {
     const result = routeInput('你好');

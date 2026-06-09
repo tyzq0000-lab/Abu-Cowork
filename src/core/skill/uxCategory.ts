@@ -31,6 +31,11 @@ export function sourceToUXCategory(source: SkillSource | undefined): SkillUXCate
     case 'draft':
       return 'agent-evolved';
     case 'builtin':
+    case 'employee':
+      // Employee-package skills are externally authored and read-only to the
+      // agent (same as bundled builtins), so they share the "builtin" bucket
+      // in the Toolbox. Per-agent context gating happens in the orchestrator,
+      // not here — this is purely the Toolbox display grouping.
       return 'builtin';
     case undefined:
       // Legacy skills loaded before `source` was populated. Treat as

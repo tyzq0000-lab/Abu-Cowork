@@ -412,6 +412,10 @@ export interface SkillHookEntry {
 //   5. user               — ~/.abu/skills/, user's personal global
 //   6. standard           — ~/.agents/skills/, cross-client global
 //   7. builtin            — bundled with Abu, read-only
+//   8. employee           — ~/.abu/employees/<pkg>/skills/, owned by a WorkBuddy
+//                           employee agent; read-only. Gated per-agent in the
+//                           orchestrator (only enters the L0 index when its
+//                           owning employee is the active agent).
 //
 // Agent is allowed to create/modify only `workspace-auto` and (with confirm) `user`
 // scopes — everything else is read-only to the agent (see PRD 2.4).
@@ -422,7 +426,8 @@ export type SkillSource =
   | 'project'
   | 'project-standard'
   | 'workspace-auto'
-  | 'draft';
+  | 'draft'
+  | 'employee';
 
 /**
  * User-facing skill categories surfaced in the Toolbox. This is a

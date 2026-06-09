@@ -598,8 +598,18 @@ ${isWindows()
     const allSkills = skillLoader.getAvailableSkills().filter(
       (s) => s.userInvocable !== false && !s.disableAutoInvoke
     );
-    const skills = allSkills.filter((s) => !disabledSkills.has(s.name));
-    const disabled = allSkills.filter((s) => disabledSkills.has(s.name));
+    // Employee-package skills (source === 'employee') belong to a specific
+    // WorkBuddy employee. They only enter the index when that employee is the
+    // active agent — gated by the agent's declared skill list
+    // (SubagentDefinition.skills). All other sources are always global. This
+    // stops one installed employee's skills from bloating another
+    // conversation's context (Phase B scope decision).
+    const ownedEmployeeSkills = new Set(route.definition?.skills ?? []);
+    const scopedSkills = allSkills.filter(
+      (s) => s.source !== 'employee' || ownedEmployeeSkills.has(s.name)
+    );
+    const skills = scopedSkills.filter((s) => !disabledSkills.has(s.name));
+    const disabled = scopedSkills.filter((s) => disabledSkills.has(s.name));
 
     if (skills.length > 0 || disabled.length > 0) {
       // Skills-guidance: per-proactivity prompt that tells the agent when

@@ -26,6 +26,13 @@ describe('sourceToUXCategory', () => {
     expect(sourceToUXCategory('builtin')).toBe('builtin');
   });
 
+  it('groups employee-package skills into "builtin" (external, read-only)', () => {
+    // Employee skills ship inside a WorkBuddy package the user installed; the
+    // agent can't edit them, same as bundled builtins, so they share the
+    // builtin Toolbox bucket. Per-agent context gating is orchestrator-side.
+    expect(sourceToUXCategory('employee')).toBe('builtin');
+  });
+
   it('treats undefined source as legacy "mine" (no source field yet)', () => {
     // Some older persisted skills may predate the source field.
     expect(sourceToUXCategory(undefined)).toBe('mine');

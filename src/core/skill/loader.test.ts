@@ -145,6 +145,57 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
     expect(drafts[0].content).toContain('Body content for pending-skill');
   });
 
+  it('discovers skills bundled in ~/.abu/employees/<pkg>/skills with source "employee"', async () => {
+    const empRoot = '/Users/testuser/.abu/employees';
+    const skillsDir = `${empRoot}/content-creator/skills`;
+    stubFs(
+      {
+        [empRoot]: ['content-creator'],
+        [skillsDir]: ['humanizer', 'novel-writer'],
+      },
+      {
+        [`${skillsDir}/humanizer/SKILL.md`]: SKILL_TEMPLATE('humanizer'),
+        [`${skillsDir}/novel-writer/SKILL.md`]: SKILL_TEMPLATE('novel-writer'),
+      },
+    );
+
+    const loader = new SkillLoader();
+    await loader.discoverSkills(null);
+
+    const all = loader.getAvailableSkills();
+    const humanizer = all.find((s) => s.name === 'humanizer');
+    const novel = all.find((s) => s.name === 'novel-writer');
+    expect(humanizer?.source).toBe('employee');
+    expect(novel?.source).toBe('employee');
+  });
+
+  it('first-win: a global user skill beats an employee skill of the same name', async () => {
+    // Employees are scanned last (lowest priority), so a user's own global
+    // skill of the same name wins — and stays source "user" (not gated).
+    const empRoot = '/Users/testuser/.abu/employees';
+    const skillsDir = `${empRoot}/content-creator/skills`;
+    stubFs(
+      {
+        '/Users/testuser/.abu/skills': ['humanizer'],
+        [empRoot]: ['content-creator'],
+        [skillsDir]: ['humanizer'],
+      },
+      {
+        '/Users/testuser/.abu/skills/humanizer/SKILL.md':
+          SKILL_TEMPLATE('humanizer').replace('Body content', 'USER'),
+        [`${skillsDir}/humanizer/SKILL.md`]:
+          SKILL_TEMPLATE('humanizer').replace('Body content', 'EMPLOYEE'),
+      },
+    );
+
+    const loader = new SkillLoader();
+    await loader.discoverSkills(null);
+
+    const shared = loader.getSkill('humanizer');
+    expect(shared!.content).toContain('USER');
+    expect(shared!.source).toBe('user');
+  });
+
   it('first-win: workspace skill beats global with same name', async () => {
     const workspace = '/Users/testuser/projects/myapp';
     stubFs(

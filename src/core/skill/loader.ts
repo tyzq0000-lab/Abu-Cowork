@@ -212,7 +212,33 @@ export class SkillLoader {
       await this.scanDirectory(path, source);
     }
 
+    // Employee-package skills: ~/.abu/employees/<pkg>/skills/<skill>/SKILL.md.
+    // Scanned last (lowest priority) so a user/builtin skill of the same name
+    // wins on collision. These are gated per-agent in the orchestrator via the
+    // owning employee's SubagentDefinition.skills list — they only enter the
+    // L0 index when their employee is the active agent.
+    await this.scanEmployeeSkills(joinPath(home, '.abu/employees'));
+
     return this.getAvailableSkills();
+  }
+
+  /**
+   * Scan WorkBuddy / CodeBuddy employee packages for bundled skills.
+   * Each package lives at <employeesRoot>/<pkg>/ and may ship a skills/
+   * directory whose children are standard SKILL.md skill folders. Reuses
+   * scanDirectory so collision/first-win semantics match the global scan.
+   */
+  private async scanEmployeeSkills(employeesRoot: string): Promise<void> {
+    try {
+      if (!(await exists(employeesRoot))) return;
+      const packages = await readDir(employeesRoot);
+      for (const pkg of packages) {
+        if (!pkg.isDirectory) continue;
+        await this.scanDirectory(joinPath(employeesRoot, pkg.name, 'skills'), 'employee');
+      }
+    } catch {
+      // Employees root unreadable — no employee skills.
+    }
   }
 
   /** Currently-active workspace path (null when discovered without one). */
