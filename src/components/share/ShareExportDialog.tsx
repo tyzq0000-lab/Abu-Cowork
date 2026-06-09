@@ -65,7 +65,7 @@ export default function ShareExportDialog({ convId, defaultFilename, onClose }: 
     try {
       const filePath = await saveDialog({
         defaultPath: defaultFilename,
-        filters: [{ name: 'Abu Conversation', extensions: ['json'] }],
+        filters: [{ name: 'Fuyao Conversation', extensions: ['json'] }],
       });
       if (filePath) {
         await writeTextFile(filePath, serializeShareBundle(state.bundle));

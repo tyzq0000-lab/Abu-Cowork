@@ -665,7 +665,7 @@ export default function MessageBubble({
       {/* ABU Avatar - 小布丁人 */}
       <div className="shrink-0 mt-0.5">
         <div className="w-7 h-7 rounded-full overflow-hidden">
-          <img src={abuAvatar} alt="Abu" className="w-full h-full object-cover" />
+          <img src={abuAvatar} alt={t.common.appName} className="w-full h-full object-cover" />
         </div>
       </div>
 

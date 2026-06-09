@@ -292,7 +292,7 @@ export default function ChatView() {
                 <>
                   {/* Mascot */}
                   <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden">
-                    <img src={abuAvatar} alt="Abu" className="w-full h-full object-cover" />
+                    <img src={abuAvatar} alt={t.common.appName} className="w-full h-full object-cover" />
                   </div>
 
                   {/* Slogan */}

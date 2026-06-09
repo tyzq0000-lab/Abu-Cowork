@@ -57,7 +57,7 @@ export default function CreateProjectDialog({
   // Get default projects directory
   useEffect(() => {
     homeDir().then((home) => {
-      setDefaultProjectsDir(joinPath(home, 'Documents', 'Abu', 'Projects'));
+      setDefaultProjectsDir(joinPath(home, 'Documents', 'Fuyao', 'Projects'));
     }).catch(() => {});
   }, []);
 

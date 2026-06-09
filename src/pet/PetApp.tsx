@@ -2,6 +2,7 @@ import abuAvatar from '@/assets/abu-avatar.png';
 import StatusLight from './StatusLight';
 import { useStatusLight } from './useStatusLight';
 import { usePetDrag } from './usePetDrag';
+import { useI18n } from '@/i18n';
 
 /**
  * Desktop pet root (Phase B).
@@ -18,6 +19,7 @@ import { usePetDrag } from './usePetDrag';
 export default function PetApp() {
   const dragRef = usePetDrag<HTMLDivElement>();
   const status = useStatusLight();
+  const { t } = useI18n();
 
   return (
     <div
@@ -35,7 +37,7 @@ export default function PetApp() {
     >
       <img
         src={abuAvatar}
-        alt="Abu"
+        alt={t.common.appName}
         draggable={false}
         style={{
           width: '100%',

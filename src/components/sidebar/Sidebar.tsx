@@ -598,7 +598,7 @@ export default function Sidebar() {
       {shareConvId && (
         <ShareExportDialog
           convId={shareConvId}
-          defaultFilename={`abu-conversation-${conversationIndex[shareConvId]?.title || shareConvId}.abu.json`}
+          defaultFilename={`fuyao-conversation-${conversationIndex[shareConvId]?.title || shareConvId}.abu.json`}
           onClose={() => setShareConvId(null)}
         />
       )}

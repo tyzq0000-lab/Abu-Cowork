@@ -25,9 +25,10 @@ function isSystemAgent(agent: SubagentDefinition): boolean {
 /** Render agent avatar: real image for abu, file-path image for employee
  *  packages (WorkBuddy `avatars/*.png`), emoji for everyone else. */
 function AgentAvatar({ agent, size = 'md' }: { agent: SubagentDefinition; size?: 'sm' | 'md' }) {
+  const { t } = useI18n();
   const cls = size === 'sm' ? 'h-5 w-5' : 'h-6 w-6';
   if (agent.name === 'abu') {
-    return <img src={abuAvatar} alt="Abu" className={`${cls} rounded-full object-cover`} />;
+    return <img src={abuAvatar} alt={t.common.appName} className={`${cls} rounded-full object-cover`} />;
   }
   if (isImageAvatarPath(agent.avatar)) {
     return <img src={convertFileSrc(agent.avatar!)} alt={agent.name} className={`${cls} rounded-full object-cover`} />;
@@ -37,7 +38,7 @@ function AgentAvatar({ agent, size = 'md' }: { agent: SubagentDefinition; size?:
 
 /** Display name: locale-aware. Falls back to canonical `name` if no override. */
 function displayName(agent: SubagentDefinition, locale: 'zh-CN' | 'en-US'): string {
-  if (agent.name === 'abu') return 'Abu';
+  if (agent.name === 'abu') return locale === 'zh-CN' ? '扶摇' : 'Fuyao';
   return agent.displayNames?.[locale] ?? agent.name;
 }
 

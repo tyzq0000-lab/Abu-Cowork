@@ -458,7 +458,7 @@ describe('SkillProposalCard · skill-patched notice (Task #41)', () => {
   it('renders a muted pill with the skill name and summary, no buttons', () => {
     renderPatched();
 
-    expect(screen.getByText('Abu patched skill')).toBeInTheDocument();
+    expect(screen.getByText('Fuyao patched skill')).toBeInTheDocument();
     expect(screen.getByText('weekly-digest')).toBeInTheDocument();
     expect(screen.getByText(/replace step 3 with fuzzy-match/)).toBeInTheDocument();
     // Read-only: no accept / reject / category buttons on patch cards.
@@ -473,7 +473,7 @@ describe('SkillProposalCard · skill-patched notice (Task #41)', () => {
     };
     renderPatched(noSummary);
 
-    expect(screen.getByText('Abu patched skill')).toBeInTheDocument();
+    expect(screen.getByText('Fuyao patched skill')).toBeInTheDocument();
     expect(screen.getByText('weekly-digest')).toBeInTheDocument();
     // No em-dash summary separator when summary is absent.
     expect(screen.queryByText(/—/)).not.toBeInTheDocument();
@@ -501,7 +501,7 @@ describe('SkillProposalCard · skill-deleted notice (Task #17 v2)', () => {
   it('renders "permanently removed" for workspace-auto deletes, no buttons', () => {
     renderDeleted({ source: 'workspace-auto', rescuable: false });
 
-    expect(screen.getByText('Abu deleted skill')).toBeInTheDocument();
+    expect(screen.getByText('Fuyao deleted skill')).toBeInTheDocument();
     expect(screen.getByText('weekly-digest')).toBeInTheDocument();
     expect(screen.getByText(/Permanently removed/)).toBeInTheDocument();
     expect(screen.queryByText(/Recoverable for 7 days/)).not.toBeInTheDocument();
