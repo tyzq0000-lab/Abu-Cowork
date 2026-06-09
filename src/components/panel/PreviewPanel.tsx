@@ -1,8 +1,8 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { readTextFile, exists } from '@tauri-apps/plugin-fs';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { getBaseName, loadLocalImage } from '@/utils/pathUtils';
+import { buildPreviewUrl } from '@/utils/previewUrl';
 import { usePreviewStore } from '@/stores/previewStore';
 import { useI18n } from '@/i18n';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -80,6 +80,7 @@ export default function PreviewPanel() {
   const { t } = useI18n();
   const [content, setContent] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [htmlPreviewUrl, setHtmlPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [htmlViewMode, setHtmlViewMode] = useState<'preview' | 'source'>('preview');
@@ -92,6 +93,7 @@ export default function PreviewPanel() {
     if (!previewFilePath) {
       setContent(null);
       setImageUrl(null);
+      setHtmlPreviewUrl(null);
       return;
     }
 
@@ -103,6 +105,7 @@ export default function PreviewPanel() {
       setError(null);
       setContent(null);
       setImageUrl(null);
+      setHtmlPreviewUrl(null);
 
       try {
         // Binary types and unsupported types don't need text reading from parent
@@ -132,9 +135,18 @@ export default function PreviewPanel() {
           if (cancelled) { URL.revokeObjectURL(blobUrl); blobUrl = null; return; }
           setImageUrl(blobUrl);
         } else {
+          // HTML and text-like types: read the source for the source-mode toggle.
+          // HTML preview mode also needs an iframe URL from the loopback server;
+          // fetched in parallel so both modes are ready when the user toggles.
           const text = await readTextFile(previewFilePath);
           if (cancelled) return;
           setContent(text);
+
+          if (rendererType === 'html') {
+            const url = await buildPreviewUrl(previewFilePath);
+            if (cancelled) return;
+            setHtmlPreviewUrl(url);
+          }
         }
       } catch (err) {
         if (cancelled) return;
@@ -263,12 +275,16 @@ export default function PreviewPanel() {
           </ScrollArea>
         ) : rendererType === 'html' ? (
           htmlViewMode === 'preview' ? (
-            <iframe
-              src={convertFileSrc(previewFilePath)}
-              title={fileName}
-              sandbox="allow-scripts"
-              className="w-full h-full border-0 bg-white"
-            />
+            htmlPreviewUrl ? (
+              <iframe
+                src={htmlPreviewUrl}
+                title={fileName}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                className="w-full h-full border-0 bg-white"
+              />
+            ) : (
+              <LazyFallback />
+            )
           ) : content !== null ? (
             <ScrollArea className="h-full bg-[#1e1e1e]">
               <SyntaxHighlighter
