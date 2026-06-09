@@ -2,9 +2,9 @@ import type { TranslationDict } from '../types';
 
 const enUS: TranslationDict = {
   common: {
-    appName: 'Abu',
-    appSlogan: 'Leave it to Abu',
-    windowTitle: '🍮 Abu - Leave it to Abu ✨',
+    appName: 'Fuyao',
+    appSlogan: 'Leave it to Fuyao',
+    windowTitle: '🍮 Fuyao - Leave it to Fuyao ✨',
     version: 'Version',
     close: 'Close',
     cancel: 'Cancel',

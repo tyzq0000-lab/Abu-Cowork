@@ -3,50 +3,6 @@
 version = 4
 
 [[package]]
-name = "abu"
-version = "0.23.1"
-dependencies = [
- "aes-gcm",
- "base64 0.22.1",
- "core-foundation 0.10.1",
- "core-foundation-sys",
- "enigo",
- "futures-util",
- "hkdf",
- "image",
- "keyring",
- "machine-uid",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-graphics",
- "prost",
- "rand 0.8.6",
- "reqwest 0.13.2",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-http",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-os",
- "tauri-plugin-process",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "tempfile",
- "tokio",
- "tokio-tungstenite",
- "windows 0.58.0",
- "xcap",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1692,6 +1648,50 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "fuyao"
+version = "0.23.1"
+dependencies = [
+ "aes-gcm",
+ "base64 0.22.1",
+ "core-foundation 0.10.1",
+ "core-foundation-sys",
+ "enigo",
+ "futures-util",
+ "hkdf",
+ "image",
+ "keyring",
+ "machine-uid",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-graphics",
+ "prost",
+ "rand 0.8.6",
+ "reqwest 0.13.2",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-http",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-os",
+ "tauri-plugin-process",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "windows 0.58.0",
+ "xcap",
 ]
 
 [[package]]

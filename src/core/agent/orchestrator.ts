@@ -14,7 +14,7 @@ import { getSkillsGuidance } from './prompts/skillsGuidance';
 import type { PromptSection } from '../llm/promptSections';
 import { sectionsToString } from '../llm/promptSections';
 
-const DEFAULT_PERSONA = '你叫阿布，是一个专业靠谱的桌面助手。回复友好简洁。';
+const DEFAULT_PERSONA = '你叫扶摇，是一个专业靠谱的桌面助手。回复友好简洁。';
 
 // Planning instruction - AI must call report_plan for complex tasks, but simple questions can be answered directly
 const PLANNING_INSTRUCTION = `
@@ -551,7 +551,7 @@ ${isWindows()
 
 ### 操作规范
 - 当用户说"打开XX"、"帮我播放XX"等，要实际操作，不要只回复教程
-- **键盘输入（type/key）前，必须先 click 目标窗口或输入框**，确保焦点正确。阿布窗口隐藏后系统焦点不一定在目标应用上
+- **键盘输入（type/key）前，必须先 click 目标窗口或输入框**，确保焦点正确。扶摇窗口隐藏后系统焦点不一定在目标应用上
 - 点击按钮优于键盘输入：如计算器的数字按钮，直接 click 按钮坐标比 type 文字更可靠
 - 没有截屏验证的操作不能说"已完成"
 - 操作没生效时分析原因重试，不假装成功

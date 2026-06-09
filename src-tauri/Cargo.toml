@@ -1,12 +1,12 @@
 [package]
-name = "abu"
+name = "fuyao"
 version = "0.23.1"
-description = "ABU - AI Desktop Assistant"
+description = "扶摇 (Fuyao) - AI Desktop Assistant · uprow"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "abu_lib"
+name = "fuyao_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

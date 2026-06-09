@@ -421,7 +421,7 @@ function App() {
   // Hide native title bar text on macOS (overlay mode — title shown in sidebar instead)
   // On Windows, show app name in native title bar
   useEffect(() => {
-    getCurrentWindow().setTitle(isMacOS() ? '' : 'Abu');
+    getCurrentWindow().setTitle(isMacOS() ? '' : '扶摇');
   }, []);
 
   // macOS uses overlay title bar (content behind traffic lights); Windows uses native title bar
