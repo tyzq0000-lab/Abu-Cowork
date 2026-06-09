@@ -8,7 +8,9 @@ import AgentEditor from './AgentEditor';
 import { Toggle } from '@/components/ui/toggle';
 import { ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2, MessageCircle, Eye, Code, Search, Plus, X, Wand2, PenLine, Upload, Check } from 'lucide-react';
 import { remove } from '@tauri-apps/plugin-fs';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { getParentDir } from '@/utils/pathUtils';
+import { isImageAvatarPath } from '@/core/agent/employeeLoader';
 import type { SubagentDefinition } from '@/types';
 import MarkdownRenderer from '@/components/chat/MarkdownRenderer';
 import abuAvatar from '@/assets/abu-avatar.png';
@@ -20,11 +22,15 @@ function isSystemAgent(agent: SubagentDefinition): boolean {
   return agent.filePath === '__builtin__';
 }
 
-/** Render agent avatar: use real image for abu, emoji for others */
+/** Render agent avatar: real image for abu, file-path image for employee
+ *  packages (WorkBuddy `avatars/*.png`), emoji for everyone else. */
 function AgentAvatar({ agent, size = 'md' }: { agent: SubagentDefinition; size?: 'sm' | 'md' }) {
   const cls = size === 'sm' ? 'h-5 w-5' : 'h-6 w-6';
   if (agent.name === 'abu') {
     return <img src={abuAvatar} alt="Abu" className={`${cls} rounded-full object-cover`} />;
+  }
+  if (isImageAvatarPath(agent.avatar)) {
+    return <img src={convertFileSrc(agent.avatar!)} alt={agent.name} className={`${cls} rounded-full object-cover`} />;
   }
   return <span className={size === 'sm' ? 'text-base' : 'text-xl'}>{agent.avatar || '🤖'}</span>;
 }
@@ -50,6 +56,9 @@ function localizedSamplePrompts(agent: SubagentDefinition, locale: 'zh-CN' | 'en
 }
 function localizedTags(agent: SubagentDefinition, locale: 'zh-CN' | 'en-US'): string[] | undefined {
   return agent.tagsI18n?.[locale] ?? agent.tags;
+}
+function localizedProfession(agent: SubagentDefinition, locale: 'zh-CN' | 'en-US'): string | undefined {
+  return agent.professionI18n?.[locale] ?? agent.profession;
 }
 
 interface AgentsSectionProps {
@@ -184,6 +193,11 @@ export default function AgentsSection({ manualCreateTrigger, onAICreate, onManua
             }`}>
               {displayName(agent, locale)}
             </div>
+            {localizedProfession(agent, locale) && (
+              <div className="text-[11px] text-[var(--abu-text-muted)] truncate mt-0.5">
+                {localizedProfession(agent, locale)}
+              </div>
+            )}
             {tags && tags.length > 0 && (
               <div className="flex items-center gap-1 mt-0.5 overflow-hidden">
                 {tags.slice(0, 2).map((tag) => (
@@ -354,7 +368,12 @@ export default function AgentsSection({ manualCreateTrigger, onAICreate, onManua
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-3 min-w-0">
                 <span className="shrink-0"><AgentAvatar agent={selected} /></span>
-                <h2 className="text-xl font-semibold text-[var(--abu-text-primary)] truncate" title={displayName(selected, locale)}>{displayName(selected, locale)}</h2>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-semibold text-[var(--abu-text-primary)] truncate" title={displayName(selected, locale)}>{displayName(selected, locale)}</h2>
+                  {localizedProfession(selected, locale) && (
+                    <div className="text-xs text-[var(--abu-text-muted)] truncate">{localizedProfession(selected, locale)}</div>
+                  )}
+                </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {selected.name !== 'abu' && (
@@ -378,8 +397,11 @@ export default function AgentsSection({ manualCreateTrigger, onAICreate, onManua
                       onChange={() => toggleAgentEnabled(selected.name)}
                     />
                     {/* "..." menu — only for user agents (edit / delete). Builtin
-                     *  agents have nothing manageable here so the button collapses. */}
-                    {!isSystemAgent(selected) && (
+                     *  agents have nothing manageable here so the button collapses.
+                     *  Employee packages are read-only imports (plugin.json format,
+                     *  not AGENT.md) — editing would diverge and delete would only
+                     *  remove the .codebuddy-plugin/ subdir, so hide the menu too. */}
+                    {!isSystemAgent(selected) && selected.source !== 'employee' && (
                       <div className="relative">
                         <button
                           onClick={(e) => { e.stopPropagation(); setMenuAgent(menuAgent === selected.name ? null : selected.name); }}

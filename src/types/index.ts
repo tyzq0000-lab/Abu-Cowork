@@ -516,6 +516,15 @@ export interface SubagentMetadata {
   /** Short tags shown as chips in toolbox list / agent selector. */
   tags?: string[];
   tagsI18n?: Partial<Record<AgentLocale, string[]>>;
+  /** Job title shown as a subtitle under the name (e.g. "内容创作专家").
+   *  Distinct from `description` (a longer blurb) and `category` (a grouping slug).
+   *  Populated from WorkBuddy-style employee packages; builtins may leave it empty. */
+  profession?: string;
+  professionI18n?: Partial<Record<AgentLocale, string>>;
+  /** Where this agent came from. `employee` = imported from an external
+   *  `.codebuddy-plugin` package under ~/.abu/employees/. Absent for the
+   *  built-in personas and hand-written AGENT.md agents. */
+  source?: 'builtin' | 'user' | 'project' | 'employee';
 }
 
 export interface SubagentDefinition extends SubagentMetadata {

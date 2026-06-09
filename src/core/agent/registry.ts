@@ -3,6 +3,7 @@ import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
 import { homeDir, resolve, resolveResource } from '@tauri-apps/api/path';
 import type { SubagentDefinition, SubagentMetadata } from '../../types';
 import { joinPath } from '../../utils/pathUtils';
+import { scanEmployees } from './employeeLoader';
 
 /**
  * Parse an AGENT.md file: YAML frontmatter + system prompt body
@@ -73,6 +74,17 @@ export class AgentRegistry {
 
     for (const dir of dirs) {
       await this.scanDirectory(dir);
+    }
+
+    // Employee packages: WorkBuddy / CodeBuddy `.codebuddy-plugin` format under
+    // ~/.abu/employees/. Loaded last so an explicitly-installed expert package
+    // takes precedence over a same-named builtin or hand-written AGENT.md.
+    const employees = await scanEmployees(joinPath(home, '.abu/employees'));
+    for (const emp of employees) {
+      // Never let a dropped-in package clobber the default fallback agent —
+      // 'abu' is the routing default and must always resolve to the builtin.
+      if (emp.name === 'abu') continue;
+      this.agents.set(emp.name, emp);
     }
 
     return this.getAvailableAgents();
