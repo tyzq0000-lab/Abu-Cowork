@@ -14,7 +14,13 @@
   - `src-tauri/tauri.conf.json` → `plugins.deep-link.desktop.schemes: ["fuyao"]`
   - `src-tauri/Cargo.toml` → `+ tauri-plugin-deep-link = "2"`;`src-tauri/src/lib.rs` → `+ .plugin(tauri_plugin_deep_link::init())`
   - `src-tauri/capabilities/default.json` → `+ "deep-link:default"`;`gen/schemas/*` 已随之重生成
-  - ⚠️ **前端尚未实现"收到 deep-link → 加载 skill"的处理逻辑**——这是下一步。目标格式 `fuyao://load?skillId=xxx`。
+- **deep-link 接收逻辑已实现**(平台下载+安装模式,用户选定):
+  - **协议契约**:`fuyao://install?type=employee|skill&url=<encoded zip URL>&name=<显示名>`。`url` 域名白名单见 `src/core/deeplink/parser.ts` 的 `ALLOWED_DOWNLOAD_HOSTS`(现仅 OSS 域;http 仅放行 localhost/127.0.0.1 供本地调试);uprow 平台域名上线后在该常量追加。
+  - 链路:`src/core/deeplink/index.ts`(onOpenUrl 入口,去重+唤窗)→ `parser.ts`(校验)→ `DeepLinkInstallDialog.tsx`(确认弹窗)→ `installer.ts`(plugin-http 下载 → fflate 解压校验 → 落盘 `~/.abu/employees|skills/`,覆盖式部署)→ `discoveryStore.refresh()` + toast。
+  - Rust:`tauri-plugin-single-instance`(deep-link feature,二次启动转发 URL);debug 构建 `register_all()` 运行时注册 scheme(会把 HKCU 的 fuyao 协议指到 dev exe,装正式包后会被重新覆盖)。
+  - capabilities 给 `$HOME/.abu/employees/*/.codebuddy-plugin(/**)` 补了 fs 白名单(Tauri glob 默认不匹配点前缀目录)。
+  - 员工包解压兼容 Windows 反斜杠 zip 条目(PowerShell Compress-Archive 产物)。
+  - **已真机 e2e 验证**(2026-06-12,Windows dev):本地 zip 服务 → 链接触发 → 弹窗 → 确认 → 完整落盘(含点目录)。踩坑记录:① App 启动 effect 里注册监听器**不能加模块级 started 守卫**——StrictMode 双挂载会让唯一监听器被 cleanup 注销(已修);② single-instance 的 deep-link 自动触发之外,回调里还手动 emit 了一次 `deep-link://new-url` 兜底,前端 3s 去重窗口吸收双投递。
 - **Windows 安装包已产出**:`src-tauri/target/release/bundle/nsis/扶摇_0.23.1_x64-setup.exe`(11.5 MB)。
 - **保留不动的技术标识符**(品牌只改展示文案,不动这些):`com.abu.app`(bundle id)、`~/.abu/`(数据目录)、`.abu.json`(分享格式后缀)、`ABU.md`(项目规则文件名)。
 
@@ -51,6 +57,11 @@
 - 环境:有 **GateGuard 钩子**会在每个文件首次编辑/首条 Bash 前要求"陈述事实",首次触发后照常重试即过。
 
 ## 7. 下一步抓手
-1. **deep-link 接收逻辑**:监听 `tauri-plugin-deep-link` 的 open-url 事件 → 解析 `fuyao://load?skillId=xxx` → 路由到加载/激活对应 skill(前端 + 必要的 Rust 侧 single-instance 处理)。
-2. **版本更新发版管线**:签名私钥经 CI 注入、产 updater 产物、发 `latest.json` 到 endpoint;按需把 endpoint/pubkey 迁到 uprow 品牌域名。
+1. **版本更新发版管线**:签名私钥经 CI 注入、产 updater 产物、发 `latest.json` 到 endpoint;按需把 endpoint/pubkey 迁到 uprow 品牌域名。(用户决定:等功能/UI 调整完、形成新版本后一并做。)
+2. **deep-link 后续**:uprow 平台下载 API 上线后,把正式域名加进 `ALLOWED_DOWNLOAD_HOSTS`;平台侧"部署到桌面端"按钮生成 `fuyao://install?...` 链接即可打通。
 3. 用户后续的功能/UI 调整。
+
+## 8. 数字员工"开箱为空"约定
+- 安装包**不含**任何员工包(resources 只有 builtin-skills/builtin-agents(空)/python-runtime/browser-extension);全新机器装包后员工列表本来就是空的,由企业用户在平台雇佣后经 deep-link 部署进来。
+- 本机曾有两个测试包(content-creator→文爆爆、new-media-ops→运小运)在 `~/.abu/employees/`,2026-06-11 已移到 `~/.abu/employees.bak/`(确认无误可删)。注意安装版与 dev 版共用 `~/.abu/`。
+- `registry.ts` 仍内置 5 个示例人格(高级开发工程师/产品经理/数据分析师/公众号编辑/HR 招聘官)——用户选择保留作开箱体验,与"员工包为空"不冲突。

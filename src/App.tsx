@@ -57,6 +57,8 @@ import { getPendingWorkspaceRequest, resolveWorkspaceRequest, subscribeToWorkspa
 import { startBehaviorSensor, stopBehaviorSensor } from '@/core/agent/behaviorSensor';
 import { useI18n } from '@/i18n';
 import CloseDialog from '@/components/common/CloseDialog';
+import DeepLinkInstallDialog from '@/components/common/DeepLinkInstallDialog';
+import { initDeepLink } from '@/core/deeplink';
 import SensitiveAuditDialog from '@/components/settings/SensitiveAuditDialog';
 import { checkForUpdate } from '@/core/updates/checker';
 import { sendConsolePing } from '@/utils/consolePing';
@@ -143,6 +145,20 @@ function App() {
         if (cancelled) fn();
         else unlistenFn = fn;
       });
+    return () => {
+      cancelled = true;
+      unlistenFn?.();
+    };
+  }, []);
+
+  // Deep link (fuyao://) — receive install requests from the uprow platform
+  useEffect(() => {
+    let unlistenFn: (() => void) | null = null;
+    let cancelled = false;
+    initDeepLink().then((fn) => {
+      if (cancelled) fn?.();
+      else unlistenFn = fn;
+    });
     return () => {
       cancelled = true;
       unlistenFn?.();
@@ -503,6 +519,10 @@ function App() {
         <RightPanel />
 
         <ToastContainer />
+
+        {/* fuyao://install deep-link confirm dialog — renders off
+            deepLinkStore.pending, staged by initDeepLink(). */}
+        <DeepLinkInstallDialog />
 
         <CloseDialog
           open={showCloseDialog}

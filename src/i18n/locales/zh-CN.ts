@@ -1687,6 +1687,22 @@ const zhCN: TranslationDict = {
     heatmapLegendLess: '少',
     heatmapLegendMore: '多',
   },
+
+  deepLink: {
+    invalidLinkTitle: '无法处理链接',
+    invalidLink: '链接格式无效或不受支持',
+    unsupportedSource: '下载来源不在信任列表中，已拦截',
+    installTitle: '部署确认',
+    installEmployeeMessage: '将从 {host} 下载「{name}」并部署为数字员工。已存在的同名员工会被更新。',
+    installSkillMessage: '将从 {host} 下载「{name}」并安装为技能。已存在的同名技能会被覆盖。',
+    unnamedPackage: '未命名包',
+    installConfirm: '下载并部署',
+    installingTitle: '正在下载部署…',
+    installSuccessTitle: '部署成功',
+    installSuccessEmployee: '数字员工「{name}」已加载，可在对话中 @ 调用',
+    installSuccessSkill: '技能「{name}」已安装',
+    installFailedTitle: '部署失败',
+  },
 };
 
 export default zhCN;

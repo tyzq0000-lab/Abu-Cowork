@@ -36,6 +36,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin/**" },
         { "path": "$HOME/**/.abu" },
         { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
@@ -53,6 +55,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin/**" },
         { "path": "$HOME/**/.abu" },
         { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
@@ -83,6 +87,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin/**" },
         { "path": "$HOME/**/.abu" },
         { "path": "$HOME/**/.abu/**" },
         { "path": "/tmp/**" },
@@ -117,6 +123,8 @@
       "allow": [
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin/**" },
         { "path": "$HOME/**/.abu" },
         { "path": "$HOME/**/.abu/**" },
         { "path": "$RESOURCE/**" },
@@ -136,6 +144,8 @@
         { "path": "$HOME/**" },
         { "path": "$HOME/.abu" },
         { "path": "$HOME/.abu/**" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin" },
+        { "path": "$HOME/.abu/employees/*/.codebuddy-plugin/**" },
         { "path": "$HOME/.abu/**/.trash" },
         { "path": "$HOME/.abu/**/.trash/**" },
         { "path": "$HOME/**/.abu" },

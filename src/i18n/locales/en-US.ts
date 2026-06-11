@@ -1686,6 +1686,22 @@ const enUS: TranslationDict = {
     heatmapLegendLess: 'Less',
     heatmapLegendMore: 'More',
   },
+
+  deepLink: {
+    invalidLinkTitle: 'Cannot handle link',
+    invalidLink: 'The link is malformed or unsupported',
+    unsupportedSource: 'Download source is not in the trusted list — blocked',
+    installTitle: 'Confirm deployment',
+    installEmployeeMessage: 'Download "{name}" from {host} and deploy it as a digital employee. An existing employee with the same name will be updated.',
+    installSkillMessage: 'Download "{name}" from {host} and install it as a skill. An existing skill with the same name will be overwritten.',
+    unnamedPackage: 'Unnamed package',
+    installConfirm: 'Download & Deploy',
+    installingTitle: 'Downloading & deploying…',
+    installSuccessTitle: 'Deployed',
+    installSuccessEmployee: 'Digital employee "{name}" is ready — @mention it in chat',
+    installSuccessSkill: 'Skill "{name}" installed',
+    installFailedTitle: 'Deployment failed',
+  },
 };
 
 export default enUS;

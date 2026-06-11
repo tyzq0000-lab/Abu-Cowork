@@ -1202,6 +1202,24 @@ fn update_tray_notice_count(app: AppHandle, count: u32) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // single-instance must be the first plugin so a second launch
+        // (e.g. the OS opening a fuyao:// link while we're running) is
+        // forwarded here and exits before doing any other work. The
+        // "deep-link" feature re-emits forwarded URLs as deep-link events.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            #[cfg(debug_assertions)]
+            eprintln!("[single-instance] forwarded args: {args:?}");
+            // The plugin's deep-link feature is supposed to re-emit forwarded
+            // URLs, but per its own docs runtime-registered schemes must be
+            // checked from argv manually — do it explicitly so the warm path
+            // works in both dev (register_all) and installed builds. The JS
+            // handler dedups if both paths deliver.
+            if let Some(url) = args.iter().skip(1).find(|a| a.starts_with("fuyao://")) {
+                use tauri::Emitter;
+                let _ = app.emit("deep-link://new-url", vec![url.clone()]);
+            }
+            show_main_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -1216,6 +1234,20 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(McpState::default())
         .setup(|app| {
+            // Dev builds aren't installed, so the fuyao:// scheme isn't in
+            // the OS registry yet — register it at runtime so deep links can
+            // be tested without an installer. Windows/Linux only (macOS only
+            // supports Info.plist registration at install time). Note: this
+            // points HKCU\Software\Classes\fuyao at the dev binary until the
+            // installed app re-registers it.
+            #[cfg(all(debug_assertions, any(windows, target_os = "linux")))]
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("[deep-link] runtime scheme registration failed: {}", e);
+                }
+            }
+
             // Initialize encrypted secret storage. On macOS the ciphertext
             // file lives in app_data_dir (created lazily); on Windows/Linux
             // the path is unused because storage is OS-managed.

@@ -40,6 +40,12 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 rusqlite = { version = "0.31", features = ["bundled"] }
 
+# Desktop-only: forward a second launch's argv (e.g. clicking a fuyao:// link
+# while the app is running) to the primary instance; the deep-link feature
+# re-emits forwarded URLs as deep-link events.
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSResponder", "NSWorkspace", "NSRunningApplication", "NSPasteboard", "NSPasteboardItem"] }

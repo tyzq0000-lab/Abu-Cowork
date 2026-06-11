@@ -1717,4 +1717,26 @@ export interface TranslationDict {
     rulesTruncated: string;
     rulesNotModifiable: string;
   };
+
+  // Deep link (fuyao://) install flow
+  deepLink: {
+    invalidLinkTitle: string;
+    invalidLink: string;
+    unsupportedSource: string;
+    installTitle: string;
+    /** "{name} 将从 {host} 下载并部署为数字员工…" */
+    installEmployeeMessage: string;
+    /** "{name} 将从 {host} 下载并安装为技能…" */
+    installSkillMessage: string;
+    /** Fallback when the link carries no display name */
+    unnamedPackage: string;
+    installConfirm: string;
+    installingTitle: string;
+    installSuccessTitle: string;
+    /** "数字员工 {name} 已加载" */
+    installSuccessEmployee: string;
+    /** "技能 {name} 已安装" */
+    installSuccessSkill: string;
+    installFailedTitle: string;
+  };
 }
