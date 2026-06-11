@@ -35,6 +35,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["fuyao"]
+      }
+    },
     "shell": {
       "open": true
     },
