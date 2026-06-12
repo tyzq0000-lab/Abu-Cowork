@@ -170,6 +170,36 @@ describe('deeplink installer', () => {
       ]);
     });
 
+    it('extracts modelConfig and blanks api keys in the on-disk plugin.json', () => {
+      const withModel = JSON.stringify({
+        ...JSON.parse(PLUGIN_JSON),
+        modelConfig: {
+          provider: {
+            apiFormat: 'openai-compatible',
+            baseUrl: 'https://api.example.com/v1',
+            model: 'deepseek-v3',
+            apiKey: 'sk-maker-secret',
+          },
+          imageGen: { baseUrl: 'https://img.example.com', model: 'img-1', apiKey: 'sk-img-secret' },
+        },
+      });
+      const plan = planEmployeeUnpack(
+        entriesOf({
+          '.codebuddy-plugin/plugin.json': withModel,
+          'agents/new-media-ops.md': 'prompt',
+        }),
+      );
+
+      // Live config (with key) is surfaced to the installer…
+      expect(plan.modelConfig?.provider.apiKey).toBe('sk-maker-secret');
+      // …but the bytes written to disk carry blanked keys only.
+      const manifestEntry = plan.files.find((f) => f.path === '.codebuddy-plugin/plugin.json')!;
+      const onDisk = new TextDecoder().decode(manifestEntry.data);
+      expect(onDisk).not.toContain('sk-maker-secret');
+      expect(onDisk).not.toContain('sk-img-secret');
+      expect(JSON.parse(onDisk).modelConfig.provider.model).toBe('deepseek-v3');
+    });
+
     it('rejects oversized files', () => {
       const big = new Uint8Array(10 * 1024 * 1024 + 1);
       expect(() =>

@@ -7,6 +7,7 @@ import type { PermissionMode } from '../core/permissions/permissionMode';
 import type { WebSearchProviderType } from '../core/search/providers';
 import { setLanguage, initLanguage, type LanguageSetting } from '@/i18n';
 import type { UpdateInfo } from '@/core/updates/checker';
+import { employeeProviderId, type EmployeeModelConfig } from '@/core/employee/contract';
 import {
   SECRET_KEYS,
   getSecret,
@@ -416,6 +417,12 @@ interface SettingsActions {
   // ── Auxiliary services ──
   setAuxiliaryWebSearch: (config: AuxiliaryServices['webSearch']) => void;
   setAuxiliaryImageGen: (config: AuxiliaryServices['imageGen']) => void;
+  /**
+   * Register/update the dedicated provider injected by an employee package's
+   * modelConfig (deep-link install). Key goes to the encrypted secret store;
+   * the provider is hidden from the AI-services UI and global model picks.
+   */
+  upsertEmployeeProvider: (agentName: string, config: EmployeeModelConfig) => string;
 
   // ── General settings actions (unchanged) ──
   setTheme: (theme: 'dark' | 'light') => void;
@@ -508,13 +515,15 @@ export function reconcileActiveProvider(
   state: Pick<SettingsState, 'providers' | 'activeModel'>
 ): void {
   const activeProvider = state.providers.find(
-    p => p.id === state.activeModel.providerId
+    p => p.id === state.activeModel.providerId && p.source !== 'employee'
   );
   if (!activeProvider) {
+    // Employee-injected providers are never eligible as the global active
+    // provider — they exist only for their owning employee's conversations.
     const fallback =
       state.providers.find(
-        p => p.enabled && (p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio')
-      ) ?? state.providers.find(p => p.enabled);
+        p => p.source !== 'employee' && p.enabled && (p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio')
+      ) ?? state.providers.find(p => p.source !== 'employee' && p.enabled);
     if (fallback) {
       state.activeModel = {
         providerId: fallback.id,
@@ -535,6 +544,7 @@ export function reconcileActiveProvider(
   const fallback = state.providers.find(
     p =>
       p.id !== activeProvider.id &&
+      p.source !== 'employee' &&
       p.enabled &&
       (p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio')
   );
@@ -604,9 +614,48 @@ export function getAllEnabledModels(state: SettingsState): Array<{
   model: ModelInfo;
 }> {
   return state.providers
-    .filter(p => p.enabled)
+    .filter(p => p.enabled && p.source !== 'employee')
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .flatMap(p => p.models.map(m => ({ provider: p, model: m })));
+}
+
+// ============================================================
+// Employee dedicated providers (modelConfig injection)
+// ============================================================
+
+export interface AgentExecutionTarget {
+  provider: ProviderInstance;
+  modelId: string;
+}
+
+/**
+ * Resolve which provider+model an agent's conversation should run on.
+ *
+ * 1. Agent carries a providerId pointing at a usable employee-injected
+ *    provider → use it with the agent's declared model.
+ * 2. Otherwise fall back to the existing semantics: resolveAgentModel for
+ *    the model id, the global active provider for transport/key. A broken
+ *    employee provider (missing, disabled, key failed to decrypt) degrades
+ *    to the global provider instead of breaking the conversation.
+ */
+export function resolveAgentExecution(
+  agent: { model?: string; providerId?: string } | undefined,
+  state: SettingsState,
+): AgentExecutionTarget | null {
+  if (agent?.providerId) {
+    const dedicated = state.providers.find(
+      p => p.id === agent.providerId && p.source === 'employee' && p.enabled,
+    );
+    if (dedicated && dedicated.apiKey.trim().length > 0) {
+      return {
+        provider: dedicated,
+        modelId: agent.model || dedicated.defaultModelId || dedicated.models[0]?.id || state.activeModel.modelId,
+      };
+    }
+  }
+  const provider = getActiveProvider(state);
+  if (!provider) return null;
+  return { provider, modelId: resolveAgentModel(agent?.model, state) };
 }
 
 // ============================================================
@@ -863,6 +912,49 @@ export const useSettingsStore = create<SettingsStore>()(
         );
       },
 
+      upsertEmployeeProvider: (agentName, config) => {
+        const id = employeeProviderId(agentName);
+        const cleanBaseUrl = config.provider.baseUrl.trim();
+        const cleanApiKey = (config.provider.apiKey ?? '').trim();
+        set((s) => {
+          const existing = s.providers.find(p => p.id === id);
+          const next: ProviderInstance = {
+            id,
+            source: 'employee',
+            name: agentName,
+            enabled: true,
+            apiFormat: config.provider.apiFormat,
+            baseUrl: cleanBaseUrl,
+            apiKey: cleanApiKey,
+            models: [{ id: config.provider.model, label: config.provider.model }],
+            defaultModelId: config.provider.model,
+            status: 'unchecked',
+            sortOrder: existing?.sortOrder ?? s.providers.length,
+          };
+          return {
+            providers: existing
+              ? s.providers.map(p => (p.id === id ? next : p))
+              : [...s.providers, next],
+          };
+        });
+        fafSecret(
+          writeSecretOrDelete(SECRET_KEYS.provider(id), cleanApiKey),
+          `upsertEmployeeProvider(${id})`,
+        );
+        // Backfill the global image-gen service only when the user hasn't
+        // configured one — never clobber an explicit user choice. Per-agent
+        // image-gen routing is a tracked follow-up.
+        const st = useSettingsStore.getState();
+        if (config.imageGen?.apiKey && !st.auxiliaryServices.imageGen?.apiKey) {
+          st.setAuxiliaryImageGen({
+            baseUrl: config.imageGen.baseUrl ?? '',
+            apiKey: config.imageGen.apiKey,
+            model: config.imageGen.model ?? '',
+          });
+        }
+        return id;
+      },
+
       // ════════════════════════════════════════════════
       // General settings actions (unchanged)
       // ════════════════════════════════════════════════
@@ -987,9 +1079,28 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'abu-settings',
-      version: 32,
+      version: 33,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>;
+
+        // ════════════════════════════════════════════════
+        // V33: ProviderSource union gains 'employee' (dedicated providers
+        // injected by employee packages). Defensive cleanup: a downgrade/
+        // upgrade cycle could leave employee providers without their secret
+        // — they are re-created on next employee deploy, so drop unknowns.
+        // ════════════════════════════════════════════════
+        if (version < 33) {
+          try {
+            const providers = state.providers;
+            if (Array.isArray(providers)) {
+              state.providers = providers.filter(
+                (p) => (p as { source?: string }).source !== 'employee',
+              );
+            }
+          } catch (err) {
+            console.error('[settingsStore] V33 migration failed:', err);
+          }
+        }
 
         // ════════════════════════════════════════════════
         // V32: Add preventSleep setting (default false — opt-in only).

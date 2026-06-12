@@ -12,7 +12,7 @@
  * writes so it can be unit-tested without Tauri.
  */
 
-import { unzipSync, strFromU8 } from 'fflate';
+import { strToU8, strFromU8, unzipSync } from 'fflate';
 import { DATA_DIR_NAME } from '@/core/branding';
 import { fetch } from '@tauri-apps/plugin-http';
 import { writeFile, mkdir, exists, remove } from '@tauri-apps/plugin-fs';
@@ -23,8 +23,10 @@ import {
   auditEmployeePackage,
   parseEmployeePlugin,
   type EmployeeAuditReport,
+  type EmployeeModelConfig,
   type EmployeeRuntimeProfile,
 } from '@/core/employee/contract';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { validateArchive, unpackSkill } from '@/core/skill/packager';
 import type { DeepLinkInstallRequest } from './parser';
 
@@ -73,6 +75,7 @@ export interface EmployeeUnpackPlan {
   name: string;
   /** Files to write, paths relative to the package root. */
   files: Array<{ path: string; data: Uint8Array }>;
+  modelConfig?: EmployeeModelConfig;
   runtimeProfile?: EmployeeRuntimeProfile;
   audit: EmployeeAuditReport;
 }
@@ -151,9 +154,30 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
     files: files.map((file) => file.path),
   });
 
+  // Never persist maker API keys to disk: rewrite the on-disk plugin.json
+  // with blanked keys. The live key is handed to the encrypted secret store
+  // by the install step (upsertEmployeeProvider).
+  const modelConfig = manifest?.modelConfig;
+  if (modelConfig && (modelConfig.provider.apiKey || modelConfig.imageGen?.apiKey)) {
+    const sanitized = {
+      ...manifest,
+      modelConfig: {
+        ...modelConfig,
+        provider: { ...modelConfig.provider, apiKey: '' },
+        ...(modelConfig.imageGen ? { imageGen: { ...modelConfig.imageGen, apiKey: '' } } : {}),
+      },
+    };
+    const manifestRel = '.codebuddy-plugin/plugin.json';
+    const idx = files.findIndex((f) => f.path === manifestRel);
+    if (idx >= 0) {
+      files[idx] = { path: manifestRel, data: strToU8(JSON.stringify(sanitized, null, 2)) };
+    }
+  }
+
   return {
     name,
     files,
+    modelConfig,
     runtimeProfile: manifest?.runtime,
     audit,
   };
@@ -210,6 +234,13 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
   } catch (err) {
     if (err instanceof DeepLinkInstallError) throw err;
     throw new DeepLinkInstallError('WRITE_FAILED', `Failed to write package: ${String(err)}`);
+  }
+
+  // Maker-pinned model: register the dedicated provider (key -> encrypted
+  // secret store). Conversations with this employee route through it via
+  // resolveAgentExecution; everything else keeps the global provider.
+  if (plan.modelConfig) {
+    useSettingsStore.getState().upsertEmployeeProvider(plan.name, plan.modelConfig);
   }
 
   return {

@@ -491,6 +491,12 @@ export interface SubagentMetadata {
   description: string;
   avatar?: string;
   model?: string;
+  /**
+   * Dedicated provider id (`employee:<name>`) injected from the employee
+   * package's modelConfig — conversations with this agent run on it instead
+   * of the global active provider. See settingsStore.resolveAgentExecution.
+   */
+  providerId?: string;
   maxTurns?: number;          // Optional cap on subagent loop turns. Falls back to global settings; ultimate fallback is 200 for safety.
   tools?: string[];
   disallowedTools?: string[];

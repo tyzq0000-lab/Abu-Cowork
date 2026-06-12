@@ -3,7 +3,9 @@ import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
 import type { SubagentDefinition } from '../../types';
 import { joinPath, normalizeSeparators } from '../../utils/pathUtils';
 import {
+  employeeProviderId,
   parseEmployeePlugin,
+  type EmployeeModelConfig,
   type EmployeeRuntimeProfile,
 } from '@/core/employee/contract';
 
@@ -43,6 +45,7 @@ interface CodebuddyPluginJson {
   quickPrompts?: LocalePair[];
   defaultInitPrompt?: LocalePair;
   skills?: string[];
+  modelConfig?: EmployeeModelConfig;
   runtime?: EmployeeRuntimeProfile;
 }
 
@@ -197,6 +200,11 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
     skills: skills && skills.length > 0 ? skills : undefined,
     memory: plugin.runtime?.memory?.scope ?? 'session',
     source: 'employee',
+    // Maker-pinned model: conversations with this employee run on its
+    // dedicated provider (registered at install time from modelConfig).
+    ...(plugin.modelConfig
+      ? { model: plugin.modelConfig.provider.model, providerId: employeeProviderId(name) }
+      : {}),
     systemPrompt,
     filePath: pluginPath,
   };

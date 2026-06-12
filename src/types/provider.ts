@@ -5,8 +5,13 @@
 import type { ApiFormat, ProviderCapabilities } from './index';
 import type { WebSearchProviderType } from '../core/search/providers';
 
-/** Provider source */
-export type ProviderSource = 'builtin' | 'custom';
+/**
+ * Provider source.
+ * 'employee' = injected by an installed employee package's modelConfig —
+ * hidden from the AI-services UI and never eligible as the global active
+ * provider; only the owning employee's conversations use it.
+ */
+export type ProviderSource = 'builtin' | 'custom' | 'employee';
 
 /** Provider connection status */
 export type ProviderStatus = 'unchecked' | 'checking' | 'verified' | 'failed';

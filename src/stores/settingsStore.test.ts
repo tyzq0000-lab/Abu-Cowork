@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { reconcileActiveProvider, useSettingsStore } from './settingsStore';
+import {
+  getAllEnabledModels,
+  reconcileActiveProvider,
+  resolveAgentExecution,
+  useSettingsStore,
+} from './settingsStore';
 import type { ProviderInstance, ActiveModel } from '@/types/provider';
 
 // ─── Test fixture helpers ─────────────────────────────────────
@@ -421,6 +426,92 @@ describe('settingsStore whitespace trim', () => {
       const cfg = useSettingsStore.getState().auxiliaryServices.imageGen;
       expect(cfg?.apiKey).toBe('imgkey');
       expect(cfg?.baseUrl).toBe('http://img.example.com/');
+    });
+  });
+});
+
+describe('employee dedicated providers (modelConfig injection)', () => {
+  const MODEL_CONFIG = {
+    provider: {
+      apiFormat: 'openai-compatible' as const,
+      baseUrl: 'https://maker.example.com/v1',
+      model: 'deepseek-v3',
+      apiKey: 'sk-maker',
+    },
+  };
+
+  beforeEach(() => {
+    useSettingsStore.setState({
+      providers: [makeProvider({ id: 'global', apiKey: 'sk-global' })],
+      activeModel: { providerId: 'global', modelId: 'm1' },
+      auxiliaryServices: {},
+    });
+  });
+
+  it('upsertEmployeeProvider registers a hidden employee provider', () => {
+    const id = useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', MODEL_CONFIG);
+    expect(id).toBe('employee:new-media-ops');
+
+    const state = useSettingsStore.getState();
+    const p = state.providers.find((x) => x.id === id)!;
+    expect(p.source).toBe('employee');
+    expect(p.enabled).toBe(true);
+    expect(p.models).toEqual([{ id: 'deepseek-v3', label: 'deepseek-v3' }]);
+    // Hidden from the model selector and never the global active provider.
+    expect(getAllEnabledModels(state).some((e) => e.provider.id === id)).toBe(false);
+    expect(state.activeModel.providerId).toBe('global');
+  });
+
+  it('upsertEmployeeProvider is idempotent per employee (replaces, no duplicates)', () => {
+    useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', MODEL_CONFIG);
+    useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', {
+      provider: { ...MODEL_CONFIG.provider, model: 'deepseek-v4' },
+    });
+    const matches = useSettingsStore
+      .getState()
+      .providers.filter((p) => p.id === 'employee:new-media-ops');
+    expect(matches).toHaveLength(1);
+    expect(matches[0].models[0].id).toBe('deepseek-v4');
+  });
+
+  it('reconcileActiveProvider never falls back onto an employee provider', () => {
+    const employee = makeProvider({
+      id: 'employee:x',
+      source: 'employee',
+      enabled: true,
+      apiKey: 'sk-emp',
+    });
+    const state = makeState([employee], { providerId: 'gone', modelId: 'm1' });
+    reconcileActiveProvider(state);
+    expect(state.activeModel.providerId).toBe('gone'); // nothing eligible — unchanged
+  });
+
+  describe('resolveAgentExecution', () => {
+    it('routes to the dedicated provider when usable', () => {
+      useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', MODEL_CONFIG);
+      const target = resolveAgentExecution(
+        { model: 'deepseek-v3', providerId: 'employee:new-media-ops' },
+        useSettingsStore.getState(),
+      )!;
+      expect(target.provider.id).toBe('employee:new-media-ops');
+      expect(target.modelId).toBe('deepseek-v3');
+    });
+
+    it('falls back to the global provider when the dedicated key is empty', () => {
+      useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', {
+        provider: { ...MODEL_CONFIG.provider, apiKey: '' },
+      });
+      const target = resolveAgentExecution(
+        { model: 'deepseek-v3', providerId: 'employee:new-media-ops' },
+        useSettingsStore.getState(),
+      )!;
+      expect(target.provider.id).toBe('global');
+    });
+
+    it('uses global semantics for agents without a providerId', () => {
+      const target = resolveAgentExecution({ model: 'inherit' }, useSettingsStore.getState())!;
+      expect(target.provider.id).toBe('global');
+      expect(target.modelId).toBe('m1');
     });
   });
 });

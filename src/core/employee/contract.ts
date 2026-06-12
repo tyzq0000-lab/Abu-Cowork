@@ -92,6 +92,26 @@ export interface EmployeeRuntimeProfile {
   sources?: EmployeeSourceCapability[];
 }
 
+/**
+ * Maker-configured model binding, injected by the uprow platform at mint
+ * time. The enterprise user never sees keys or model names — the desktop
+ * registers a dedicated provider on install and blanks the apiKey fields
+ * in the on-disk plugin.json (live keys go to the encrypted secret store).
+ */
+export interface EmployeeModelConfig {
+  provider: {
+    apiFormat: 'anthropic' | 'openai-compatible';
+    baseUrl: string;
+    model: string;
+    apiKey?: string;
+  };
+  imageGen?: {
+    baseUrl?: string;
+    model?: string;
+    apiKey?: string;
+  };
+}
+
 interface LocalePair {
   zh?: string;
   en?: string;
@@ -113,6 +133,7 @@ export interface EmployeePluginManifest {
   quickPrompts?: LocalePair[];
   defaultInitPrompt?: LocalePair;
   skills?: string[];
+  modelConfig?: EmployeeModelConfig;
   runtime?: EmployeeRuntimeProfile;
 }
 
@@ -301,6 +322,11 @@ function isRuntimeProfile(value: unknown): value is EmployeeRuntimeProfile {
     && (!Array.isArray(value.sources) || !value.sources.every(isSourceCapability))
   ) return false;
   return true;
+}
+
+/** Provider id for an employee's dedicated (modelConfig-injected) provider. */
+export function employeeProviderId(agentName: string): string {
+  return `employee:${agentName}`;
 }
 
 export function parseEmployeePlugin(raw: string): EmployeePluginManifest | null {

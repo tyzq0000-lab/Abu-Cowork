@@ -153,6 +153,31 @@ describe('employeeLoader', () => {
       expect(def!.memory).toBe('project');
     });
 
+    it('maps modelConfig into a dedicated providerId + pinned model', async () => {
+      const withModel = JSON.stringify({
+        ...JSON.parse(PLUGIN_JSON),
+        modelConfig: {
+          provider: {
+            apiFormat: 'openai-compatible',
+            baseUrl: 'https://api.example.com/v1',
+            model: 'deepseek-v3',
+            apiKey: '',
+          },
+        },
+      });
+      mockPackageFiles({ [`${PKG}/.codebuddy-plugin/plugin.json`]: withModel });
+      const def = await loadEmployeePackage(PKG);
+      expect(def!.model).toBe('deepseek-v3');
+      expect(def!.providerId).toBe('employee:content-creator');
+    });
+
+    it('leaves model/providerId unset without modelConfig', async () => {
+      mockPackageFiles();
+      const def = await loadEmployeePackage(PKG);
+      expect(def!.model).toBeUndefined();
+      expect(def!.providerId).toBeUndefined();
+    });
+
     it('returns null when plugin.json is missing', async () => {
       vi.mocked(readTextFile).mockRejectedValue(new Error('ENOENT'));
       expect(await loadEmployeePackage(PKG)).toBeNull();

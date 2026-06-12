@@ -6,7 +6,8 @@ import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
 import { getAllTools, type ConfirmationInfo, type FilePermissionCallback } from '../tools/registry';
 import type { ToolDefinition } from '../../types';
 import { useChatStore, flushTokenBuffer } from '../../stores/chatStore';
-import { useSettingsStore, getEffectiveModel, getActiveApiKey, getActiveProvider, resolveAgentModel, providerRequiresApiKey } from '../../stores/settingsStore';
+import { useSettingsStore, getEffectiveModel, getActiveApiKey, getActiveProvider, resolveAgentExecution, providerRequiresApiKey } from '../../stores/settingsStore';
+import type { ProviderInstance } from '../../types/provider';
 import { useDiscoveredCapsStore } from '../../stores/discoveredCapabilitiesStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useTaskExecutionStore } from '../../stores/taskExecutionStore';
@@ -616,11 +617,25 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     conversationId,
   };
 
-  // Determine effective model — agent can override (with provider compatibility check)
+  // Determine effective model — agent can override (with provider compatibility
+  // check). An employee with an injected dedicated provider (modelConfig) pins
+  // the whole conversation to that provider; everything else follows the
+  // global active provider.
   let effectiveModelId = getEffectiveModel(settings);
-  if (route.type === 'agent' && route.definition?.model) {
-    effectiveModelId = resolveAgentModel(route.definition.model, settings);
+  let dedicatedProvider: ProviderInstance | undefined;
+  if (route.type === 'agent' && route.definition) {
+    const execution = resolveAgentExecution(route.definition, settings);
+    if (execution) {
+      effectiveModelId = execution.modelId;
+      if (execution.provider.source === 'employee') dedicatedProvider = execution.provider;
+    }
   }
+  // Provider used for transport (adapter/apiKey/baseUrl). Re-reads fresh
+  // settings each call to preserve the existing mid-loop-config-change
+  // semantics for the global provider; a dedicated employee provider stays
+  // pinned for the loop's lifetime.
+  const execProviderOf = (s: Parameters<typeof getActiveProvider>[0]) =>
+    dedicatedProvider ?? getActiveProvider(s);
   // Set active model for per-model token calibration
   setActiveModel(effectiveModelId);
 
@@ -644,7 +659,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     } : undefined,
   });
 
-  const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
+  const adapter: LLMAdapter = execProviderOf(settings)?.apiFormat === 'openai-compatible'
     ? new OpenAICompatibleAdapter()
     : new ClaudeAdapter();
 
@@ -944,7 +959,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     try {
       // ── Per-turn: refresh tools and dynamic prompt sections ──
       const freshSettings = useSettingsStore.getState();
-      const activeProvider = getActiveProvider(freshSettings);
+      const activeProvider = execProviderOf(freshSettings);
       const builtinWebSearch = activeProvider
         ? getBuiltinSearchConfig(activeProvider.id as LLMProvider, true)
         : undefined;
@@ -1079,8 +1094,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
               {
                 adapter,
                 model: effectiveModelId,
-                apiKey: getActiveApiKey(freshSettings),
-                baseUrl: getActiveProvider(freshSettings)?.baseUrl || undefined,
+                apiKey: execProviderOf(freshSettings)?.apiKey ?? '',
+                baseUrl: execProviderOf(freshSettings)?.baseUrl || undefined,
                 signal: abortController.signal,
               },
               toolTokens
@@ -1165,8 +1180,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
 
       const chatOptions = {
         model: effectiveModelId,
-        apiKey: getActiveApiKey(freshSettings),
-        baseUrl: getActiveProvider(freshSettings)?.baseUrl || undefined,
+        apiKey: execProviderOf(freshSettings)?.apiKey ?? '',
+        baseUrl: execProviderOf(freshSettings)?.baseUrl || undefined,
         systemPrompt: effectiveSystemPrompt,
         systemPromptSections: allSections,
         tools: tools.length > 0 ? tools : undefined,
@@ -1421,8 +1436,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
                 {
                   adapter,
                   model: effectiveModelId,
-                  apiKey: getActiveApiKey(freshSettings),
-                  baseUrl: getActiveProvider(freshSettings)?.baseUrl || undefined,
+                  apiKey: execProviderOf(freshSettings)?.apiKey ?? '',
+                  baseUrl: execProviderOf(freshSettings)?.baseUrl || undefined,
                   signal: abortController.signal,
                 },
                 toolTokens
