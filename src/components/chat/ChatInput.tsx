@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Plus, ArrowUp, Square, X, ChevronDown, FileText } from 'lucide-react';
-import { ModelSelector, CapabilityBadge } from '@/components/chat/ModelSelector';
+import { Plus, ArrowUp, Square, X, FileText } from 'lucide-react';
 // AgentSelector hidden from UI; import kept for easy restore
 // import AgentSelector from '@/components/chat/AgentSelector';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -15,7 +14,7 @@ import { getCurrentLoopContext } from '@/core/agent/permissionBridge';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
 import ContextIndicator from '@/components/chat/ContextIndicator';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
-import { useSettingsStore, getEffectiveModel, getActiveProvider } from '@/stores/settingsStore';
+import { useSettingsStore } from '@/stores/settingsStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { usePermissionStore } from '@/stores/permissionStore';
 import type { PermissionDuration } from '@/stores/permissionStore';
@@ -136,7 +135,6 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
   const agents = useDiscoveryStore((s) => s.agents);
   const disabledSkills = useSettingsStore((s) => s.disabledSkills);
   const disabledAgents = useSettingsStore((s) => s.disabledAgents);
-  const currentModel = useSettingsStore((s) => getEffectiveModel(s));
   const recentPaths = useWorkspaceStore((s) => s.recentPaths);
   const grantPermission = usePermissionStore((s) => s.grantPermission);
   const hasPermission = usePermissionStore((s) => s.hasPermission);
@@ -145,30 +143,6 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
   // Chat-only derived state
   const isRunning = activeConv?.status === 'running';
   const isStreaming = !isWelcome && isRunning;
-  const hasActiveProvider = useSettingsStore((s) => {
-    const p = getActiveProvider(s);
-    return !!p && p.enabled;
-  });
-  const availableModels = useSettingsStore((s) => getActiveProvider(s)?.models ?? []);
-  const activeModelInfo = availableModels.find((m) => m.id === currentModel);
-  const modelDisplay = !hasActiveProvider
-    ? t.chat.noModelConfigured
-    : (activeModelInfo?.label ?? (currentModel ? currentModel.split('/').pop()?.split('-').slice(0, 2).join(' ') : 'Claude'));
-  const modelCaps = activeModelInfo?.capabilities ?? [];
-  const [showModelPicker, setShowModelPicker] = useState(false);
-  const modelPickerRef = useRef<HTMLDivElement>(null);
-
-  // Close model picker on click outside
-  useEffect(() => {
-    if (!showModelPicker) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
-        setShowModelPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showModelPicker]);
 
   // Handle pasting from clipboard.
   //
@@ -802,32 +776,9 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
               </Button>
               <div className="flex-1" />
 
-              {/* Model picker — right-aligned, before Start button */}
-              <div className="relative" ref={modelPickerRef}>
-                <button
-                  onClick={() => setShowModelPicker(!showModelPicker)}
-                  title={modelDisplay}
-                  className={cn(
-                    'btn-ghost flex items-center gap-1 px-2 py-1 text-[12px] font-medium rounded-md transition-colors max-w-[180px]',
-                    hasActiveProvider
-                      ? 'text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
-                      : 'text-[var(--abu-clay)] hover:text-[var(--abu-clay-hover)] hover:bg-[var(--abu-clay-bg)]'
-                  )}
-                >
-                  <span className="truncate">{modelDisplay}</span>
-                  {hasActiveProvider && modelCaps.length > 0 && (
-                    <span className="flex items-center gap-0.5 ml-0.5 shrink-0">
-                      {modelCaps.map((cap) => <CapabilityBadge key={cap} cap={cap} size="xs" />)}
-                    </span>
-                  )}
-                  <ChevronDown className={cn('h-3 w-3 transition-transform shrink-0', showModelPicker && 'rotate-180')} />
-                </button>
-                <ModelSelector
-                  open={showModelPicker}
-                  onClose={() => setShowModelPicker(false)}
-                  anchorRef={modelPickerRef as React.RefObject<HTMLElement>}
-                />
-              </div>
+              {/* Model picker hidden for the end-user build — the text model
+                  comes from settings defaults / the employee package's
+                  dedicated model. Configuration lives in Settings > AI services. */}
 
               <Button
                 size="icon"
@@ -867,36 +818,10 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
                 </Button>
               </div>
 
-              {/* Right Actions: Model picker + Context indicator + Send / Stop */}
+              {/* Right Actions: Context indicator + Send / Stop. Model picker
+                  hidden for the end-user build (see welcome variant note). */}
               <div className="flex items-center gap-1">
-                {/* Model picker */}
-                <div className="relative" ref={modelPickerRef}>
-                  <button
-                    onClick={() => setShowModelPicker(!showModelPicker)}
-                    title={modelDisplay}
-                    className={cn(
-                      'btn-ghost flex items-center gap-1 px-2 py-1 text-[12px] font-medium rounded-md transition-colors max-w-[180px]',
-                      hasActiveProvider
-                        ? 'text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
-                        : 'text-[var(--abu-clay)] hover:text-[var(--abu-clay-hover)] hover:bg-[var(--abu-clay-bg)]'
-                    )}
-                  >
-                    <span className="truncate">{modelDisplay}</span>
-                    {hasActiveProvider && modelCaps.length > 0 && (
-                      <span className="flex items-center gap-0.5 ml-0.5 shrink-0">
-                        {modelCaps.map((cap) => <CapabilityBadge key={cap} cap={cap} size="xs" />)}
-                      </span>
-                    )}
-                    <ChevronDown className={cn('h-3 w-3 transition-transform shrink-0', showModelPicker && 'rotate-180')} />
-                  </button>
-                  <ModelSelector
-                    open={showModelPicker}
-                    onClose={() => setShowModelPicker(false)}
-                    anchorRef={modelPickerRef as React.RefObject<HTMLElement>}
-                  />
-                </div>
-
-                {/* Context usage ring — between model picker and send button */}
+                {/* Context usage ring — before send button */}
                 {activeConvIdForIndicator && (
                   <div className="flex items-center justify-center h-7 px-1">
                     <ContextIndicator conversationId={activeConvIdForIndicator} />
