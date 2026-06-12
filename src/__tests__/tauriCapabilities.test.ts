@@ -153,8 +153,20 @@ describe('tauri capabilities — workspace .abu reachability under $HOME', () =>
   it('fs:allow-remove declares $HOME/**/.abu/** (contents only — not the .abu dir itself)', () => {
     const paths = permissionScopePaths(loadCapabilities().permissions, 'fs:allow-remove');
     expect(paths).toContain('$HOME/**/.abu/**');
-    // Intentionally NOT $HOME/**/.abu — same convention as the existing
-    // $HOME/.abu/** entry: we allow deleting files inside but not the dir.
+    // Intentionally NOT $HOME/**/.abu — same convention as the
+    // $HOME/.uprow/** entry: we allow deleting files inside but not the dir.
     expect(paths).not.toContain('$HOME/**/.abu');
+  });
+});
+
+// Rebrand guard: the home-level data dir is ~/.uprow (was ~/.abu). Workspace
+// dirs ({workspace}/.abu via $HOME/**/.abu) deliberately keep the old name —
+// see src/core/branding.ts. A literal "$HOME/.abu..." entry reappearing means
+// an upstream merge reintroduced the legacy home dir.
+describe('tauri capabilities — home data dir is .uprow', () => {
+  it('declares $HOME/.uprow/** and no $HOME/.abu entries', () => {
+    const paths = collectScopePaths(loadCapabilities().permissions);
+    expect(paths).toContain('$HOME/.uprow/**');
+    expect(paths.filter((p) => p.startsWith('$HOME/.abu'))).toEqual([]);
   });
 });

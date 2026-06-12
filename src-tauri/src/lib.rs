@@ -966,6 +966,18 @@ fn get_network_proxy_port() -> Option<u16> {
     proxy::get_proxy_port()
 }
 
+/// Outcome of the one-shot ~/.abu -> ~/.uprow data dir migration (see setup).
+struct DataDirMigration {
+    failed: bool,
+}
+
+/// True when the legacy data dir exists but could not be renamed — the
+/// frontend shows a one-time warning toast asking the user to retry.
+#[tauri::command]
+fn get_data_migration_status(state: tauri::State<DataDirMigration>) -> bool {
+    state.failed
+}
+
 fn show_main_window(app: &AppHandle) {
     #[cfg(target_os = "macos")]
     let _ = app.show();
@@ -1234,6 +1246,34 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .manage(McpState::default())
         .setup(|app| {
+            // One-shot data dir migration: ~/.abu -> ~/.uprow (rebrand).
+            // Must run before the webview loads — every frontend module
+            // (sessions, skills, employees, memory) resolves the data dir
+            // very early in App boot. std::fs::rename of two siblings under
+            // $HOME is same-volume, so no copy fallback: on failure the old
+            // dir is left untouched (zero data loss) and the frontend shows
+            // a one-time toast via get_data_migration_status.
+            {
+                use tauri::Manager;
+                let mut failed = false;
+                if let Ok(home) = app.path().home_dir() {
+                    let legacy = home.join(".abu");
+                    let new_dir = home.join(".uprow");
+                    if legacy.is_dir() && !new_dir.exists() {
+                        match std::fs::rename(&legacy, &new_dir) {
+                            Ok(()) => eprintln!("[migration] data dir moved: {} -> {}", legacy.display(), new_dir.display()),
+                            Err(e) => {
+                                eprintln!("[migration] data dir move FAILED ({}); old data left in place", e);
+                                failed = true;
+                            }
+                        }
+                    } else if legacy.is_dir() && new_dir.exists() {
+                        eprintln!("[migration] both .abu and .uprow exist; using .uprow, legacy dir ignored");
+                    }
+                }
+                app.manage(DataDirMigration { failed });
+            }
+
             // Dev builds aren't installed, so the fuyao:// scheme isn't in
             // the OS registry yet — register it at runtime so deep links can
             // be tested without an installer. Windows/Linux only (macOS only
@@ -1342,6 +1382,7 @@ pub fn run() {
             app_exit,
             window_hide,
             window_show,
+            get_data_migration_status,
             start_network_proxy,
             update_network_whitelist,
             get_network_proxy_port,

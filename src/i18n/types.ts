@@ -1718,6 +1718,13 @@ export interface TranslationDict {
     rulesNotModifiable: string;
   };
 
+  // One-shot data dir migration (~/.abu -> ~/.uprow)
+  migration: {
+    dataDirMoveFailedTitle: string;
+    /** Toast body shown when the legacy dir rename failed; data stays in place */
+    dataDirMoveFailed: string;
+  };
+
   // Deep link (fuyao://) install flow
   deepLink: {
     invalidLinkTitle: string;

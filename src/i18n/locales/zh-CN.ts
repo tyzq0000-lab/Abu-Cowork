@@ -1688,6 +1688,11 @@ const zhCN: TranslationDict = {
     heatmapLegendMore: '多',
   },
 
+  migration: {
+    dataDirMoveFailedTitle: '数据目录迁移未完成',
+    dataDirMoveFailed: '检测到旧版数据目录 ~/.abu，但自动迁移到 ~/.uprow 失败（可能被其他程序占用）。旧数据已原样保留，请关闭占用程序后重启应用，或手动将该文件夹重命名为 .uprow。',
+  },
+
   deepLink: {
     invalidLinkTitle: '无法处理链接',
     invalidLink: '链接格式无效或不受支持',

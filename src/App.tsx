@@ -55,7 +55,8 @@ import { initMCPStoreSync, cleanupMCPStoreSync } from '@/stores/mcpStore';
 import { initFileWatchers, stopAllWatchers } from '@/core/agent/fileWatcher';
 import { getPendingWorkspaceRequest, resolveWorkspaceRequest, subscribeToWorkspaceRequest } from '@/core/agent/permissionBridge';
 import { startBehaviorSensor, stopBehaviorSensor } from '@/core/agent/behaviorSensor';
-import { useI18n } from '@/i18n';
+import { useI18n, getI18n } from '@/i18n';
+import { useToastStore } from '@/stores/toastStore';
 import CloseDialog from '@/components/common/CloseDialog';
 import DeepLinkInstallDialog from '@/components/common/DeepLinkInstallDialog';
 import { initDeepLink } from '@/core/deeplink';
@@ -208,6 +209,22 @@ function App() {
     registerBuiltinTools();
     installLargeWriteGuard();
     refreshDiscovery();
+
+    // Surface the one-shot ~/.abu -> ~/.uprow migration failure (rare):
+    // user must know their old data wasn't picked up and how to fix it.
+    invoke<boolean>('get_data_migration_status')
+      .then((failed) => {
+        if (failed) {
+          const t = getI18n();
+          useToastStore.getState().addToast({
+            type: 'warning',
+            title: t.migration.dataDirMoveFailedTitle,
+            message: t.migration.dataDirMoveFailed,
+            duration: 15000,
+          });
+        }
+      })
+      .catch(() => {});
     initMCPStoreSync();
     sendConsolePing();
 

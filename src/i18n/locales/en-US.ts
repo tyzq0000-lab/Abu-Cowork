@@ -1687,6 +1687,11 @@ const enUS: TranslationDict = {
     heatmapLegendMore: 'More',
   },
 
+  migration: {
+    dataDirMoveFailedTitle: 'Data directory migration incomplete',
+    dataDirMoveFailed: 'Found the legacy data directory ~/.abu but failed to move it to ~/.uprow (it may be locked by another program). Your data is untouched — close the blocking program and restart, or rename the folder to .uprow manually.',
+  },
+
   deepLink: {
     invalidLinkTitle: 'Cannot handle link',
     invalidLink: 'The link is malformed or unsupported',
