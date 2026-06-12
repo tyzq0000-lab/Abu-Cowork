@@ -5,13 +5,15 @@ import { useChatStore } from '@/stores/chatStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { exists, mkdir } from '@tauri-apps/plugin-fs';
+import { mkdir } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
 import { FolderPlus, FolderOpen, X, ArrowLeft } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { getBaseName, joinPath } from '@/utils/pathUtils';
+import { WORKSPACE_DIR_NAME } from '@/core/branding';
+import { findWorkspaceRulesFile, workspaceRulesWritePath } from '@/core/agent/projectRules';
 
 type CreateMode = 'scratch' | 'existing-folder';
 
@@ -84,8 +86,9 @@ export default function CreateProjectDialog({
     }
     const existing = getProjectByWorkspace(selectedFolder);
     setConflictProject(existing?.name ?? null);
-    const abuPath = joinPath(selectedFolder, '.abu', 'ABU.md');
-    exists(abuPath).then(setHasAbuConfig).catch(() => setHasAbuConfig(false));
+    findWorkspaceRulesFile(selectedFolder)
+      .then((found) => setHasAbuConfig(found !== null))
+      .catch(() => setHasAbuConfig(false));
   }, [selectedFolder, getProjectByWorkspace]);
 
   // Handle folder selection for "existing-folder" mode
@@ -118,12 +121,12 @@ export default function CreateProjectDialog({
       finalFolder = joinPath(dir, projectName.trim());
       try {
         await mkdir(finalFolder, { recursive: true });
-        // Create .abu/ dir with instructions if provided
+        // Create the workspace dot dir with instructions if provided
         if (instructions.trim()) {
-          const abuDir = joinPath(finalFolder, '.abu');
-          await mkdir(abuDir, { recursive: true });
+          const dotDir = joinPath(finalFolder, WORKSPACE_DIR_NAME);
+          await mkdir(dotDir, { recursive: true });
           const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-          await writeTextFile(joinPath(abuDir, 'ABU.md'), instructions.trim());
+          await writeTextFile(workspaceRulesWritePath(finalFolder), instructions.trim());
         }
       } catch (err) {
         console.error('Failed to create project folder:', err);

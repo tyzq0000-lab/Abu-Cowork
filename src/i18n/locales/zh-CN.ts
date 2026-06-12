@@ -135,7 +135,7 @@ const zhCN: TranslationDict = {
     memoryGuideProjectMemoryName: '项目记忆（右侧面板）',
     memoryGuideProjectMemoryDesc: '扶摇在对话中积累的项目知识，如技术栈、常见问题等。仅对当前工作区生效，存储在工作区的 .abu/MEMORY.md。',
     memoryGuideProjectRulesName: '项目指令（右侧面板）',
-    memoryGuideProjectRulesDesc: '由你手动编写的项目规则，如编码规范、构建命令等。扶摇会严格遵守。存储在 .abu/ABU.md，建议提交到 git 与团队共享。',
+    memoryGuideProjectRulesDesc: '由你手动编写的项目规则，如编码规范、构建命令等。扶摇会严格遵守。存储在 .abu/FUYAO.md，建议提交到 git 与团队共享。',
     memoryGuideTip: '提示：个人记忆和项目记忆由扶摇在对话中自动积累，你随时可以查看和修改。项目指令需要你手动编写。',
   },
 

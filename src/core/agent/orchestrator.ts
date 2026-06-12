@@ -510,7 +510,7 @@ ${indexContent.trim()}
 - 长期记忆索引见上方 <memory-index>；每轮自动注入的相关记忆完整内容见 <relevant-memories>（在本提示后段）。能从这两段回答的就直接答，不用再调工具。
 - 索引行末尾带 🔒 是私密记忆，不会自动注入。仅用户明确问起时调 read_memory 拉取，回复只引用必要部分，不要在后续无关消息里复述。
 - 用户说"记住这个"立即保存；"忘掉/别记了"找到对应条目删除。具体怎么写记忆、何时 recall vs read_memory、如何处理冲突 → 见各记忆工具的 description。
-- 当前对话内的进度用 todo_write，不要塞记忆。项目规则（.abu/ABU.md）用户自维护，不要用 update_memory 改。`, cacheable: true });
+- 当前对话内的进度用 todo_write，不要塞记忆。项目规则（.abu/FUYAO.md）用户自维护，不要用 update_memory 改。`, cacheable: true });
     } catch (err) {
       console.warn('Failed to load memories:', err);
     }

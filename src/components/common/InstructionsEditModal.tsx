@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { useI18n } from '@/i18n';
 import { readTextFile, writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
 import { joinPath } from '@/utils/pathUtils';
+import { WORKSPACE_DIR_NAME } from '@/core/branding';
+import { findWorkspaceRulesFile, workspaceRulesWritePath } from '@/core/agent/projectRules';
 
 interface InstructionsEditModalProps {
   open: boolean;
@@ -24,10 +26,10 @@ export default function InstructionsEditModal({ open, onClose, workspacePath }: 
     async function loadContent() {
       setLoading(true);
       try {
-        const abuMdPath = joinPath(workspacePath, '.abu', 'ABU.md');
-        const fileExists = await exists(abuMdPath);
-        if (fileExists) {
-          const text = await readTextFile(abuMdPath);
+        // FUYAO.md preferred, legacy ABU.md fallback (saving always targets FUYAO.md)
+        const found = await findWorkspaceRulesFile(workspacePath);
+        if (found) {
+          const text = await readTextFile(found.path);
           if (!cancelled) setContent(text);
         } else {
           if (!cancelled) setContent('');
@@ -57,12 +59,11 @@ export default function InstructionsEditModal({ open, onClose, workspacePath }: 
     setSaving(true);
     setError(null);
     try {
-      const abuDir = joinPath(workspacePath, '.abu');
-      if (!(await exists(abuDir))) {
-        await mkdir(abuDir, { recursive: true });
+      const dotDir = joinPath(workspacePath, WORKSPACE_DIR_NAME);
+      if (!(await exists(dotDir))) {
+        await mkdir(dotDir, { recursive: true });
       }
-      const abuMdPath = joinPath(abuDir, 'ABU.md');
-      await writeTextFile(abuMdPath, content);
+      await writeTextFile(workspaceRulesWritePath(workspacePath), content);
       onClose();
     } catch (err) {
       console.error('Failed to save instructions:', err);

@@ -135,7 +135,7 @@ const enUS: TranslationDict = {
     memoryGuideProjectMemoryName: 'Project Memory (right panel)',
     memoryGuideProjectMemoryDesc: 'Knowledge Fuyao accumulates from conversations — like tech stack, common issues, etc. Only applies to the current workspace. Stored in .abu/MEMORY.md.',
     memoryGuideProjectRulesName: 'Project Instructions (right panel)',
-    memoryGuideProjectRulesDesc: 'Rules you write manually — like coding standards, build commands, etc. Fuyao strictly follows these. Stored in .abu/ABU.md. Recommended to commit to git and share with your team.',
+    memoryGuideProjectRulesDesc: 'Rules you write manually — like coding standards, build commands, etc. Fuyao strictly follows these. Stored in .abu/FUYAO.md. Recommended to commit to git and share with your team.',
     memoryGuideTip: 'Tip: Personal and project memory are accumulated automatically by Fuyao during conversations — you can view and edit them anytime. Project instructions need to be written by you manually.',
   },
 

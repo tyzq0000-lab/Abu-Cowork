@@ -1,17 +1,20 @@
 /**
- * Project Rules — user-maintained project rules (ABU.md)
+ * Project Rules — user-maintained project rules (FUYAO.md)
  *
  * Rules are manually maintained by users (committed to git, high priority).
  * This is separate from AI-written memories (.abu/MEMORY.md).
  *
  * File structure:
- *   ~/.uprow/ABU.md                    — User-level rules (cross-project)
- *   {workspace}/.abu/ABU.md          — Project main rules
+ *   ~/.uprow/FUYAO.md                — User-level rules (cross-project)
+ *   {workspace}/.abu/FUYAO.md        — Project main rules
  *   {workspace}/.abu/rules/*.md      — Modular rules (alphabetical)
+ *
+ * Backward compat: workspaces/homes created before the Fuyao rebrand hold
+ * ABU.md instead — readers fall back to it, writers only create FUYAO.md.
  */
 
 import { readTextFile, readDir, exists, mkdir } from '@tauri-apps/plugin-fs';
-import { DATA_DIR_NAME } from '@/core/branding';
+import { DATA_DIR_NAME, RULES_FILENAME, LEGACY_RULES_FILENAME, WORKSPACE_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { joinPath } from '../../utils/pathUtils';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
@@ -52,22 +55,30 @@ async function safeReadTextFile(path: string): Promise<string> {
 }
 
 /**
- * Load user-level rules from ~/.uprow/ABU.md
+ * Read the rules file from a dot dir: FUYAO.md first, falling back to the
+ * pre-rebrand ABU.md when FUYAO.md is absent/empty.
+ */
+async function readRulesFile(dotDir: string): Promise<string> {
+  const content = await safeReadTextFile(joinPath(dotDir, RULES_FILENAME));
+  if (content) return content;
+  return await safeReadTextFile(joinPath(dotDir, LEGACY_RULES_FILENAME));
+}
+
+/**
+ * Load user-level rules from ~/.uprow/FUYAO.md (legacy ABU.md fallback)
  */
 export async function loadUserRules(): Promise<string> {
   const home = await getCachedHomeDir();
-  const rulesPath = joinPath(home, DATA_DIR_NAME, 'ABU.md');
-  const content = await safeReadTextFile(rulesPath);
+  const content = await readRulesFile(joinPath(home, DATA_DIR_NAME));
   if (!content) return '';
   return truncateAtParagraph(content, MAX_USER_RULES_CHARS, '...(用户规则已截断)');
 }
 
 /**
- * Load project main rules from {workspace}/.abu/ABU.md
+ * Load project main rules from {workspace}/.abu/FUYAO.md (legacy ABU.md fallback)
  */
 export async function loadProjectRules(workspacePath: string): Promise<string> {
-  const rulesPath = joinPath(workspacePath, '.abu', 'ABU.md');
-  return await safeReadTextFile(rulesPath);
+  return await readRulesFile(joinPath(workspacePath, WORKSPACE_DIR_NAME));
 }
 
 /**
@@ -76,7 +87,7 @@ export async function loadProjectRules(workspacePath: string): Promise<string> {
  * Each file is prefixed with "### {filename}" header.
  */
 export async function loadModularRules(workspacePath: string): Promise<string> {
-  const rulesDir = joinPath(workspacePath, '.abu', 'rules');
+  const rulesDir = joinPath(workspacePath, WORKSPACE_DIR_NAME, 'rules');
   try {
     if (!(await exists(rulesDir))) return '';
     const entries = await readDir(rulesDir);
@@ -104,8 +115,8 @@ export async function loadModularRules(workspacePath: string): Promise<string> {
 
 /**
  * Load all rules by priority (low → high):
- * 1. User-level rules (~/.uprow/ABU.md)
- * 2. Project main rules ({workspace}/.abu/ABU.md)
+ * 1. User-level rules (~/.uprow/FUYAO.md)
+ * 2. Project main rules ({workspace}/.abu/FUYAO.md)
  * 3. Modular rules ({workspace}/.abu/rules/*.md)
  *
  * Total budget: MAX_USER_RULES_CHARS + MAX_PROJECT_RULES_CHARS
@@ -117,7 +128,7 @@ export async function loadAllRules(workspacePath: string | null): Promise<string
   try {
     const userRules = await loadUserRules();
     if (userRules.trim()) {
-      parts.push(`### 用户规则（~/.uprow/ABU.md）\n${userRules.trim()}`);
+      parts.push(`### 用户规则（~/.uprow/${RULES_FILENAME}）\n${userRules.trim()}`);
     }
   } catch (err) {
     console.warn('Failed to load user rules:', err);
@@ -128,7 +139,7 @@ export async function loadAllRules(workspacePath: string | null): Promise<string
     try {
       const projectRules = await loadProjectRules(workspacePath);
       if (projectRules.trim()) {
-        parts.push(`### 项目规则（.abu/ABU.md）\n${projectRules.trim()}`);
+        parts.push(`### 项目规则（.abu/${RULES_FILENAME}）\n${projectRules.trim()}`);
       }
     } catch (err) {
       console.warn('Failed to load project rules:', err);
@@ -155,36 +166,61 @@ export async function loadAllRules(workspacePath: string | null): Promise<string
   return result;
 }
 
+/** Absolute path where workspace rules are written ({workspace}/.abu/FUYAO.md). */
+export function workspaceRulesWritePath(workspacePath: string): string {
+  return joinPath(workspacePath, WORKSPACE_DIR_NAME, RULES_FILENAME);
+}
+
 /**
- * Initialize workspace rules: create template .abu/ABU.md and .abu/rules/ directory.
+ * Find the existing workspace rules file: FUYAO.md preferred, legacy ABU.md
+ * fallback. Returns null when neither exists. UI components use this so the
+ * panel badge/editor reflect whichever file is actually in effect.
+ */
+export async function findWorkspaceRulesFile(
+  workspacePath: string,
+): Promise<{ path: string; fileName: string } | null> {
+  const dotDir = joinPath(workspacePath, WORKSPACE_DIR_NAME);
+  const current = joinPath(dotDir, RULES_FILENAME);
+  if (await exists(current)) return { path: current, fileName: RULES_FILENAME };
+  const legacy = joinPath(dotDir, LEGACY_RULES_FILENAME);
+  if (await exists(legacy)) return { path: legacy, fileName: LEGACY_RULES_FILENAME };
+  return null;
+}
+
+/**
+ * Initialize workspace rules: create template .abu/FUYAO.md and .abu/rules/ directory.
  * Returns a description of what was created.
  */
 export async function initWorkspaceRules(workspacePath: string): Promise<string> {
-  const abuDir = joinPath(workspacePath, '.abu');
-  const rulesFile = joinPath(abuDir, 'ABU.md');
-  const rulesDir = joinPath(abuDir, 'rules');
+  const dotDir = joinPath(workspacePath, WORKSPACE_DIR_NAME);
+  const rulesFile = joinPath(dotDir, RULES_FILENAME);
+  const legacyRulesFile = joinPath(dotDir, LEGACY_RULES_FILENAME);
+  const rulesDir = joinPath(dotDir, 'rules');
   const results: string[] = [];
 
-  // Check if ABU.md already exists
+  // A rules file under either name counts as "already initialized".
   if (await exists(rulesFile)) {
-    return '`.abu/ABU.md` 已存在，请直接编辑或使用 /init 技能让 AI 帮助改进。';
+    return `\`.abu/${RULES_FILENAME}\` 已存在，请直接编辑或使用 /init 技能让 AI 帮助改进。`;
+  }
+  if (await exists(legacyRulesFile)) {
+    return `\`.abu/${LEGACY_RULES_FILENAME}\` 已存在（旧版规则文件，仍然生效），请直接编辑或使用 /init 技能让 AI 帮助改进。`;
   }
 
-  // Ensure .abu directory exists
+  // Ensure the workspace dot directory exists
   try {
-    if (!(await exists(abuDir))) {
-      await mkdir(abuDir, { recursive: true });
+    if (!(await exists(dotDir))) {
+      await mkdir(dotDir, { recursive: true });
     }
   } catch (err) {
-    console.warn('Failed to create .abu directory:', err);
+    console.warn('Failed to create workspace dot directory:', err);
   }
 
-  // Create template ABU.md
+  // Create template FUYAO.md
   const template = `# 项目规则
 
 <!--
   这是项目规则文件，由团队成员手动维护。
-  Abu 会在每次对话中加载这些规则并严格遵守。
+  扶摇会在每次对话中加载这些规则并严格遵守。
   建议提交到 git，与团队共享。
 
   注意：.abu/MEMORY.md 是 AI 自动记忆，不要提交到 git。
@@ -208,9 +244,9 @@ export async function initWorkspaceRules(workspacePath: string): Promise<string>
 
   try {
     await writeTextFile(rulesFile, template);
-    results.push('创建了 `.abu/ABU.md` 规则模板');
+    results.push(`创建了 \`.abu/${RULES_FILENAME}\` 规则模板`);
   } catch (err) {
-    results.push(`创建 ABU.md 失败: ${err}`);
+    results.push(`创建 ${RULES_FILENAME} 失败: ${err}`);
   }
 
   // Create rules directory

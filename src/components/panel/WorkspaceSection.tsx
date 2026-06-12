@@ -5,8 +5,8 @@ import { usePermissionStore, type PermissionDuration } from '@/stores/permission
 import { useI18n } from '@/i18n';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { exists } from '@tauri-apps/plugin-fs';
 import { scanMemoryFiles } from '@/core/memdir/scan';
+import { findWorkspaceRulesFile } from '@/core/agent/projectRules';
 import {
   FolderOpen,
   ExternalLink,
@@ -23,7 +23,6 @@ import InstructionsEditModal from '@/components/common/InstructionsEditModal';
 import MemoryViewModal from '@/components/common/MemoryViewModal';
 import FilesSection from './FilesSection';
 import { cn } from '@/lib/utils';
-import { joinPath } from '@/utils/pathUtils';
 
 export default function WorkspaceSection() {
   const currentPath = useWorkspaceStore((s) => s.currentPath);
@@ -43,6 +42,7 @@ export default function WorkspaceSection() {
   const grantPermission = usePermissionStore((s) => s.grantPermission);
   const hasPermission = usePermissionStore((s) => s.hasPermission);
   const [hasInstructions, setHasInstructions] = useState(false);
+  const [rulesFileName, setRulesFileName] = useState<string | null>(null);
   const [hasMemory, setHasMemory] = useState(false);
   const [pendingFolder, setPendingFolder] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -65,19 +65,23 @@ export default function WorkspaceSection() {
     }
   }, [isDropdownOpen]);
 
-  // Check for .abu/ABU.md and .abu/MEMORY.md when workspace changes
+  // Check for the workspace rules file (FUYAO.md / legacy ABU.md) and
+  // .abu/MEMORY.md when workspace changes
   useEffect(() => {
     async function checkFiles() {
       if (!currentPath) {
         setHasInstructions(false);
+        setRulesFileName(null);
         setHasMemory(false);
         return;
       }
       try {
-        const abuMdPath = joinPath(currentPath, '.abu', 'ABU.md');
-        setHasInstructions(await exists(abuMdPath));
+        const found = await findWorkspaceRulesFile(currentPath);
+        setHasInstructions(found !== null);
+        setRulesFileName(found?.fileName ?? null);
       } catch {
         setHasInstructions(false);
+        setRulesFileName(null);
       }
       try {
         // Check memdir for this workspace
@@ -166,7 +170,15 @@ export default function WorkspaceSection() {
           onClose={() => {
             setShowInstructionsModal(false);
             // Re-check if file was created/modified
-            exists(joinPath(currentPath, '.abu', 'ABU.md')).then(setHasInstructions).catch(() => setHasInstructions(false));
+            findWorkspaceRulesFile(currentPath)
+              .then((found) => {
+                setHasInstructions(found !== null);
+                setRulesFileName(found?.fileName ?? null);
+              })
+              .catch(() => {
+                setHasInstructions(false);
+                setRulesFileName(null);
+              });
           }}
           workspacePath={currentPath}
         />
@@ -321,7 +333,7 @@ export default function WorkspaceSection() {
             >
               <FileText className={cn('w-3.5 h-3.5', hasInstructions ? 'text-[var(--abu-clay)]' : 'text-[var(--abu-text-placeholder)]')} />
               <span className={cn('text-[11px] font-medium', hasInstructions ? 'text-[var(--abu-text-secondary)]' : 'text-[var(--abu-text-muted)]')}>
-                {hasInstructions ? `${t.panel.instructions} · ABU.md` : t.panel.instructionsAdd}
+                {hasInstructions && rulesFileName ? `${t.panel.instructions} · ${rulesFileName}` : t.panel.instructionsAdd}
               </span>
             </button>
 

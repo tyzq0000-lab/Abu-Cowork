@@ -85,7 +85,39 @@ describe('loadProjectRules', () => {
     mockReadTextFile.mockResolvedValue('project rules');
     const result = await loadProjectRules('/workspace');
     expect(result).toBe('project rules');
+    expect(mockReadTextFile).toHaveBeenCalledWith('/workspace/.abu/FUYAO.md');
+  });
+});
+
+describe('rules filename backward compat (FUYAO.md preferred, ABU.md fallback)', () => {
+  it('falls back to legacy ABU.md when FUYAO.md is missing', async () => {
+    mockReadTextFile.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('FUYAO.md')) throw new Error('not found');
+      if (String(path).endsWith('ABU.md')) return 'legacy rules';
+      return '';
+    });
+    const result = await loadProjectRules('/workspace');
+    expect(result).toBe('legacy rules');
+    expect(mockReadTextFile).toHaveBeenCalledWith('/workspace/.abu/FUYAO.md');
     expect(mockReadTextFile).toHaveBeenCalledWith('/workspace/.abu/ABU.md');
+  });
+
+  it('prefers FUYAO.md when both files exist', async () => {
+    mockReadTextFile.mockImplementation(async (path: string) => {
+      if (String(path).endsWith('FUYAO.md')) return 'new rules';
+      if (String(path).endsWith('ABU.md')) return 'legacy rules';
+      return '';
+    });
+    const result = await loadProjectRules('/workspace');
+    expect(result).toBe('new rules');
+    expect(mockReadTextFile).not.toHaveBeenCalledWith('/workspace/.abu/ABU.md');
+  });
+
+  it('initWorkspaceRules treats an existing legacy ABU.md as already initialized', async () => {
+    mockExists.mockImplementation(async (path: string) => String(path).endsWith('ABU.md'));
+    const result = await initWorkspaceRules('/workspace');
+    expect(result).toContain('已存在');
+    expect(mockWriteTextFile).not.toHaveBeenCalled();
   });
 });
 
@@ -151,7 +183,7 @@ describe('loadAllRules', () => {
     // First call = user rules, second call = project rules
     mockReadTextFile.mockImplementation(async (path: string) => {
       if (path.includes('/mock/home/')) return 'user rules';
-      if (path.includes('ABU.md')) return 'project rules';
+      if (path.includes('FUYAO.md')) return 'project rules';
       return '';
     });
     mockExists.mockResolvedValue(false); // no modular rules dir
@@ -167,7 +199,7 @@ describe('loadAllRules', () => {
     mockReadTextFile.mockResolvedValue('user rules');
     const result = await loadAllRules(null);
     expect(result).toContain('user rules');
-    expect(result).not.toContain('项目规则（.abu/ABU.md）');
+    expect(result).not.toContain('项目规则（.abu/FUYAO.md）');
   });
 
   it('truncates when total exceeds budget', async () => {
@@ -175,7 +207,7 @@ describe('loadAllRules', () => {
     const longProjectRules = 'p'.repeat(8000);
     mockReadTextFile.mockImplementation(async (path: string) => {
       if (path.includes('/mock/home/')) return longUserRules;
-      if (path.includes('ABU.md')) return longProjectRules;
+      if (path.includes('FUYAO.md')) return longProjectRules;
       return '';
     });
     mockExists.mockResolvedValue(false);
@@ -188,14 +220,14 @@ describe('loadAllRules', () => {
 });
 
 describe('initWorkspaceRules', () => {
-  it('returns message when ABU.md already exists', async () => {
+  it('returns message when FUYAO.md already exists', async () => {
     mockExists.mockResolvedValue(true);
     const result = await initWorkspaceRules('/workspace');
     expect(result).toContain('已存在');
   });
 
   it('creates template and rules directory', async () => {
-    // First exists check (ABU.md) = false, rest = false
+    // First exists checks (FUYAO.md/ABU.md) = false, rest = false
     mockExists.mockResolvedValue(false);
     mockMkdir.mockResolvedValue(undefined);
     mockWriteTextFile.mockResolvedValue(undefined);
@@ -203,7 +235,7 @@ describe('initWorkspaceRules', () => {
     const result = await initWorkspaceRules('/workspace');
     expect(result).toContain('创建了');
     expect(mockWriteTextFile).toHaveBeenCalledWith(
-      '/workspace/.abu/ABU.md',
+      '/workspace/.abu/FUYAO.md',
       expect.stringContaining('# 项目规则')
     );
     expect(mockMkdir).toHaveBeenCalled();
