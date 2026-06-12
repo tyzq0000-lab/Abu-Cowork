@@ -119,7 +119,7 @@ function parseFeishu(payload: Record<string, unknown>): NormalizedIMMessage | nu
   // Check: mentions array has entries, or text contains mention tags, or common bot names.
   const mentions = (event.message as Record<string, unknown>)?.mentions as { name?: string; id?: { open_id?: string } }[] | undefined;
   const hasMentions = mentions != null && mentions.length > 0;
-  const isMention = hasMentions || /(@_user_\d+|@Abu|@abu|@阿布)/.test(text);
+  const isMention = hasMentions || /(@_user_\d+|@Fuyao|@fuyao|@扶摇|@Abu|@abu|@阿布)/.test(text);
   const isDirect = chatType === 'p2p';
 
   // Clean mention tags from text

@@ -177,7 +177,7 @@ export const mcpTemplates: MCPTemplate[] = [
   {
     id: 'abu-browser-bridge',
     name: 'abu-browser-bridge',
-    description: '阿布浏览器桥接，配合 Chrome 插件实现网页自动化：点击、填写、提取数据、截图等',
+    description: '扶摇浏览器桥接，配合 Chrome 插件实现网页自动化：点击、填写、提取数据、截图等',
     command: 'npx',
     defaultArgs: ['-y', 'abu-browser-bridge@latest'],
     configurableArgs: [],

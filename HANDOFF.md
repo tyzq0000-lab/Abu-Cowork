@@ -56,12 +56,23 @@
 - **成本意识**:谨慎使用子代理与大规模构建(本交接前的会话成本极高)。
 - 环境:有 **GateGuard 钩子**会在每个文件首次编辑/首条 Bash 前要求"陈述事实",首次触发后照常重试即过。
 
-## 7. 下一步抓手
-1. **版本更新发版管线**:签名私钥经 CI 注入、产 updater 产物、发 `latest.json` 到 endpoint;按需把 endpoint/pubkey 迁到 uprow 品牌域名。(用户决定:等功能/UI 调整完、形成新版本后一并做。)
-2. **deep-link 后续**:uprow 平台下载 API 上线后,把正式域名加进 `ALLOWED_DOWNLOAD_HOSTS`;平台侧"部署到桌面端"按钮生成 `fuyao://install?...` 链接即可打通。
-3. 用户后续的功能/UI 调整。
+## 7. 2026-06-12 批次:去品牌/上游监测/模型注入/IM 原型(已完成)
+- **去品牌(档2)**:用户可见 abu/阿布/原作者痕迹全清(启动页/托盘/关于页/删反馈+赞助页/头像改名 fuyao-avatar);技术标识改三项:`~/.abu`→`~/.uprow`(Rust setup 一次性 rename 迁移,失败原地保留+toast)、`ABU.md`→`FUYAO.md`(读回退兼容)、`.abu.json`→`.fuyao.json`(导入兼容)。**保留**:`com.abu.app`、workspace `{workspace}/.abu/`、`ABU_` env、`--abu-*` CSS 变量、`abu://command-output-` 内部事件。品牌字面量收敛进 `src/core/branding.ts`。
+- **远程仓**:`origin`=gitee(git@gitee.com:trustwork/fuyao-desktop.git,主仓),`upstream`=GitHub PM-Shawn/Abu-Cowork(**只拉不推**)。上游监测=`.github/workflows/upstream-watch.yml`(需 GitHub 镜像仓才会跑)+ `UPSTREAM-SYNC.md` 合入手册(冲突优先级表)。
+- **模型路由**:聊天输入区已隐藏 ModelSelector;员工包 `plugin.json.modelConfig` 契约(铸造者配 apiFormat/baseUrl/model/apiKey)→ deep-link 安装注入 `employee:<name>` 专属 provider(key 进加密 secret store,落盘 plugin.json key 置空)→ `resolveAgentExecution` 让该员工对话走专属 provider,失效自动回退全局;employee provider 对设置页/选择器/全局 active 全隐藏。settingsStore v33。
+- **员工运行时契约**(并行完成):`src/core/employee/`(contract L0-L3 成熟度审计/runtimeTemplates 幂等安装定时+触发器模板/archiveAudit),EmployeeRuntimeSetupDialog 安装后确认,scheduleStore v4/triggerStore v5,`npm run audit:employees`,契约文档 `EMPLOYEE_PACKAGE_RUNTIME_CONTRACT.md`。
+- **IM 化**:`mockups/im-layout.html` 交互原型(联系人列表/点选即聊/会话历史抽屉/无模型选择),**待用户走查对齐后再出实现计划**。
 
-## 8. 数字员工"开箱为空"约定
+## 8. 下一步抓手 / 待办
+1. **IM 化实现**(待 mockup 对齐)。
+2. **版本更新发版管线**:签名私钥经 CI 注入、产 updater 产物、发 `latest.json`;(用户决定:形成新版本后一并做)。
+3. **去品牌升档1**(后续再问用户):`com.abu.app`/`ABU_` env/CSS 变量/内部事件名全改+常量全收敛。
+4. **generate_video 生视频工具**(需视频 API 选型,用户要求记入待办)。
+5. **per-agent imageGen**(生图源按员工切换;现注入仅在全局 imageGen 为空时回填)。
+6. **deep-link 后续**:uprow 平台域名上线后加进 `ALLOWED_DOWNLOAD_HOSTS`。
+7. GitHub 镜像仓(让 upstream-watch 跑起来)。
+
+## 9. 数字员工"开箱为空"约定
 - 安装包**不含**任何员工包(resources 只有 builtin-skills/builtin-agents(空)/python-runtime/browser-extension);全新机器装包后员工列表本来就是空的,由企业用户在平台雇佣后经 deep-link 部署进来。
 - 本机曾有两个测试包(content-creator→文爆爆、new-media-ops→运小运)在 `~/.abu/employees/`,2026-06-11 已移到 `~/.abu/employees.bak/`(确认无误可删)。注意安装版与 dev 版共用 `~/.abu/`。
 - `registry.ts` 仍内置 5 个示例人格(高级开发工程师/产品经理/数据分析师/公众号编辑/HR 招聘官)——用户选择保留作开箱体验,与"员工包为空"不冲突。

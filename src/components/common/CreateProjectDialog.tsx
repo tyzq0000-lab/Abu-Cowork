@@ -252,12 +252,12 @@ export default function CreateProjectDialog({
               {/* Instructions */}
               <div>
                 <label className="text-[13px] font-medium text-[var(--abu-text-secondary)] mb-1.5 block">
-                  Instructions
+                  {t.panel.instructionsTitle}
                 </label>
                 <Textarea
                   value={instructions}
                   onChange={(e) => setInstructions(e.target.value)}
-                  placeholder="Tell Abu how to work in this project (optional)"
+                  placeholder={t.panel.instructionsPlaceholder}
                   className="min-h-[80px] resize-none"
                 />
               </div>
