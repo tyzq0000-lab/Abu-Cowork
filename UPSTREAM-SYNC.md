@@ -9,7 +9,11 @@ origin    git@gitee.com:trustwork/fuyao-desktop.git   # 我们的主仓（推送
 upstream  https://github.com/PM-Shawn/Abu-Cowork      # 上游（只拉不推）
 ```
 
-⚠️ **绝不向 upstream push**。首次配置：
+⚠️ **绝不向 upstream push**。
+
+⚠️ `upstream-watch.yml` 是 GitHub Actions——**只在 GitHub 仓库上运行**。gitee 为主仓时，需另建一个自己的 GitHub 仓（私有即可）作为镜像并 push 本仓内容，监测 issue 会开在该 GitHub 仓里；或改用本机定时任务轮询上游 releases API。
+
+首次配置：
 
 ```bash
 git remote rename origin upstream      # 若 origin 仍指向上游
