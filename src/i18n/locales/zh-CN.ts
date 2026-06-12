@@ -1532,10 +1532,6 @@ const zhCN: TranslationDict = {
   },
 
   about: {
-    feedback: '反馈',
-    feedbackDesc: '扫码添加微信，反馈问题或交流想法',
-    sponsor: '支持',
-    sponsorDesc: '如果觉得扶摇好用，请作者喝杯咖啡吧',
     deviceId: '设备 ID',
     deviceIdHint: '遇到问题时发给开发者，用于定位你的设备记录',
     copied: '已复制',

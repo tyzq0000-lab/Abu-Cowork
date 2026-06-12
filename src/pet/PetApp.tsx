@@ -1,4 +1,4 @@
-import abuAvatar from '@/assets/abu-avatar.png';
+import fuyaoAvatar from '@/assets/fuyao-avatar.png';
 import StatusLight from './StatusLight';
 import { useStatusLight } from './useStatusLight';
 import { usePetDrag } from './usePetDrag';
@@ -36,7 +36,7 @@ export default function PetApp() {
       }}
     >
       <img
-        src={abuAvatar}
+        src={fuyaoAvatar}
         alt={t.common.appName}
         draggable={false}
         style={{

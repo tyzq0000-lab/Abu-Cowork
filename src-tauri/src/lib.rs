@@ -172,7 +172,7 @@ fn execute_foreground_command(
 
 #[tauri::command]
 fn greet(name: &str) -> String {
-    format!("Hello, {}! Welcome to ABU.", name)
+    format!("Hello, {}! Welcome to Fuyao.", name)
 }
 
 #[tauri::command]
@@ -1172,7 +1172,7 @@ fn update_tray_menu(app: AppHandle, im_channels: Vec<IMTrayStatus>, trigger_coun
     if let Ok(sep) = MenuItem::with_id(&app, "sep", "────────────", false, None::<&str>) {
         items.push(sep);
     }
-    if let Ok(show) = MenuItem::with_id(&app, "show", "Show Abu / 显示窗口", true, None::<&str>) {
+    if let Ok(show) = MenuItem::with_id(&app, "show", "Show Fuyao / 显示窗口", true, None::<&str>) {
         items.push(show);
     }
     if let Ok(quit) = MenuItem::with_id(&app, "quit", "Quit / 退出", true, None::<&str>) {
@@ -1204,9 +1204,9 @@ fn update_tray_notice_count(app: AppHandle, count: u32) {
     let _ = tray.set_title(Some(&title));
 
     let tooltip = if count > 0 {
-        format!("Abu — {} pending", count)
+        format!("Fuyao — {} pending", count)
     } else {
-        "Abu".to_string()
+        "扶摇 Fuyao".to_string()
     };
     let _ = tray.set_tooltip(Some(&tooltip));
 }
@@ -1307,7 +1307,7 @@ pub fn run() {
                     );
                     // Fall back to a best-effort temp-dir store so the UI doesn't crash;
                     // migration will retry on next launch.
-                    let fallback_path = std::env::temp_dir().join("abu-secrets-fallback.bin");
+                    let fallback_path = std::env::temp_dir().join("fuyao-secrets-fallback.bin");
                     if let Ok(store) = secrets::SecretStore::load(&fallback_path) {
                         app.manage(store);
                     }
@@ -1330,14 +1330,14 @@ pub fn run() {
             }
 
             // Build tray menu — bilingual labels for cross-locale compatibility
-            let show_item = MenuItem::with_id(app, "show", "Show Abu / 显示窗口", true, None::<&str>)?;
+            let show_item = MenuItem::with_id(app, "show", "Show Fuyao / 显示窗口", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit / 退出", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
 
             // Create tray icon with known ID for update_tray_menu
             TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().expect("default window icon must be set in tauri.conf.json").clone())
-                .tooltip("Abu")
+                .tooltip("扶摇 Fuyao")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| {

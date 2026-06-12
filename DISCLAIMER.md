@@ -1,9 +1,9 @@
 # 免责声明 | Disclaimer
 
-> Abu（阿布）是由个人开发者以 Apache 2.0 许可证发布的开源桌面软件。  
+> 扶摇（Fuyao）是由个人开发者以 Apache 2.0 许可证发布的开源桌面软件。  
 > 使用本软件即表示你已阅读并接受以下条款。
 >
-> Abu is an open-source desktop application released by an individual developer  
+> Fuyao is an open-source desktop application released by an individual developer  
 > under the Apache 2.0 License. By using this software, you agree to the terms below.
 
 ---
@@ -20,7 +20,7 @@ of any kind. Breaking changes may occur between releases.
 
 ## 二、AI 输出免责 / AI Output
 
-Abu 通过调用第三方大语言模型（LLM）生成内容：
+Fuyao 通过调用第三方大语言模型（LLM）生成内容：
 
 - AI 输出**仅供参考**，不构成专业建议（法律、医疗、财务、投资等）。
 - 模型可能产生错误、幻觉或偏见，**请自行核实所有关键输出**。
@@ -33,7 +33,7 @@ Always verify critical outputs independently.
 
 ## 三、本地操作风险 / Local Operation Risks
 
-Abu 具备以下能力——**在授权前请仔细确认**：
+Fuyao 具备以下能力——**在授权前请仔细确认**：
 
 | 能力 | 风险提示 |
 |---|---|
@@ -49,29 +49,29 @@ All consequences arising from the above operations are solely the user's respons
 
 ## 四、第三方服务与 API Key / Third-Party Services & API Keys
 
-- Abu **不提供任何 LLM 后端**。你的 AI 请求通过**你自己的 API Key** 直接发往第三方服务商（Anthropic、OpenAI 兼容端点等）。
+- Fuyao **不提供任何 LLM 后端**。你的 AI 请求通过**你自己的 API Key** 直接发往第三方服务商（Anthropic、OpenAI 兼容端点等）。
 - 数据处理、隐私保护及费用均由各服务商条款约束，请阅读并遵守所用服务商的 ToS。
 - 开发者对你的 API 用量及由此产生的费用**不承担任何责任**。
 
-Abu provides **no LLM backend**. Your requests go directly to your configured provider  
+Fuyao provides **no LLM backend**. Your requests go directly to your configured provider  
 via your own API key. Usage costs and data handling are governed by that provider's terms.
 
 ---
 
 ## 五、隐私与数据 / Privacy & Data
 
-- **本地优先**：对话记录、记忆、配置均存储在你的本机，不经过阿布的服务器。
+- **本地优先**：对话记录、记忆、配置均存储在你的本机，不经过扶摇的服务器。
 - IM 集成（飞书 / 钉钉 / 企微 / Slack 等）发送的内容经对应平台传输，适用其各自隐私政策。
 - 导出诊断包时，请在发送前检查并移除任何敏感信息。
 
 Conversations, memory, and settings are stored **locally on your device**,  
-not on any Abu server.
+not on any Fuyao server.
 
 ---
 
 ## 六、使用限制 / Acceptable Use
 
-你同意不将 Abu 用于：
+你同意不将 Fuyao 用于：
 
 - 违反任何适用法律或法规的活动
 - 生成或传播虚假信息、诈骗内容或有害材料
@@ -91,4 +91,8 @@ This section supplements Apache 2.0 License Sections 7 and 8.
 ---
 
 *最后更新 / Last updated: 2026-05-27*  
-*Abu (阿布) · Apache 2.0 · https://github.com/PM-Shawn/Abu-Cowork*
+*Fuyao (扶摇) · Apache 2.0 · https://github.com/PM-Shawn/Fuyao-Cowork*
+
+---
+
+Based on the open-source Abu-Cowork project (Apache License 2.0). Original license terms are preserved in LICENSE.

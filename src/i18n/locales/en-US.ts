@@ -1531,10 +1531,6 @@ const enUS: TranslationDict = {
   },
 
   about: {
-    feedback: 'Feedback',
-    feedbackDesc: 'Scan to add on WeChat for feedback or discussion',
-    sponsor: 'Support',
-    sponsorDesc: 'Buy the author a coffee if you find Fuyao useful',
     deviceId: 'Device ID',
     deviceIdHint: 'Share with the developer when reporting issues',
     copied: 'Copied',

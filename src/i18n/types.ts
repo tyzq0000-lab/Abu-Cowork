@@ -1553,10 +1553,6 @@ export interface TranslationDict {
 
   // About
   about: {
-    feedback: string;
-    feedbackDesc: string;
-    sponsor: string;
-    sponsorDesc: string;
     deviceId: string;
     deviceIdHint: string;
     copied: string;

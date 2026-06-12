@@ -17,7 +17,7 @@ import { agentRegistry } from '@/core/agent/registry';
 import PermissionDialog from '@/components/common/PermissionDialog';
 import CommandConfirmDialog from '@/components/common/CommandConfirmDialog';
 import { ChevronDown, Settings } from 'lucide-react';
-import abuAvatar from '@/assets/abu-avatar.png';
+import fuyaoAvatar from '@/assets/fuyao-avatar.png';
 import IMInfoBar from './IMInfoBar';
 import SourceInfoBar from './SourceInfoBar';
 import ComputerUseStatusBar from './ComputerUseStatusBar';
@@ -292,7 +292,7 @@ export default function ChatView() {
                 <>
                   {/* Mascot */}
                   <div className="w-20 h-20 mx-auto mb-4 rounded-full overflow-hidden">
-                    <img src={abuAvatar} alt={t.common.appName} className="w-full h-full object-cover" />
+                    <img src={fuyaoAvatar} alt={t.common.appName} className="w-full h-full object-cover" />
                   </div>
 
                   {/* Slogan */}

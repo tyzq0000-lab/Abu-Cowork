@@ -1,9 +1,8 @@
 import { useSettingsStore, type SystemSettingsTab } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
-import { Settings2, Info, Shield, SlidersHorizontal, MessageCircle, Radio, Brain, Heart, Activity, BarChart3 } from 'lucide-react';
+import { Settings2, Info, Shield, SlidersHorizontal, Radio, Brain, Heart, Activity, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIServicesSection, AboutSection, SandboxSection, GeneralSection, IMChannelSection } from './sections';
-import FeedbackSection from './sections/FeedbackSection';
 import PersonalMemorySection from './sections/PersonalMemorySection';
 import SoulSection from './sections/SoulSection';
 import DiagnosticSection from './sections/DiagnosticSection';
@@ -25,7 +24,6 @@ export default function SystemSettingsView() {
     { id: 'sandbox', label: t.settings.sandbox, icon: Shield },
     { id: 'general', label: t.settings.general, icon: SlidersHorizontal },
     { id: 'diagnostic', label: t.diagnostic.title, icon: Activity },
-    { id: 'feedback', label: t.about.feedback, icon: MessageCircle },
     { id: 'about', label: t.common.version, icon: Info },
   ];
 
@@ -49,8 +47,6 @@ export default function SystemSettingsView() {
         return <DiagnosticSection />;
       case 'about':
         return <AboutSection />;
-      case 'feedback':
-        return <FeedbackSection />;
       default:
         return <GeneralSection />;
     }

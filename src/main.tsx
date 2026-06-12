@@ -30,4 +30,4 @@ root.render(
     <App />
   </StrictMode>,
 );
-(window as typeof window & { __abuRootMounted: boolean }).__abuRootMounted = true;
+(window as typeof window & { __fuyaoRootMounted: boolean }).__fuyaoRootMounted = true;

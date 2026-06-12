@@ -3,7 +3,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { RefreshCw, Download, CheckCircle, CircleAlert, RotateCcw, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import abuAvatar from '@/assets/abu-avatar.png';
+import fuyaoAvatar from '@/assets/fuyao-avatar.png';
 import { APP_VERSION } from '@/utils/version';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { checkForUpdate, downloadAndInstallUpdate, restartApp } from '@/core/updates/checker';
@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 
 type CheckResult = 'idle' | 'just-checked' | 'error';
 
-const DISCLAIMER_URL = 'https://github.com/PM-Shawn/Abu-Cowork/blob/main/DISCLAIMER.md';
+const DISCLAIMER_URL = 'https://gitee.com/trustwork/fuyao-desktop/blob/main/DISCLAIMER.md';
 
 export default function AboutSection() {
   const [disclaimerOpen, setDisclaimerOpen] = useState(false);
@@ -74,7 +74,7 @@ export default function AboutSection() {
     <div className="space-y-6">
       {/* Logo & name */}
       <div className="flex flex-col items-center text-center space-y-3">
-        <img src={abuAvatar} alt="阿布" className="w-20 h-20 rounded-2xl" />
+        <img src={fuyaoAvatar} alt={t.common.appName} className="w-20 h-20 rounded-2xl" />
         <div>
           <h4 className="text-2xl font-bold text-[var(--abu-text-primary)]">{t.common.appName}</h4>
           <p className="text-sm text-[var(--abu-text-tertiary)]">{t.common.appSlogan}</p>
@@ -237,15 +237,6 @@ export default function AboutSection() {
 
       {/* Footer */}
       <div className="text-center space-y-2 pt-2">
-        <p className="text-sm text-[var(--abu-text-tertiary)]">
-          Made with ❤️ by{' '}
-          <button
-            onClick={() => handleOpenLink('https://github.com/PM-Shawn/Abu-Cowork')}
-            className="text-[var(--abu-clay)] hover:underline font-medium"
-          >
-            Shawn
-          </button>
-        </p>
         <p className="text-xs text-[var(--abu-text-muted)]">
           © 2026 {t.common.appName}. All rights reserved.
           <span className="mx-1.5">·</span>
