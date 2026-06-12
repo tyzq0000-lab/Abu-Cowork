@@ -123,6 +123,36 @@ describe('employeeLoader', () => {
       expect(def!.avatar).toBe('✍️');
     });
 
+    it('uses the package runtime memory scope instead of forcing session memory', async () => {
+      const persistentEmployee = JSON.stringify({
+        ...JSON.parse(PLUGIN_JSON),
+        runtime: {
+          version: 1,
+          targetMaturity: 'L2',
+          memory: {
+            scope: 'project',
+            autoCapture: ['feedback', 'failure'],
+          },
+          workflows: [
+            {
+              id: 'weekly-review',
+              kind: 'schedule',
+              name: '每周复盘',
+              prompt: '执行每周复盘',
+              schedule: { frequency: 'weekly', dayOfWeek: 3 },
+            },
+          ],
+        },
+      });
+      mockPackageFiles({
+        [`${PKG}/.codebuddy-plugin/plugin.json`]: persistentEmployee,
+      });
+
+      const def = await loadEmployeePackage(PKG);
+
+      expect(def!.memory).toBe('project');
+    });
+
     it('returns null when plugin.json is missing', async () => {
       vi.mocked(readTextFile).mockRejectedValue(new Error('ENOENT'));
       expect(await loadEmployeePackage(PKG)).toBeNull();

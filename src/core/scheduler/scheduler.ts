@@ -42,6 +42,17 @@ const autoFilePermission: FilePermissionCallback = async (request) => {
 
 const TICK_INTERVAL_MS = 60_000; // 60 seconds
 
+export function buildScheduledTaskPrompt(task: ScheduledTask): string {
+  let prompt = task.prompt;
+  if (task.skillName) {
+    prompt = `/${task.skillName} ${prompt}`;
+  }
+  if (task.agentName) {
+    prompt = `@${task.agentName} ${prompt}`;
+  }
+  return prompt;
+}
+
 class SchedulerEngine {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private runningTasks = new Set<string>();
@@ -100,10 +111,7 @@ class SchedulerEngine {
     const runId = scheduleStore.startRun(task.id, conversationId);
 
     // Build the prompt
-    let prompt = task.prompt;
-    if (task.skillName) {
-      prompt = `/${task.skillName} ${prompt}`;
-    }
+    const prompt = buildScheduledTaskPrompt(task);
 
     try {
       const result = await runAgentLoop(conversationId, prompt, {

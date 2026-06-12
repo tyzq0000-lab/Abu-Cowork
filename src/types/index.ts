@@ -310,6 +310,8 @@ export interface ToolParameter {
 export interface ToolExecutionContext {
   /** Resolved workspace path (from IMContext or global store) */
   workspacePath?: string | null;
+  /** Restricts persistent memory access for a delegated agent. */
+  memoryScope?: 'session' | 'project' | 'user';
   /** Loop ID for multi-agent context lookup */
   loopId?: string;
   /** Conversation ID — tools should prefer this over activeConversationId */

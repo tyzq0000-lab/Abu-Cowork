@@ -14,6 +14,12 @@ export interface ScheduleConfig {
   dayOfWeek?: number;
 }
 
+export interface EmployeeTemplateSource {
+  kind: 'employee-template';
+  employeeName: string;
+  templateId: string;
+}
+
 export interface ScheduledTask {
   id: string;
   name: string;
@@ -24,6 +30,8 @@ export interface ScheduledTask {
   status: ScheduledTaskStatus;
   /** Optional skill binding */
   skillName?: string;
+  /** Optional employee/agent binding for unattended execution. */
+  agentName?: string;
   /** Optional workspace path */
   workspacePath?: string;
   /** Optional IM channel ID to push results to after completion */
@@ -34,6 +42,8 @@ export interface ScheduledTask {
   outputUserIds?: string;
   /** Project this task belongs to */
   projectId?: string;
+  /** Installed from a digital employee package workflow template. */
+  source?: EmployeeTemplateSource;
   createdAt: number;
   updatedAt: number;
   lastRunAt?: number;

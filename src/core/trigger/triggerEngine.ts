@@ -314,6 +314,9 @@ class TriggerEngine {
     if (trigger.action.skillName) {
       prompt = `/${trigger.action.skillName} ${prompt}`;
     }
+    if (trigger.action.agentName) {
+      prompt = `@${trigger.action.agentName} ${prompt}`;
+    }
 
     try {
       // Resolve permission callbacks based on trigger's capability level.

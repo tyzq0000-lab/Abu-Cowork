@@ -229,6 +229,9 @@ export const readMemoryTool: ToolDefinition = {
   execute: async (input, context) => {
     const filename = ((input.filename as string) || '').trim();
     if (!filename) return 'Error: filename 不能为空';
+    if (context?.memoryScope === 'session') {
+      return 'Error: 当前 Agent 使用会话记忆，没有可读取的持久记忆。';
+    }
 
     const requestedWs = (input.workspace as string | undefined)?.trim() || undefined;
     const currentWs = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
@@ -238,7 +241,12 @@ export const readMemoryTool: ToolDefinition = {
 
     // Build search order: requested workspace > current workspace > global.
     const searchPaths: Array<string | null> = [];
-    if (requestedWs) {
+    if (context?.memoryScope === 'user') {
+      searchPaths.push(null);
+    } else if (context?.memoryScope === 'project') {
+      if (!currentWs) return 'Error: 当前 Agent 使用项目记忆，但任务没有配置工作区。';
+      searchPaths.push(currentWs);
+    } else if (requestedWs) {
       searchPaths.push(requestedWs);
     } else {
       if (currentWs) searchPaths.push(currentWs);

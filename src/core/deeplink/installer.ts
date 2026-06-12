@@ -19,6 +19,12 @@ import { writeFile, mkdir, exists, remove } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
 import { joinPath } from '@/utils/pathUtils';
 import { parsePluginJson } from '@/core/agent/employeeLoader';
+import {
+  auditEmployeePackage,
+  parseEmployeePlugin,
+  type EmployeeAuditReport,
+  type EmployeeRuntimeProfile,
+} from '@/core/employee/contract';
 import { validateArchive, unpackSkill } from '@/core/skill/packager';
 import type { DeepLinkInstallRequest } from './parser';
 
@@ -56,6 +62,8 @@ export interface InstalledPackage {
   /** Canonical package name (= directory name under ~/.uprow/...). */
   name: string;
   fileCount: number;
+  runtimeProfile?: EmployeeRuntimeProfile;
+  audit?: EmployeeAuditReport;
 }
 
 // ── Employee package: pure planning ───────────────────────────────────────
@@ -65,6 +73,8 @@ export interface EmployeeUnpackPlan {
   name: string;
   /** Files to write, paths relative to the package root. */
   files: Array<{ path: string; data: Uint8Array }>;
+  runtimeProfile?: EmployeeRuntimeProfile;
+  audit: EmployeeAuditReport;
 }
 
 /** True when a name is safe to use as a single directory component. */
@@ -105,7 +115,8 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
   // Prefix to strip, e.g. "new-media-ops/" when zipped from the parent dir.
   const prefix = manifestKey.slice(0, manifestKey.length - '.codebuddy-plugin/plugin.json'.length);
 
-  const plugin = parsePluginJson(strFromU8(entries[manifestKey]));
+  const rawPlugin = strFromU8(entries[manifestKey]);
+  const plugin = parsePluginJson(rawPlugin);
   const name = plugin?.agentName || plugin?.name;
   if (!name || !isSafeDirName(name)) {
     throw new DeepLinkInstallError('NO_NAME', 'plugin.json is missing a valid agentName/name');
@@ -134,7 +145,18 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
     files.push({ path: rel, data });
   }
 
-  return { name, files };
+  const manifest = parseEmployeePlugin(rawPlugin);
+  const audit = auditEmployeePackage({
+    manifest,
+    files: files.map((file) => file.path),
+  });
+
+  return {
+    name,
+    files,
+    runtimeProfile: manifest?.runtime,
+    audit,
+  };
 }
 
 // ── Download + install ─────────────────────────────────────────────────────
@@ -190,7 +212,13 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
     throw new DeepLinkInstallError('WRITE_FAILED', `Failed to write package: ${String(err)}`);
   }
 
-  return { kind: 'employee', name: plan.name, fileCount: plan.files.length };
+  return {
+    kind: 'employee',
+    name: plan.name,
+    fileCount: plan.files.length,
+    runtimeProfile: plan.runtimeProfile,
+    audit: plan.audit,
+  };
 }
 
 /** Unpack a .askill archive into ~/.uprow/skills/<name>/ (overwrites). */

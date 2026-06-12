@@ -59,6 +59,7 @@ import { useI18n, getI18n } from '@/i18n';
 import { useToastStore } from '@/stores/toastStore';
 import CloseDialog from '@/components/common/CloseDialog';
 import DeepLinkInstallDialog from '@/components/common/DeepLinkInstallDialog';
+import EmployeeRuntimeSetupDialog from '@/components/common/EmployeeRuntimeSetupDialog';
 import { initDeepLink } from '@/core/deeplink';
 import SensitiveAuditDialog from '@/components/settings/SensitiveAuditDialog';
 import { checkForUpdate } from '@/core/updates/checker';
@@ -540,6 +541,7 @@ function App() {
         {/* fuyao://install deep-link confirm dialog — renders off
             deepLinkStore.pending, staged by initDeepLink(). */}
         <DeepLinkInstallDialog />
+        <EmployeeRuntimeSetupDialog />
 
         <CloseDialog
           open={showCloseDialog}

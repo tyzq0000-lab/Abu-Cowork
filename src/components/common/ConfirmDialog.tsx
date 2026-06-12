@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
-  message: string;
+  message: ReactNode;
   confirmText: string;
   cancelText: string;
   onConfirm: () => void;
@@ -52,9 +52,9 @@ export default function ConfirmDialog({
         <h3 className="text-[16px] font-semibold text-[var(--abu-text-primary)] mb-2">
           {title}
         </h3>
-        <p className="text-[14px] text-[var(--abu-text-tertiary)] leading-relaxed mb-6">
+        <div className="text-[14px] text-[var(--abu-text-tertiary)] leading-relaxed mb-6">
           {message}
-        </p>
+        </div>
         <div className="flex items-center justify-end gap-3">
           <button
             onClick={onCancel}

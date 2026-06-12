@@ -2,6 +2,10 @@ import { parse as parseYaml } from 'yaml';
 import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
 import type { SubagentDefinition } from '../../types';
 import { joinPath, normalizeSeparators } from '../../utils/pathUtils';
+import {
+  parseEmployeePlugin,
+  type EmployeeRuntimeProfile,
+} from '@/core/employee/contract';
 
 /**
  * Employee Loader — load WorkBuddy / CodeBuddy "expert" packages into Abu's
@@ -39,6 +43,7 @@ interface CodebuddyPluginJson {
   quickPrompts?: LocalePair[];
   defaultInitPrompt?: LocalePair;
   skills?: string[];
+  runtime?: EmployeeRuntimeProfile;
 }
 
 const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i;
@@ -54,13 +59,7 @@ export function isImageAvatarPath(avatar: string | undefined): boolean {
 
 /** Parse plugin.json text. Returns null on malformed JSON or non-object root. */
 export function parsePluginJson(raw: string): CodebuddyPluginJson | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    return parsed as CodebuddyPluginJson;
-  } catch {
-    return null;
-  }
+  return parseEmployeePlugin(raw) as CodebuddyPluginJson | null;
 }
 
 /** zh-first localized pick (Abu's default locale is zh-CN). */
@@ -196,7 +195,7 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
     samplePromptsI18n,
     category: plugin.categoryId,
     skills: skills && skills.length > 0 ? skills : undefined,
-    memory: 'session',
+    memory: plugin.runtime?.memory?.scope ?? 'session',
     source: 'employee',
     systemPrompt,
     filePath: pluginPath,

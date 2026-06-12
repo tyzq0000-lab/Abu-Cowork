@@ -29,11 +29,46 @@ describe('deeplink installer', () => {
         }),
       );
       expect(plan.name).toBe('new-media-ops');
+      expect(plan.audit.level).toBe('L0');
+      expect(plan.runtimeProfile).toBeUndefined();
       expect(plan.files.map((f) => f.path).sort()).toEqual([
         '.codebuddy-plugin/plugin.json',
         'agents/new-media-ops.md',
         'avatars/expert.png',
       ]);
+    });
+
+    it('carries runtime templates and maturity audit into the install result', () => {
+      const runtimePlugin = JSON.stringify({
+        ...JSON.parse(PLUGIN_JSON),
+        skills: ['./skills/content-diagnosis'],
+        runtime: {
+          version: 1,
+          targetMaturity: 'L2',
+          memory: { scope: 'project', autoCapture: ['feedback'] },
+          workflows: [
+            {
+              id: 'weekly-review',
+              kind: 'schedule',
+              name: '每周复盘',
+              prompt: '执行每周复盘',
+              schedule: { frequency: 'weekly', dayOfWeek: 3, time: { hour: 9, minute: 0 } },
+            },
+          ],
+        },
+      });
+      const plan = planEmployeeUnpack(
+        entriesOf({
+          '.codebuddy-plugin/plugin.json': runtimePlugin,
+          'agents/new-media-ops.md': 'prompt',
+          'skills/content-diagnosis/SKILL.md': '---\nname: content-diagnosis\n---\nbody',
+        }),
+      );
+
+      expect(plan.runtimeProfile?.workflows?.[0]).toEqual(
+        expect.objectContaining({ id: 'weekly-review', kind: 'schedule' }),
+      );
+      expect(plan.audit.level).toBe('L2');
     });
 
     it('strips a single nested directory prefix (zip created from parent dir)', () => {

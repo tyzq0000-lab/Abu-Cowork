@@ -143,11 +143,13 @@ interface ScheduleActions {
     prompt: string;
     schedule: ScheduleConfig;
     skillName?: string;
+    agentName?: string;
     workspacePath?: string;
     projectId?: string;
     outputChannelId?: string;
     outputChatIds?: string;
     outputUserIds?: string;
+    source?: ScheduledTask['source'];
   }) => string;
   updateTask: (
     id: string,
@@ -157,6 +159,7 @@ interface ScheduleActions {
       prompt: string;
       schedule: ScheduleConfig;
       skillName: string | undefined;
+      agentName: string | undefined;
       workspacePath: string | undefined;
       projectId: string | undefined;
       outputChannelId: string | undefined;
@@ -210,11 +213,13 @@ export const useScheduleStore = create<ScheduleStore>()(
           schedule: data.schedule,
           status: 'active',
           skillName: data.skillName,
+          agentName: data.agentName,
           workspacePath: data.workspacePath,
           projectId: data.projectId,
           outputChannelId: data.outputChannelId,
           outputChatIds: data.outputChatIds,
           outputUserIds: data.outputUserIds,
+          source: data.source,
           createdAt: now,
           updatedAt: now,
           nextRunAt: computeNextRunAt(data.schedule, 'active', now),
@@ -235,6 +240,7 @@ export const useScheduleStore = create<ScheduleStore>()(
           if (data.description !== undefined) task.description = data.description;
           if (data.prompt !== undefined) task.prompt = data.prompt;
           if (data.skillName !== undefined) task.skillName = data.skillName;
+          if (data.agentName !== undefined) task.agentName = data.agentName;
           if (data.workspacePath !== undefined) task.workspacePath = data.workspacePath;
           if (data.projectId !== undefined) task.projectId = data.projectId;
           if (data.outputChannelId !== undefined) task.outputChannelId = data.outputChannelId;
@@ -389,7 +395,7 @@ export const useScheduleStore = create<ScheduleStore>()(
     })),
     {
       name: 'abu-schedule',
-      version: 3,
+      version: 4,
       migrate(persisted: unknown, version: number) {
         if (version < 2) {
           // v1→v2 added optional IM output fields (outputChannelId, outputChatIds, outputUserIds).
@@ -397,6 +403,9 @@ export const useScheduleStore = create<ScheduleStore>()(
         }
         if (version < 3) {
           // v2→v3 added optional projectId field. No data transform needed.
+        }
+        if (version < 4) {
+          // v3→v4 added optional employee template provenance and agent binding.
         }
         return persisted as Record<string, unknown>;
       },

@@ -102,7 +102,15 @@ export const updateMemoryTool: ToolDefinition = {
     const action = (input.action as string) || 'append';
 
     try {
-      const workspacePath = context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
+      if (context?.memoryScope === 'session') {
+        return 'Error: 当前 Agent 使用会话记忆，不能读写持久记忆。';
+      }
+      const workspacePath = context?.memoryScope === 'user'
+        ? null
+        : context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
+      if (context?.memoryScope === 'project' && !workspacePath) {
+        return 'Error: 当前 Agent 使用项目记忆，但任务没有配置工作区。';
+      }
 
       if (action === 'clear') {
         const { clearAllMemories } = await import('../../memdir/write');
@@ -132,8 +140,12 @@ export const updateMemoryTool: ToolDefinition = {
 
         // Find the existing memory across both global and workspace dirs
         const [globalHeaders, wsHeaders] = await Promise.all([
-          scanMemoryFiles(null),
-          workspacePath ? scanMemoryFiles(workspacePath) : Promise.resolve([]),
+          context?.memoryScope === 'project'
+            ? Promise.resolve([])
+            : scanMemoryFiles(null),
+          context?.memoryScope === 'user' || !workspacePath
+            ? Promise.resolve([])
+            : scanMemoryFiles(workspacePath),
         ]);
         const existing = [...globalHeaders, ...wsHeaders].find((h) => h.filename === filename);
         if (!existing) {

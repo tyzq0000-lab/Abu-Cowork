@@ -6,6 +6,7 @@
  */
 
 import type { IMReplyContext } from './im';
+import type { EmployeeTemplateSource } from './schedule';
 
 // Re-export shared IM types for backwards compatibility
 export type { IMPlatform, IMReplyContext } from './im';
@@ -108,6 +109,8 @@ export interface TriggerPermissions {
 // ── Action ──
 
 export interface TriggerAction {
+  /** Employee/agent to execute this unattended action (optional). */
+  agentName?: string;
   /** Skill to invoke (optional) */
   skillName?: string;
   /** Prompt sent to Agent. Use $EVENT_DATA for event data placeholder. */
@@ -192,6 +195,8 @@ export interface Trigger {
   output?: TriggerOutput;
   /** Project this trigger belongs to */
   projectId?: string;
+  /** Installed from a digital employee package workflow template. */
+  sourceTemplate?: EmployeeTemplateSource;
   createdAt: number;
   updatedAt: number;
   lastTriggeredAt?: number;

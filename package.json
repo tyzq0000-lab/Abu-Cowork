@@ -19,6 +19,7 @@
     "test:changed": "vitest run --changed HEAD~1",
     "eval:tool-selection": "tsx src/eval/run.ts tool-selection",
     "eval:report": "tsx src/eval/run.ts report",
+    "audit:employees": "tsx scripts/audit-employee-packages.ts",
     "copy-resources": "node scripts/copy-resources.js",
     "setup-python": "bash scripts/setup-python-runtime.sh",
     "prepare": "husky"

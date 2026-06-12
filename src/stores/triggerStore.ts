@@ -55,6 +55,7 @@ interface TriggerActions {
     quietHours?: QuietHoursConfig;
     output?: TriggerOutput;
     projectId?: string;
+    sourceTemplate?: Trigger['sourceTemplate'];
   }) => string;
   updateTrigger: (
     id: string,
@@ -120,6 +121,7 @@ export const useTriggerStore = create<TriggerStore>()(
           quietHours: data.quietHours,
           output: data.output,
           projectId: data.projectId,
+          sourceTemplate: data.sourceTemplate,
           createdAt: now,
           updatedAt: now,
           runs: [],
@@ -299,7 +301,7 @@ export const useTriggerStore = create<TriggerStore>()(
     })),
     {
       name: 'abu-triggers',
-      version: 4,
+      version: 5,
       partialize: (state) => ({
         triggers: state.triggers,
       }),
@@ -363,6 +365,9 @@ export const useTriggerStore = create<TriggerStore>()(
         // v3 → v4: added optional projectId on Trigger. No data transform needed.
         if (version < 4) {
           // no-op, projectId is optional
+        }
+        if (version < 5) {
+          // v4→v5 added optional employee template provenance and agent binding.
         }
 
         return persisted;

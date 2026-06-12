@@ -42,6 +42,17 @@ export default function DeepLinkInstallDialog() {
             { name: displayName },
           ),
         });
+        if (
+          installed.kind === 'employee'
+          && installed.runtimeProfile
+          && (installed.runtimeProfile.workflows?.length ?? 0) > 0
+        ) {
+          useDeepLinkStore.getState().setRuntimeSetup({
+            name: installed.name,
+            level: installed.audit?.level ?? 'L1',
+            profile: installed.runtimeProfile,
+          });
+        }
         return useDiscoveryStore.getState().refresh();
       })
       .catch((err: unknown) => {

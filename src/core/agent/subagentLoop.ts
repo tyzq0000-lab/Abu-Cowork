@@ -21,6 +21,8 @@ import { prepareContextMessages } from '../context/contextManager';
 import { compressContextIfNeeded } from '../context/contextCompressor';
 import { getMessageText } from '../context/contextUtils';
 import { withRetry } from './retry';
+import { buildEmployeeSkillsSection } from './employeeSkills';
+import { resolveAgentMemoryPaths } from './employeeMemory';
 
 /**
  * Extract a brief summary of parent conversation for subagent context.
@@ -154,6 +156,10 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     });
 
     let systemPrompt = agent.systemPrompt;
+    const employeeSkillsSection = buildEmployeeSkillsSection(agent);
+    if (employeeSkillsSection) {
+      systemPrompt += `\n\n${employeeSkillsSection}`;
+    }
     systemPrompt += `\n\n## 当前时间\n${dateStr} ${timeStr}`;
     if (workspacePath) {
       systemPrompt += `\n\n## 当前工作区\n路径: ${workspacePath}`;
@@ -166,14 +172,13 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     // Load and inject persistent memory from memdir
     try {
       const { scanMemoryFiles, loadMemoryIndex } = await import('../memdir/scan');
-      const wsPath = workspacePath;
-
-      const [globalHeaders, wsHeaders, globalIndex] = await Promise.all([
-        scanMemoryFiles(null),
-        wsPath ? scanMemoryFiles(wsPath) : Promise.resolve([]),
-        loadMemoryIndex(null),
+      const memoryPaths = resolveAgentMemoryPaths(agent, workspacePath);
+      const [headerGroups, indexes] = await Promise.all([
+        Promise.all(memoryPaths.map((path) => scanMemoryFiles(path))),
+        Promise.all(memoryPaths.map((path) => loadMemoryIndex(path))),
       ]);
-      const allHeaders = [...globalHeaders, ...wsHeaders];
+      const allHeaders = headerGroups.flat();
+      const memoryIndex = indexes.filter(Boolean).join('\n');
 
       if (allHeaders.length > 0) {
         const top = allHeaders
@@ -181,8 +186,8 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
           .slice(0, 10);
         const memText = top.map(e => `- [${e.type}] ${e.name}: ${e.description}`).join('\n');
         systemPrompt += `\n\n## 你的记忆\n以下是跨会话积累的记忆，可参考使用：\n${memText}`;
-      } else if (globalIndex.trim()) {
-        systemPrompt += `\n\n## 你的记忆\n${globalIndex}`;
+      } else if (memoryIndex.trim()) {
+        systemPrompt += `\n\n## 你的记忆\n${memoryIndex}`;
       }
     } catch {
       // Non-critical: proceed without memory
@@ -211,6 +216,11 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     if (agent.disallowedTools && agent.disallowedTools.length > 0) {
       const blocked = new Set(agent.disallowedTools);
       tools = tools.filter((t) => !blocked.has(t.name));
+    }
+    if ((agent.memory ?? 'session') === 'session') {
+      tools = tools.filter(
+        (tool) => tool.name !== TOOL_NAMES.UPDATE_MEMORY && tool.name !== TOOL_NAMES.READ_MEMORY,
+      );
     }
     // Always remove delegate_to_agent (prevent recursion) and update_soul (main agent only)
     tools = tools.filter((t) => t.name !== TOOL_NAMES.DELEGATE_TO_AGENT && t.name !== TOOL_NAMES.UPDATE_SOUL);
@@ -427,7 +437,10 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
             return { id: tc.id, result: '[已取消]' };
           }
           try {
-            const subagentToolContext: ToolExecutionContext = { workspacePath };
+            const subagentToolContext: ToolExecutionContext = {
+              workspacePath,
+              memoryScope: agent.memory ?? 'session',
+            };
             const rawResult = await executeAnyTool(
               tc.name,
               tc.input,

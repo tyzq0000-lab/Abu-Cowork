@@ -92,6 +92,28 @@ describe('TriggerEngine', () => {
 
   // ── Filter matching ──
   describe('filter matching', () => {
+    it('routes an employee trigger through the declared employee and skill', async () => {
+      const trigger = makeTrigger({
+        action: {
+          agentName: 'new-media-ops',
+          skillName: 'inbox-watch',
+          prompt: 'Analyze $EVENT_DATA',
+        },
+      });
+      useTriggerStore.setState({ triggers: { [trigger.id]: trigger } });
+
+      const { runAgentLoop } = await import('../agent/agentLoop');
+      vi.mocked(runAgentLoop).mockClear();
+      vi.mocked(runAgentLoop).mockResolvedValueOnce({ reason: 'completed' });
+      await triggerEngine.handleEvent(trigger.id, { data: { file: 'brief.md' } });
+
+      expect(runAgentLoop).toHaveBeenCalledWith(
+        expect.any(String),
+        '@new-media-ops /inbox-watch Analyze {\n  "file": "brief.md"\n}',
+        expect.any(Object),
+      );
+    });
+
     it('always filter passes all events', async () => {
       const trigger = makeTrigger({ filter: { type: 'always' } });
       useTriggerStore.setState({ triggers: { [trigger.id]: trigger } });

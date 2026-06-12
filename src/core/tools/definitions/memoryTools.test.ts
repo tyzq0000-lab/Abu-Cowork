@@ -49,6 +49,27 @@ beforeEach(() => {
 });
 
 describe('updateMemoryTool — append (default)', () => {
+  it('blocks persistent writes for session-scoped agents', async () => {
+    const result = await updateMemoryTool.execute(
+      { action: 'append', name: 'temp', content: 'temporary' },
+      { memoryScope: 'session', workspacePath: '/test/workspace' },
+    );
+
+    expect(result).toContain('会话记忆');
+    expect(mockWriteMemory).not.toHaveBeenCalled();
+  });
+
+  it('writes user-scoped agent memory to the global memory directory', async () => {
+    await updateMemoryTool.execute(
+      { action: 'append', name: 'preference', content: 'Keep answers concise' },
+      { memoryScope: 'user', workspacePath: '/test/workspace' },
+    );
+
+    expect(mockWriteMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ workspacePath: null }),
+    );
+  });
+
   it('writes a new memory when action omitted', async () => {
     const result = await updateMemoryTool.execute({
       name: 'preference',
