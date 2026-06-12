@@ -8,7 +8,7 @@ import { joinPath, normalizeSeparators } from '../../utils/pathUtils';
  * agent registry so they behave exactly like the built-in personas
  * (@mention routing, AgentSelector dropdown, per-agent memory).
  *
- * Package layout (under ~/.abu/employees/<pkg>/):
+ * Package layout (under ~/.uprow/employees/<pkg>/):
  *   .codebuddy-plugin/plugin.json   — multilingual metadata
  *   agents/<agentName>.md           — YAML frontmatter + system-prompt body
  *   skills/<skill>/SKILL.md         — supporting skills (loaded by SkillLoader)
@@ -204,7 +204,7 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
 }
 
 /**
- * Scan an employees root directory (e.g. ~/.abu/employees/) and load every
+ * Scan an employees root directory (e.g. ~/.uprow/employees/) and load every
  * sub-directory that is a valid CodeBuddy package. Non-package directories are
  * skipped silently. Returns [] when the root doesn't exist.
  */

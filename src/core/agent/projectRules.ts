@@ -5,12 +5,13 @@
  * This is separate from AI-written memories (.abu/MEMORY.md).
  *
  * File structure:
- *   ~/.abu/ABU.md                    — User-level rules (cross-project)
+ *   ~/.uprow/ABU.md                    — User-level rules (cross-project)
  *   {workspace}/.abu/ABU.md          — Project main rules
  *   {workspace}/.abu/rules/*.md      — Modular rules (alphabetical)
  */
 
 import { readTextFile, readDir, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { joinPath } from '../../utils/pathUtils';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
@@ -51,11 +52,11 @@ async function safeReadTextFile(path: string): Promise<string> {
 }
 
 /**
- * Load user-level rules from ~/.abu/ABU.md
+ * Load user-level rules from ~/.uprow/ABU.md
  */
 export async function loadUserRules(): Promise<string> {
   const home = await getCachedHomeDir();
-  const rulesPath = joinPath(home, '.abu', 'ABU.md');
+  const rulesPath = joinPath(home, DATA_DIR_NAME, 'ABU.md');
   const content = await safeReadTextFile(rulesPath);
   if (!content) return '';
   return truncateAtParagraph(content, MAX_USER_RULES_CHARS, '...(用户规则已截断)');
@@ -103,7 +104,7 @@ export async function loadModularRules(workspacePath: string): Promise<string> {
 
 /**
  * Load all rules by priority (low → high):
- * 1. User-level rules (~/.abu/ABU.md)
+ * 1. User-level rules (~/.uprow/ABU.md)
  * 2. Project main rules ({workspace}/.abu/ABU.md)
  * 3. Modular rules ({workspace}/.abu/rules/*.md)
  *
@@ -116,7 +117,7 @@ export async function loadAllRules(workspacePath: string | null): Promise<string
   try {
     const userRules = await loadUserRules();
     if (userRules.trim()) {
-      parts.push(`### 用户规则（~/.abu/ABU.md）\n${userRules.trim()}`);
+      parts.push(`### 用户规则（~/.uprow/ABU.md）\n${userRules.trim()}`);
     }
   } catch (err) {
     console.warn('Failed to load user rules:', err);

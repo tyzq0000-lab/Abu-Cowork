@@ -57,10 +57,10 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
   it('scans global dirs only when workspacePath is null', async () => {
     stubFs(
       {
-        '/Users/testuser/.abu/skills': ['global-skill'],
+        '/Users/testuser/.uprow/skills': ['global-skill'],
       },
       {
-        '/Users/testuser/.abu/skills/global-skill/SKILL.md': SKILL_TEMPLATE('global-skill'),
+        '/Users/testuser/.uprow/skills/global-skill/SKILL.md': SKILL_TEMPLATE('global-skill'),
       },
     );
 
@@ -76,11 +76,11 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
     stubFs(
       {
         [`${workspace}/.abu/skills`]: ['project-skill'],
-        '/Users/testuser/.abu/skills': ['global-skill'],
+        '/Users/testuser/.uprow/skills': ['global-skill'],
       },
       {
         [`${workspace}/.abu/skills/project-skill/SKILL.md`]: SKILL_TEMPLATE('project-skill'),
-        '/Users/testuser/.abu/skills/global-skill/SKILL.md': SKILL_TEMPLATE('global-skill'),
+        '/Users/testuser/.uprow/skills/global-skill/SKILL.md': SKILL_TEMPLATE('global-skill'),
       },
     );
 
@@ -93,10 +93,10 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
     expect(loader.getCurrentWorkspace()).toBe(workspace);
   });
 
-  it('workspace-auto skills are discovered under ~/.abu/projects/<key>/skills', async () => {
+  it('workspace-auto skills are discovered under ~/.uprow/projects/<key>/skills', async () => {
     const workspace = '/Users/testuser/projects/myapp';
     // sanitizePath('/Users/testuser/projects/myapp') → '-Users-testuser-projects-myapp'
-    const autoDir = '/Users/testuser/.abu/projects/-Users-testuser-projects-myapp/skills';
+    const autoDir = '/Users/testuser/.uprow/projects/-Users-testuser-projects-myapp/skills';
     stubFs(
       {
         [autoDir]: ['auto-skill'],
@@ -117,7 +117,7 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
 
   it('drafts are NOT in getAvailableSkills() by default (excluded from L0 index)', async () => {
     const workspace = '/Users/testuser/projects/myapp';
-    const draftDir = '/Users/testuser/.abu/projects/-Users-testuser-projects-myapp/skills/drafts';
+    const draftDir = '/Users/testuser/.uprow/projects/-Users-testuser-projects-myapp/skills/drafts';
     stubFs(
       {
         [draftDir]: ['pending-skill'],
@@ -145,8 +145,8 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
     expect(drafts[0].content).toContain('Body content for pending-skill');
   });
 
-  it('discovers skills bundled in ~/.abu/employees/<pkg>/skills with source "employee"', async () => {
-    const empRoot = '/Users/testuser/.abu/employees';
+  it('discovers skills bundled in ~/.uprow/employees/<pkg>/skills with source "employee"', async () => {
+    const empRoot = '/Users/testuser/.uprow/employees';
     const skillsDir = `${empRoot}/content-creator/skills`;
     stubFs(
       {
@@ -172,16 +172,16 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
   it('first-win: a global user skill beats an employee skill of the same name', async () => {
     // Employees are scanned last (lowest priority), so a user's own global
     // skill of the same name wins — and stays source "user" (not gated).
-    const empRoot = '/Users/testuser/.abu/employees';
+    const empRoot = '/Users/testuser/.uprow/employees';
     const skillsDir = `${empRoot}/content-creator/skills`;
     stubFs(
       {
-        '/Users/testuser/.abu/skills': ['humanizer'],
+        '/Users/testuser/.uprow/skills': ['humanizer'],
         [empRoot]: ['content-creator'],
         [skillsDir]: ['humanizer'],
       },
       {
-        '/Users/testuser/.abu/skills/humanizer/SKILL.md':
+        '/Users/testuser/.uprow/skills/humanizer/SKILL.md':
           SKILL_TEMPLATE('humanizer').replace('Body content', 'USER'),
         [`${skillsDir}/humanizer/SKILL.md`]:
           SKILL_TEMPLATE('humanizer').replace('Body content', 'EMPLOYEE'),
@@ -201,12 +201,12 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
     stubFs(
       {
         [`${workspace}/.abu/skills`]: ['shared-name'],
-        '/Users/testuser/.abu/skills': ['shared-name'],
+        '/Users/testuser/.uprow/skills': ['shared-name'],
       },
       {
         [`${workspace}/.abu/skills/shared-name/SKILL.md`]:
           SKILL_TEMPLATE('shared-name').replace('Body content', 'WORKSPACE'),
-        '/Users/testuser/.abu/skills/shared-name/SKILL.md':
+        '/Users/testuser/.uprow/skills/shared-name/SKILL.md':
           SKILL_TEMPLATE('shared-name').replace('Body content', 'GLOBAL'),
       },
     );

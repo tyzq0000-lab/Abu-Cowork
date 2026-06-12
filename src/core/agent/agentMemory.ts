@@ -2,13 +2,14 @@
  * Agent Memory — per-agent persistent memory
  *
  * Each agent has a memory.md file stored at:
- *   ~/.abu/agents/{agentName}/memory.md
+ *   ~/.uprow/agents/{agentName}/memory.md
  *
  * Memory is loaded into the agent system prompt and can be updated
  * by the agent via the update_memory tool (append / rewrite / clear).
  */
 
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { ensureParentDir, joinPath } from '../../utils/pathUtils';
 
@@ -40,7 +41,7 @@ async function getCachedHomeDir(): Promise<string> {
  */
 async function getMemoryPath(agentName: string): Promise<string> {
   const home = await getCachedHomeDir();
-  return joinPath(home, '.abu', 'agents', agentName, 'memory.md');
+  return joinPath(home, DATA_DIR_NAME, 'agents', agentName, 'memory.md');
 }
 
 /**

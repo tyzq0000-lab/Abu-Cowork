@@ -2,17 +2,18 @@
  * Soul Config — Abu's personality definition (SOUL.md)
  *
  * SOUL.md defines Abu's character traits and communication style.
- * File location: ~/.abu/SOUL.md
+ * File location: ~/.uprow/SOUL.md
  *
  * Three editing channels:
  *   1. Settings UI (SoulSection)
- *   2. Direct file editing (~/.abu/SOUL.md)
+ *   2. Direct file editing (~/.uprow/SOUL.md)
  *   3. In-conversation via update_soul tool
  *
  * All writes go through saveSoul() as the single entry point.
  */
 
 import { readTextFile, writeTextFile, exists, mkdir } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { joinPath } from '../../utils/pathUtils';
 
@@ -29,11 +30,11 @@ async function getCachedHomeDir(): Promise<string> {
 }
 
 /**
- * Get the path to ~/.abu/SOUL.md
+ * Get the path to ~/.uprow/SOUL.md
  */
 async function getSoulPath(): Promise<string> {
   const home = await getCachedHomeDir();
-  return joinPath(home, '.abu', 'SOUL.md');
+  return joinPath(home, DATA_DIR_NAME, 'SOUL.md');
 }
 
 /**
@@ -47,7 +48,7 @@ function truncateAtParagraph(content: string, maxChars: number): string {
 }
 
 /**
- * Load Abu's soul from ~/.abu/SOUL.md.
+ * Load Abu's soul from ~/.uprow/SOUL.md.
  * Returns empty string if file doesn't exist or can't be read.
  */
 export async function loadSoul(): Promise<string> {
@@ -62,15 +63,15 @@ export async function loadSoul(): Promise<string> {
 }
 
 /**
- * Save Abu's soul to ~/.abu/SOUL.md.
- * Ensures ~/.abu/ directory exists before writing.
+ * Save Abu's soul to ~/.uprow/SOUL.md.
+ * Ensures ~/.uprow/ directory exists before writing.
  * This is the SINGLE write entry point — both UI and update_soul tool call this.
  */
 export async function saveSoul(content: string): Promise<void> {
   const home = await getCachedHomeDir();
-  const abuDir = joinPath(home, '.abu');
+  const abuDir = joinPath(home, DATA_DIR_NAME);
 
-  // Ensure ~/.abu/ directory exists
+  // Ensure ~/.uprow/ directory exists
   try {
     if (!(await exists(abuDir))) {
       await mkdir(abuDir, { recursive: true });

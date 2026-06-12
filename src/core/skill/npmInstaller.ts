@@ -2,12 +2,13 @@
  * npm Registry Skill Installer
  *
  * Downloads skill packages from npm registries (including private registries),
- * extracts SKILL.md files, and installs them to ~/.abu/skills/<name>/.
+ * extracts SKILL.md files, and installs them to ~/.uprow/skills/<name>/.
  *
  * Flow: fetch metadata → download .tgz → gunzip → parse tar → find SKILL.md → write to disk
  */
 
 import { fetch } from '@tauri-apps/plugin-http';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { gunzipSync, strFromU8 } from 'fflate';
 import { writeFile, mkdir, exists } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
@@ -111,10 +112,10 @@ export async function installSkillFromNpm(
     throw new NpmInstallError('NO_NAME', 'SKILL.md is missing a valid "name" field in frontmatter');
   }
 
-  // Step 5: Write to ~/.abu/skills/<name>/
+  // Step 5: Write to ~/.uprow/skills/<name>/
   progress('installing', skillName);
   const home = await homeDir();
-  const skillsBase = joinPath(home, '.abu/skills');
+  const skillsBase = joinPath(home, DATA_DIR_NAME, 'skills');
   const targetDir = joinPath(skillsBase, skillName);
 
   if (!options?.overwrite && await exists(targetDir)) {

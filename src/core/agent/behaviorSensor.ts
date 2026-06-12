@@ -2,7 +2,7 @@
  * Behavior Sensor — window sampling for user work pattern awareness
  *
  * Samples the active window title every 5 minutes.
- * Raw data stored at ~/.abu/behavior-log.json (7-day retention).
+ * Raw data stored at ~/.uprow/behavior-log.json (7-day retention).
  * Aggregates injected into system prompt as 3-5 line summary.
  *
  * Privacy: default OFF, only window titles (no content/screenshots),
@@ -10,6 +10,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
 import { ensureParentDir, joinPath } from '../../utils/pathUtils';
@@ -34,7 +35,7 @@ let cachedHome: string | null = null;
 
 async function getLogPath(): Promise<string> {
   if (!cachedHome) cachedHome = await homeDir();
-  return joinPath(cachedHome, '.abu', 'behavior-log.json');
+  return joinPath(cachedHome, DATA_DIR_NAME, 'behavior-log.json');
 }
 
 async function readBehaviorLog(): Promise<BehaviorSample[]> {

@@ -1,4 +1,5 @@
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
 import { homeDir, resolve, resolveResource } from '@tauri-apps/api/path';
 import type { SubagentDefinition, SubagentMetadata } from '../../types';
@@ -67,7 +68,7 @@ export class AgentRegistry {
     }
 
     const dirs = [
-      joinPath(home, '.abu/agents'),  // user-level
+      joinPath(home, DATA_DIR_NAME, 'agents'),  // user-level
       projectDir,                     // project-level
       ...(builtinDir ? [builtinDir] : []),  // bundled builtin-agents
     ];
@@ -77,9 +78,9 @@ export class AgentRegistry {
     }
 
     // Employee packages: WorkBuddy / CodeBuddy `.codebuddy-plugin` format under
-    // ~/.abu/employees/. Loaded last so an explicitly-installed expert package
+    // ~/.uprow/employees/. Loaded last so an explicitly-installed expert package
     // takes precedence over a same-named builtin or hand-written AGENT.md.
-    const employees = await scanEmployees(joinPath(home, '.abu/employees'));
+    const employees = await scanEmployees(joinPath(home, DATA_DIR_NAME, 'employees'));
     for (const emp of employees) {
       // Never let a dropped-in package clobber the default fallback agent —
       // 'abu' is the routing default and must always resolve to the builtin.

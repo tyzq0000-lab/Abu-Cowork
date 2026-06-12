@@ -84,7 +84,7 @@ describe('saveAgentMemory', () => {
     mockWriteTextFile.mockResolvedValue(undefined);
     await saveAgentMemory('abu', 'test content');
     expect(mockWriteTextFile).toHaveBeenCalledWith(
-      '/mock/home/.abu/agents/abu/memory.md',
+      '/mock/home/.uprow/agents/abu/memory.md',
       'test content'
     );
   });

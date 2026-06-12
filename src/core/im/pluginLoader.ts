@@ -1,5 +1,5 @@
 /**
- * PluginLoader — Discover and load IM plugins from ~/.abu/plugins/
+ * PluginLoader — Discover and load IM plugins from ~/.uprow/plugins/
  *
  * Plugins are manifest-driven (JSON config, no executable code).
  * Each plugin directory contains:
@@ -11,6 +11,7 @@
  */
 
 import { readDir, readTextFile } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { joinPath } from '../../utils/pathUtils';
 import { registerIMPlugin } from './pluginRegistry';
@@ -83,13 +84,13 @@ export interface PluginManifestFile {
 const PLUGINS_DIR = 'plugins';
 
 /**
- * Discover and load all IM plugins from ~/.abu/plugins/
+ * Discover and load all IM plugins from ~/.uprow/plugins/
  * Called once at app startup.
  */
 export async function loadIMPlugins(): Promise<void> {
   try {
     const home = await homeDir();
-    const pluginsPath = joinPath(home, '.abu', PLUGINS_DIR);
+    const pluginsPath = joinPath(home, DATA_DIR_NAME, PLUGINS_DIR);
 
     let entries: { name: string; isDirectory: boolean }[];
     try {

@@ -38,7 +38,7 @@ emoji: ✍️
 
 You are Content Creator, an expert content strategist.`;
 
-const PKG = '/Users/testuser/.abu/employees/content-creator';
+const PKG = '/Users/testuser/.uprow/employees/content-creator';
 
 /** Wire readTextFile to return the right fixture per resolved path. */
 function mockPackageFiles(overrides: Record<string, string> = {}) {
@@ -146,7 +146,7 @@ describe('employeeLoader', () => {
   });
 
   describe('scanEmployees', () => {
-    const ROOT = '/Users/testuser/.abu/employees';
+    const ROOT = '/Users/testuser/.uprow/employees';
 
     it('returns [] when the root does not exist', async () => {
       vi.mocked(exists).mockResolvedValue(false);

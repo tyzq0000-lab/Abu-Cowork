@@ -2,9 +2,9 @@
  * Memdir Migration — one-time migration from old memory systems to file-based memdir.
  *
  * Migrates from:
- *   1. Structured entries: ~/.abu/memory/entries.json (user scope)
+ *   1. Structured entries: ~/.uprow/memory/entries.json (user scope)
  *   2. Structured entries: {workspace}/.abu/memory/entries.json (project scope)
- *   3. Legacy flat file: ~/.abu/agents/abu/memory.md
+ *   3. Legacy flat file: ~/.uprow/agents/abu/memory.md
  *   4. Legacy flat file: {workspace}/.abu/MEMORY.md
  *
  * Category mapping (7 → 4):
@@ -20,6 +20,7 @@
  */
 
 import { readTextFile } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { joinPath } from '../../utils/pathUtils';
 import { writeMemory } from './write';
@@ -146,8 +147,8 @@ async function migrateFlatFile(
  *
  * Migration logic:
  *   1. Check if new memdir already has files (skip if yes)
- *   2. Migrate global entries.json → ~/.abu/memory/*.md
- *   3. Migrate legacy ~/.abu/agents/abu/memory.md → ~/.abu/memory/*.md
+ *   2. Migrate global entries.json → ~/.uprow/memory/*.md
+ *   3. Migrate legacy ~/.uprow/agents/abu/memory.md → ~/.uprow/memory/*.md
  *
  * Note: per-workspace migration happens lazily when the workspace is opened,
  * not at startup (we don't know all workspace paths upfront).
@@ -165,7 +166,7 @@ export async function migrateMemdirIfNeeded(): Promise<void> {
     let totalMigrated = 0;
 
     // 1. Migrate global entries.json
-    const globalEntriesPath = joinPath(home, '.abu', 'memory', 'entries.json');
+    const globalEntriesPath = joinPath(home, DATA_DIR_NAME, 'memory', 'entries.json');
     const globalEntries = await loadOldEntries(globalEntriesPath);
     if (globalEntries.length > 0) {
       const count = await migrateEntries(globalEntries, null);
@@ -174,7 +175,7 @@ export async function migrateMemdirIfNeeded(): Promise<void> {
     }
 
     // 2. Migrate legacy agent memory.md
-    const legacyPath = joinPath(home, '.abu', 'agents', 'abu', 'memory.md');
+    const legacyPath = joinPath(home, DATA_DIR_NAME, 'agents', 'abu', 'memory.md');
     if (await migrateFlatFile(legacyPath, null)) {
       totalMigrated++;
       console.log('[Memdir] Migrated legacy agents/abu/memory.md');

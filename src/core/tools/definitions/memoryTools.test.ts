@@ -192,7 +192,7 @@ describe('updateMemoryTool — edit', () => {
       .mockResolvedValueOnce([    // global scan
         {
           filename: 'user_name.md',
-          filePath: '/Users/me/.abu/memory/user_name.md',
+          filePath: '/Users/me/.uprow/memory/user_name.md',
           name: 'old', description: 'old', type: 'user',
           source: 'auto_flush', created: 1000, updated: 2000, accessCount: 0,
         },
@@ -200,7 +200,7 @@ describe('updateMemoryTool — edit', () => {
       .mockResolvedValueOnce([]); // workspace scan: empty
     mockReadMemoryFile.mockResolvedValueOnce({
       header: {
-        filename: 'user_name.md', filePath: '/Users/me/.abu/memory/user_name.md',
+        filename: 'user_name.md', filePath: '/Users/me/.uprow/memory/user_name.md',
         name: 'old', description: 'old', type: 'user',
         source: 'auto_flush', created: 1000, updated: 2000, accessCount: 0,
       },

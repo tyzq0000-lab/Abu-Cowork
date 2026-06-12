@@ -49,8 +49,8 @@ const mockInvoke = vi.mocked(invoke);
 
 const WS = '/Users/testuser/projects/myapp';
 // sanitizePath('/Users/testuser/projects/myapp') → '-Users-testuser-projects-myapp'
-const DRAFTS = '/Users/testuser/.abu/projects/-Users-testuser-projects-myapp/skills/drafts';
-const SKILLS = '/Users/testuser/.abu/projects/-Users-testuser-projects-myapp/skills';
+const DRAFTS = '/Users/testuser/.uprow/projects/-Users-testuser-projects-myapp/skills/drafts';
+const SKILLS = '/Users/testuser/.uprow/projects/-Users-testuser-projects-myapp/skills';
 
 /**
  * Track an in-memory VFS so exists/readTextFile/readDir see consistent state

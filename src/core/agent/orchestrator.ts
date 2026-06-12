@@ -413,7 +413,7 @@ export async function buildSystemPromptSections(
 **需要工作区的操作**（调用前必须先让用户选工作区，不要先调再看错误）：
 - 文件 / 目录操作：整理、复制、读取、查看桌面等
 - Skill 管理：\`skill_manage\` 的 create / patch / write_file（workspace-auto 作用域）
-- Memory 写入：项目级 memory 写到 \`~/.abu/projects/<key>/memory/\`
+- Memory 写入：项目级 memory 写到 \`~/.uprow/projects/<key>/memory/\`
 - Copy-on-Modify 触发的任何跨作用域 skill 修改
 
 遇到这些场景时，**直接调用 request_workspace 工具让用户选择工作目录**，不要用文字回复让用户自己去选，也不要先调会失败的工具再看错误。

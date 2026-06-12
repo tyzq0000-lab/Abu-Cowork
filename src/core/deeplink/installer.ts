@@ -2,9 +2,9 @@
  * Deep-link package installer — download a zip from an allowlisted URL and
  * unpack it into the local data directory:
  *
- *   employee → ~/.abu/employees/<agentName>/   (WorkBuddy/CodeBuddy package,
+ *   employee → ~/.uprow/employees/<agentName>/   (WorkBuddy/CodeBuddy package,
  *              validated by .codebuddy-plugin/plugin.json)
- *   skill    → ~/.abu/skills/<name>/           (.askill archive, reuses
+ *   skill    → ~/.uprow/skills/<name>/           (.askill archive, reuses
  *              core/skill/packager validation + unpack)
  *
  * Re-deploying an already-installed package overwrites it (deploy = sync to
@@ -13,6 +13,7 @@
  */
 
 import { unzipSync, strFromU8 } from 'fflate';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { fetch } from '@tauri-apps/plugin-http';
 import { writeFile, mkdir, exists, remove } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
@@ -52,7 +53,7 @@ export class DeepLinkInstallError extends Error {
 
 export interface InstalledPackage {
   kind: 'employee' | 'skill';
-  /** Canonical package name (= directory name under ~/.abu/...). */
+  /** Canonical package name (= directory name under ~/.uprow/...). */
   name: string;
   fileCount: number;
 }
@@ -156,7 +157,7 @@ async function downloadArchive(url: string): Promise<Uint8Array> {
   return bytes;
 }
 
-/** Unpack an employee archive into ~/.abu/employees/<name>/ (overwrites). */
+/** Unpack an employee archive into ~/.uprow/employees/<name>/ (overwrites). */
 async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPackage> {
   let entries: Record<string, Uint8Array>;
   try {
@@ -168,7 +169,7 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
   const plan = planEmployeeUnpack(entries);
 
   const home = await homeDir();
-  const targetDir = joinPath(home, '.abu/employees', plan.name);
+  const targetDir = joinPath(home, DATA_DIR_NAME, 'employees', plan.name);
 
   try {
     // Overwrite semantics: clear a previous deployment so stale files
@@ -192,7 +193,7 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
   return { kind: 'employee', name: plan.name, fileCount: plan.files.length };
 }
 
-/** Unpack a .askill archive into ~/.abu/skills/<name>/ (overwrites). */
+/** Unpack a .askill archive into ~/.uprow/skills/<name>/ (overwrites). */
 async function installSkillArchive(bytes: Uint8Array): Promise<InstalledPackage> {
   const validationError = validateArchive(bytes);
   if (validationError) {
@@ -202,7 +203,7 @@ async function installSkillArchive(bytes: Uint8Array): Promise<InstalledPackage>
   }
 
   const home = await homeDir();
-  const baseDir = joinPath(home, '.abu/skills');
+  const baseDir = joinPath(home, DATA_DIR_NAME, 'skills');
   try {
     const result = await unpackSkill(bytes, baseDir, { overwrite: true });
     return { kind: 'skill', name: result.name, fileCount: result.files.length };

@@ -2,11 +2,12 @@
  * File Watcher — event-driven task triggering
  *
  * Watches directories for file changes and triggers Agent tasks.
- * Rules stored at ~/.abu/watch-rules.json.
+ * Rules stored at ~/.uprow/watch-rules.json.
  * Uses Tauri's @tauri-apps/plugin-fs watch API.
  */
 
 import { watch, readTextFile, writeTextFile, exists, type UnwatchFn } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { ensureParentDir, joinPath, getBaseName } from '../../utils/pathUtils';
 import { runAgentLoop } from './agentLoop';
@@ -29,7 +30,7 @@ let cachedHome: string | null = null;
 
 async function getRulesPath(): Promise<string> {
   if (!cachedHome) cachedHome = await homeDir();
-  return joinPath(cachedHome, '.abu', 'watch-rules.json');
+  return joinPath(cachedHome, DATA_DIR_NAME, 'watch-rules.json');
 }
 
 export async function loadWatchRules(): Promise<FileWatchRule[]> {

@@ -14,8 +14,8 @@
  *
  * ## Scope rules
  *
- *   writable:  workspace-auto  (~/.abu/projects/<key>/skills/)
- *   writable:  draft           (~/.abu/projects/<key>/skills/drafts/) — via create
+ *   writable:  workspace-auto  (~/.uprow/projects/<key>/skills/)
+ *   writable:  draft           (~/.uprow/projects/<key>/skills/drafts/) — via create
  *   read-only: user, project, project-standard, standard, builtin
  *
  * Agent attempts to patch a read-only source transparently Copy-on-Modify
@@ -42,6 +42,7 @@
  */
 
 import { readTextFile, exists, mkdir, readDir } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 
 import type { ToolDefinition, SkillMetadata, Skill, ToolExecutionContext, InteractiveNoticeCard } from '../../../types';
@@ -86,7 +87,7 @@ type SkillScope = 'workspace-auto' | 'user';
 async function getWorkspaceAutoSkillsDir(workspacePath: string): Promise<string> {
   const home = await homeDir();
   const key = sanitizePath(normalizeSeparators(workspacePath));
-  return joinPath(home, '.abu/projects', key, 'skills');
+  return joinPath(home, DATA_DIR_NAME, 'projects', key, 'skills');
 }
 
 /**

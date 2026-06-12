@@ -1,12 +1,13 @@
 /**
  * Task Log — records completed tasks for pattern analysis
  *
- * Stores at ~/.abu/task-log.json, FIFO keeps latest 100 entries.
+ * Stores at ~/.uprow/task-log.json, FIFO keeps latest 100 entries.
  * Used by orchestrator to inject task patterns into system prompt,
  * enabling the agent to propose Skill/Agent sedimentation.
  */
 
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { ensureParentDir, joinPath } from '../../utils/pathUtils';
 import { skillLoader } from '../skill/loader';
@@ -48,7 +49,7 @@ let cachedHome: string | null = null;
 
 async function getLogPath(): Promise<string> {
   if (!cachedHome) cachedHome = await homeDir();
-  return joinPath(cachedHome, '.abu', 'task-log.json');
+  return joinPath(cachedHome, DATA_DIR_NAME, 'task-log.json');
 }
 
 /**

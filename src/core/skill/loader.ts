@@ -1,4 +1,5 @@
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
 import { homeDir, resolve, resolveResource } from '@tauri-apps/api/path';
 import type { Skill, SkillMetadata, SkillHookEntry, SkillSource } from '../../types';
@@ -131,11 +132,11 @@ export class SkillLoader {
    *   WITH workspacePath:
    *     1. {workspace}/.abu/skills/              (project, git-shareable)
    *     2. {workspace}/.agents/skills/           (project-standard)
-   *     3. ~/.abu/projects/<key>/skills/         (workspace-auto, agent-written)
-   *     4. ~/.abu/projects/<key>/skills/drafts/ (draft, pending review)
+   *     3. ~/.uprow/projects/<key>/skills/         (workspace-auto, agent-written)
+   *     4. ~/.uprow/projects/<key>/skills/drafts/ (draft, pending review)
    *
    *   ALWAYS:
-   *     5. ~/.abu/skills/                        (user global)
+   *     5. ~/.uprow/skills/                        (user global)
    *     6. ~/.agents/skills/                     (standard cross-client)
    *     7. <resource>/builtin-skills/            (bundled)
    *
@@ -183,7 +184,7 @@ export class SkillLoader {
         { path: joinPath(workspacePath, '.abu/skills'), source: 'project' },
         { path: joinPath(workspacePath, '.agents/skills'), source: 'project-standard' },
       );
-      // Agent auto-write + drafts land under ~/.abu/projects/<sanitized>/, aligned
+      // Agent auto-write + drafts land under ~/.uprow/projects/<sanitized>/, aligned
       // with the memdir key-sanitization convention so memory + skills share the
       // same per-workspace namespace on disk.
       //
@@ -194,14 +195,14 @@ export class SkillLoader {
       // $HOME/.abu/** cover it without per-path capability entries.
       const key = sanitizePath(normalizeSeparators(workspacePath));
       dirs.push(
-        { path: joinPath(home, '.abu/projects', key, 'skills'), source: 'workspace-auto' },
-        { path: joinPath(home, '.abu/projects', key, 'skills/drafts'), source: 'draft' },
+        { path: joinPath(home, DATA_DIR_NAME, 'projects', key, 'skills'), source: 'workspace-auto' },
+        { path: joinPath(home, DATA_DIR_NAME, 'projects', key, 'skills/drafts'), source: 'draft' },
       );
     }
 
     // Global + cross-client + bundled, always scanned.
     dirs.push(
-      { path: joinPath(home, '.abu/skills'), source: 'user' },
+      { path: joinPath(home, DATA_DIR_NAME, 'skills'), source: 'user' },
       { path: joinPath(home, '.agents/skills'), source: 'standard' },
     );
     if (builtinDir) {
@@ -212,12 +213,12 @@ export class SkillLoader {
       await this.scanDirectory(path, source);
     }
 
-    // Employee-package skills: ~/.abu/employees/<pkg>/skills/<skill>/SKILL.md.
+    // Employee-package skills: ~/.uprow/employees/<pkg>/skills/<skill>/SKILL.md.
     // Scanned last (lowest priority) so a user/builtin skill of the same name
     // wins on collision. These are gated per-agent in the orchestrator via the
     // owning employee's SubagentDefinition.skills list — they only enter the
     // L0 index when their employee is the active agent.
-    await this.scanEmployeeSkills(joinPath(home, '.abu/employees'));
+    await this.scanEmployeeSkills(joinPath(home, DATA_DIR_NAME, 'employees'));
 
     return this.getAvailableSkills();
   }

@@ -407,12 +407,12 @@ export interface SkillHookEntry {
 // Priority order (first-win; earlier scans beat later ones on name collision):
 //   1. project            — {workspace}/.abu/skills/, git-shareable
 //   2. project-standard   — {workspace}/.agents/skills/, git-shareable cross-client
-//   3. workspace-auto     — ~/.abu/projects/<key>/skills/, agent-auto-written for this project
-//   4. draft              — ~/.abu/projects/<key>/skills/drafts/, pending user review
-//   5. user               — ~/.abu/skills/, user's personal global
+//   3. workspace-auto     — ~/.uprow/projects/<key>/skills/, agent-auto-written for this project
+//   4. draft              — ~/.uprow/projects/<key>/skills/drafts/, pending user review
+//   5. user               — ~/.uprow/skills/, user's personal global
 //   6. standard           — ~/.agents/skills/, cross-client global
 //   7. builtin            — bundled with Abu, read-only
-//   8. employee           — ~/.abu/employees/<pkg>/skills/, owned by a WorkBuddy
+//   8. employee           — ~/.uprow/employees/<pkg>/skills/, owned by a WorkBuddy
 //                           employee agent; read-only. Gated per-agent in the
 //                           orchestrator (only enters the L0 index when its
 //                           owning employee is the active agent).
@@ -527,7 +527,7 @@ export interface SubagentMetadata {
   profession?: string;
   professionI18n?: Partial<Record<AgentLocale, string>>;
   /** Where this agent came from. `employee` = imported from an external
-   *  `.codebuddy-plugin` package under ~/.abu/employees/. Absent for the
+   *  `.codebuddy-plugin` package under ~/.uprow/employees/. Absent for the
    *  built-in personas and hand-written AGENT.md agents. */
   source?: 'builtin' | 'user' | 'project' | 'employee';
 }

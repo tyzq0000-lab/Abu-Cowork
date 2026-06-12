@@ -4,6 +4,7 @@
  */
 
 import { homeDir } from '@tauri-apps/api/path';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { lstat } from '@tauri-apps/plugin-fs';
 import { isWindows } from '../../utils/platform';
 
@@ -245,20 +246,20 @@ function isInAuthorizedWorkspace(path: string, capability: 'read' | 'write' = 'r
 
 /**
  * Check if an absolute path is inside an Abu memory directory.
- * Whitelists ~/.abu/memory/ and ~/.abu/projects/{key}/memory/.
+ * Whitelists ~/.uprow/memory/ and ~/.uprow/projects/{key}/memory/.
  * This allows file tools (read_file, write_file, edit_file) to operate
  * on memory files without triggering permission dialogs.
  */
 async function isAbuMemoryPath(normalizedPath: string): Promise<boolean> {
   const home = await getHomeDir();
-  const abuBase = `${home}/.abu`;
+  const abuBase = `${home}/${DATA_DIR_NAME}`;
 
-  // ~/.abu/memory/
+  // ~/.uprow/memory/
   if (normalizedPath.startsWith(`${abuBase}/memory/`) || normalizedPath === `${abuBase}/memory`) {
     return true;
   }
 
-  // ~/.abu/projects/*/memory/
+  // ~/.uprow/projects/*/memory/
   const projectsPrefix = `${abuBase}/projects/`;
   if (normalizedPath.startsWith(projectsPrefix)) {
     const rest = normalizedPath.slice(projectsPrefix.length);
@@ -498,7 +499,7 @@ export async function checkReadPath(path: string): Promise<PathCheckResult> {
     return { allowed: true };
   }
 
-  // Check Abu memory directories (~/.abu/memory/, ~/.abu/projects/*/memory/)
+  // Check Abu memory directories (~/.uprow/memory/, ~/.uprow/projects/*/memory/)
   if (await isAbuMemoryPath(normalizedPath)) {
     return { allowed: true };
   }
@@ -589,7 +590,7 @@ export async function checkWritePath(path: string): Promise<PathCheckResult> {
     return { allowed: true };
   }
 
-  // Check Abu memory directories (~/.abu/memory/, ~/.abu/projects/*/memory/)
+  // Check Abu memory directories (~/.uprow/memory/, ~/.uprow/projects/*/memory/)
   if (await isAbuMemoryPath(normalizedPath)) {
     return { allowed: true };
   }

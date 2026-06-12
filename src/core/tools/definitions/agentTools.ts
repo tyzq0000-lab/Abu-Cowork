@@ -1,4 +1,5 @@
 import { writeTextFile } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import type { ToolDefinition, Conversation, SubagentDefinition } from '../../../types';
 import { skillLoader } from '../../skill/loader';
 import { agentRegistry } from '../../agent/registry';
@@ -441,7 +442,7 @@ export const readSkillFileTool: ToolDefinition = {
   isConcurrencySafe: false,
 };
 
-// --- save_skill / save_agent: bypass pathSafety for ~/.abu/ writes ---
+// --- save_skill / save_agent: bypass pathSafety for ~/.uprow/ writes ---
 
 function createSaveItemTool(kind: 'skill' | 'agent'): ToolDefinition {
   const isSkill = kind === 'skill';
@@ -451,7 +452,7 @@ function createSaveItemTool(kind: 'skill' | 'agent'): ToolDefinition {
 
   return {
     name: isSkill ? TOOL_NAMES.SAVE_SKILL : TOOL_NAMES.SAVE_AGENT,
-    description: `保存自定义${label}文件到 ~/.abu/${folder}/{name}/${fileName}。当用户要求创建或修改${label}时使用。只需提供名称和内容，路径自动计算。可选传入 files 数组来同时保存脚本、参考文档等附属文件。`,
+    description: `保存自定义${label}文件到 ~/.uprow/${folder}/{name}/${fileName}。当用户要求创建或修改${label}时使用。只需提供名称和内容，路径自动计算。可选传入 files 数组来同时保存脚本、参考文档等附属文件。`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -481,7 +482,7 @@ function createSaveItemTool(kind: 'skill' | 'agent'): ToolDefinition {
       }
 
       const info = await getSystemInfoData();
-      const itemDir = joinPath(info.home, '.abu', folder, name);
+      const itemDir = joinPath(info.home, DATA_DIR_NAME, folder, name);
       const filePath = joinPath(itemDir, fileName);
 
       await ensureParentDir(filePath);

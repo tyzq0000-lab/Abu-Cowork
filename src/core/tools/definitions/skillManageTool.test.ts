@@ -359,7 +359,7 @@ describe('skill_manage · patch', () => {
   it('patches a workspace-auto skill in place (no CoM)', async () => {
     const skill = makeSkill('local-skill', {
       source: 'workspace-auto',
-      skillDir: '/Users/testuser/.abu/projects/-workspace-myapp/skills/local-skill',
+      skillDir: '/Users/testuser/.uprow/projects/-workspace-myapp/skills/local-skill',
     });
     vi.spyOn(skillLoader, 'getSkill').mockReturnValue(skill);
 
@@ -644,7 +644,7 @@ describe('skill_manage · edit', () => {
 
     expect(result.success).toBe(true);
     // Target path is under workspace-auto, not the original user dir.
-    expect(result.path).toContain('.abu/projects');
+    expect(result.path).toContain('.uprow/projects');
     expect(result.path).toContain('user-skill');
   });
 

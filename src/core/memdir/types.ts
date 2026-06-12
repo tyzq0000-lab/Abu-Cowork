@@ -2,8 +2,8 @@
  * Memdir Types — file-based persistent memory system (aligned with Claude Code).
  *
  * Each memory is a standalone .md file with YAML frontmatter:
- *   ~/.abu/memory/              — global memories (no workspace)
- *   ~/.abu/projects/<key>/memory/ — per-workspace memories
+ *   ~/.uprow/memory/              — global memories (no workspace)
+ *   ~/.uprow/projects/<key>/memory/ — per-workspace memories
  *
  * MEMORY.md in each directory is the index (always injected into system prompt).
  */

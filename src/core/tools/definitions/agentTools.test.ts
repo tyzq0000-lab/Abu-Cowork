@@ -59,11 +59,11 @@ describe('save_agent multi-file support', () => {
 
       expect(writeTextFile).toHaveBeenCalledTimes(2);
       expect(writeTextFile).toHaveBeenCalledWith(
-        '/Users/testuser/.abu/agents/my-agent/AGENT.md',
+        '/Users/testuser/.uprow/agents/my-agent/AGENT.md',
         expect.any(String),
       );
       expect(writeTextFile).toHaveBeenCalledWith(
-        '/Users/testuser/.abu/agents/my-agent/scripts/helper.py',
+        '/Users/testuser/.uprow/agents/my-agent/scripts/helper.py',
         'print("hello")',
       );
       expect(result).toContain('附属文件');

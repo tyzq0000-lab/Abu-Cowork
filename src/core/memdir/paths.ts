@@ -2,14 +2,15 @@
  * Memdir Paths — memory directory resolution.
  *
  * Resolution (aligned with Claude Code):
- *   With workspace:  ~/.abu/projects/<sanitized-workspace-path>/memory/
- *   Without:         ~/.abu/memory/                    (global fallback)
+ *   With workspace:  ~/.uprow/projects/<sanitized-workspace-path>/memory/
+ *   Without:         ~/.uprow/memory/                    (global fallback)
  *
  * sanitizePath replaces non-alphanumeric chars with hyphens, truncates + hashes
  * if the result exceeds filesystem limits (255 bytes).
  */
 
 import { homeDir } from '@tauri-apps/api/path';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { joinPath, normalizeSeparators } from '../../utils/pathUtils';
 import { MEMORY_INDEX_FILENAME } from './types';
 
@@ -65,9 +66,9 @@ export async function getMemoryDir(workspacePath?: string | null): Promise<strin
   if (workspacePath) {
     const normalized = normalizeSeparators(workspacePath);
     const key = sanitizePath(normalized);
-    return joinPath(home, '.abu', 'projects', key, 'memory');
+    return joinPath(home, DATA_DIR_NAME, 'projects', key, 'memory');
   }
-  return joinPath(home, '.abu', 'memory');
+  return joinPath(home, DATA_DIR_NAME, 'memory');
 }
 
 /**
@@ -86,14 +87,14 @@ export async function isMemoryPath(absolutePath: string): Promise<boolean> {
   const home = await getCachedHome();
   const normalized = normalizeSeparators(absolutePath);
 
-  // Global memory dir: ~/.abu/memory/
-  const globalDir = joinPath(home, '.abu', 'memory');
+  // Global memory dir: ~/.uprow/memory/
+  const globalDir = joinPath(home, DATA_DIR_NAME, 'memory');
   if (normalized.startsWith(globalDir + '/') || normalized === globalDir) {
     return true;
   }
 
-  // Per-project memory dir: ~/.abu/projects/*/memory/
-  const projectsPrefix = joinPath(home, '.abu', 'projects');
+  // Per-project memory dir: ~/.uprow/projects/*/memory/
+  const projectsPrefix = joinPath(home, DATA_DIR_NAME, 'projects');
   if (normalized.startsWith(projectsPrefix + '/')) {
     const rest = normalized.slice(projectsPrefix.length + 1);
     // rest looks like "<sanitized-key>/memory/..." or "<sanitized-key>/memory"

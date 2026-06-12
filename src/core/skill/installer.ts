@@ -2,10 +2,11 @@
  * Install a skill from a local folder.
  *
  * Validates that the folder contains a SKILL.md with a valid `name` frontmatter field,
- * then recursively copies the entire directory to ~/.abu/skills/{name}/.
+ * then recursively copies the entire directory to ~/.uprow/skills/{name}/.
  */
 
 import { readTextFile, readDir, readFile, writeFile, mkdir, exists } from '@tauri-apps/plugin-fs';
+import { DATA_DIR_NAME } from '@/core/branding';
 import { homeDir } from '@tauri-apps/api/path';
 import { parse as parseYaml } from 'yaml';
 import { joinPath } from '@/utils/pathUtils';
@@ -15,7 +16,7 @@ export type InstallResult =
   | { ok: false; code: 'NO_SKILL_MD' | 'NO_NAME' | 'ALREADY_EXISTS' | 'COPY_FAILED'; message: string };
 
 /**
- * Install a skill by copying a folder to ~/.abu/skills/{name}/.
+ * Install a skill by copying a folder to ~/.uprow/skills/{name}/.
  *
  * @param folderPath - Absolute path to the source folder (must contain SKILL.md)
  * @param options    - overwrite: replace existing skill directory
@@ -39,7 +40,7 @@ export async function installSkillFromFolder(
 
   // 3. Determine target directory
   const home = await homeDir();
-  const targetDir = joinPath(home, '.abu', 'skills', name);
+  const targetDir = joinPath(home, DATA_DIR_NAME, 'skills', name);
 
   // 4. Conflict check
   if (!options?.overwrite && (await exists(targetDir))) {

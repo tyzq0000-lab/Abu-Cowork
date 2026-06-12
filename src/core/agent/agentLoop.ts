@@ -170,7 +170,7 @@ export function persistExecutionSnapshot(conversationId: string, loopId: string)
 
 /**
  * Abu's default soul — factory personality.
- * Used when ~/.abu/SOUL.md is empty or doesn't exist.
+ * Used when ~/.uprow/SOUL.md is empty or doesn't exist.
  * Exported so orchestrator can use it as fallback.
  */
 export function getDefaultSoul(): string {
@@ -201,9 +201,9 @@ export function getDefaultSoul(): string {
 export function getCapabilityPrompt(): string {
   const win = isWindows();
   const dangerousCmd = win ? 'del /s /q' : 'rm -rf';
-  const abuDir = win ? '%USERPROFILE%\\.abu\\' : '~/.abu/';
-  const skillPathTmpl = win ? '%USERPROFILE%\\.abu\\skills\\{技能名}\\' : '~/.abu/skills/{技能名}/';
-  const agentPathTmpl = win ? '%USERPROFILE%\\.abu\\agents\\{代理名}\\' : '~/.abu/agents/{代理名}/';
+  const abuDir = win ? '%USERPROFILE%\\.uprow\\' : '~/.uprow/';
+  const skillPathTmpl = win ? '%USERPROFILE%\\.uprow\\skills\\{技能名}\\' : '~/.uprow/skills/{技能名}/';
+  const agentPathTmpl = win ? '%USERPROFILE%\\.uprow\\agents\\{代理名}\\' : '~/.uprow/agents/{代理名}/';
 
   return `## 可视化输出 — 生成式 UI（重要！）
 当用户需要图表、可视化、交互式演示、动画、UI 原型、数据展示、流程解释等视觉内容时，
@@ -505,7 +505,7 @@ export function isInteractiveDesktop(
  *
  * Memory extraction (the other isInteractiveDesktop consumer) is
  * intentionally NOT gated this way: memdir works without a workspace
- * (global `~/.abu/memory/`), so extraction stays useful even before
+ * (global `~/.uprow/memory/`), so extraction stays useful even before
  * the user picks a project.
  *
  * Pure function, exported for testing.

@@ -21,6 +21,7 @@
  * rejectDraft.
  */
 
+import { DATA_DIR_NAME } from '@/core/branding';
 import {
   readTextFile,
   readDir,
@@ -98,7 +99,7 @@ interface DraftSidecar {
 async function getProjectSkillsDir(workspacePath: string): Promise<string> {
   const home = await homeDir();
   const key = sanitizePath(normalizeSeparators(workspacePath));
-  return joinPath(home, '.abu/projects', key, 'skills');
+  return joinPath(home, DATA_DIR_NAME, 'projects', key, 'skills');
 }
 
 async function getDraftsRoot(workspacePath: string): Promise<string> {
