@@ -1,5 +1,5 @@
 /**
- * Share Bundle — serialize a conversation into a portable `.abu.json` file
+ * Share Bundle — serialize a conversation into a portable `.fuyao.json` file (legacy `.abu.json` imports stay compatible)
  * that another Abu user can import as a read-only dialogue.
  *
  * Responsibilities:

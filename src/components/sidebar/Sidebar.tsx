@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react';
+import { SHARE_EXT } from '@/core/branding';
 import { useChatStore } from '@/stores/chatStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -598,7 +599,7 @@ export default function Sidebar() {
       {shareConvId && (
         <ShareExportDialog
           convId={shareConvId}
-          defaultFilename={`fuyao-conversation-${conversationIndex[shareConvId]?.title || shareConvId}.abu.json`}
+          defaultFilename={`conversation-${conversationIndex[shareConvId]?.title || shareConvId}${SHARE_EXT}`}
           onClose={() => setShareConvId(null)}
         />
       )}

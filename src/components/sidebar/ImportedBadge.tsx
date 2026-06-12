@@ -1,6 +1,6 @@
 /**
  * ImportedBadge — small download icon pinned before a conversation title
- * in the sidebar, signaling that the conversation came from a `.abu.json`
+ * in the sidebar, signaling that the conversation came from a `.fuyao.json`
  * share bundle someone else exported. The recipient can still continue
  * chatting; the badge only communicates provenance.
  *

@@ -267,7 +267,7 @@ export interface Conversation {
    */
   pendingProposalSignal?: import('../core/agent/proposalSignal').ProposalSignal;
   /**
-   * True if this conversation was imported from a shared bundle (.abu.json).
+   * True if this conversation was imported from a shared bundle (.fuyao.json, legacy .abu.json).
    * Read-only — user cannot continue the conversation. Persisted via
    * ConversationMeta (index.json) so the flag survives restarts.
    */
