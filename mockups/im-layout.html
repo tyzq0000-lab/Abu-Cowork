@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>扶摇 · IM 化布局原型（仅供交互对齐，假数据）</title>
+<style>
+  :root{
+    --bg:#faf9f5; --bg-panel:#f4f2ec; --bg-hover:#edeae2; --bg-active:#e8e4d9;
+    --text:#29261b; --text-2:#6b6557; --text-3:#9a9384;
+    --clay:#d97757; --clay-bg:#fbeee8; --border:#e5e1d8;
+    --bubble-me:#d97757; --bubble-ai:#ffffff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);height:100vh;display:flex;overflow:hidden}
+
+  /* ── 左栏：数字员工联系人 ── */
+  .rail{width:280px;min-width:280px;border-right:1px solid var(--border);background:var(--bg-panel);display:flex;flex-direction:column}
+  .rail-head{padding:14px 14px 10px}
+  .search{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--border);border-radius:10px;padding:7px 10px;color:var(--text-3);font-size:13px}
+  .rail-title{padding:6px 16px;font-size:11px;color:var(--text-3);letter-spacing:.05em}
+  .contacts{flex:1;overflow-y:auto}
+  .contact{display:flex;gap:10px;padding:10px 14px;cursor:pointer;align-items:center}
+  .contact:hover{background:var(--bg-hover)}
+  .contact.active{background:var(--bg-active)}
+  .avatar{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:#fff;border:1px solid var(--border);position:relative;flex-shrink:0}
+  .avatar .dot{position:absolute;right:-2px;bottom:-2px;width:11px;height:11px;border-radius:50%;background:#34a853;border:2px solid var(--bg-panel)}
+  .c-main{flex:1;min-width:0}
+  .c-row1{display:flex;justify-content:space-between;align-items:center}
+  .c-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .c-name .tag{font-size:10px;color:var(--clay);background:var(--clay-bg);border-radius:5px;padding:1px 5px;margin-left:5px;font-weight:500;vertical-align:1px}
+  .c-time{font-size:11px;color:var(--text-3);flex-shrink:0}
+  .c-row2{display:flex;justify-content:space-between;align-items:center;margin-top:3px}
+  .c-last{font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .badge{min-width:17px;height:17px;border-radius:9px;background:var(--clay);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0 5px;flex-shrink:0;margin-left:6px}
+  .rail-foot{border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:center;gap:10px;color:var(--text-2);font-size:13px}
+  .rail-foot .icons{margin-left:auto;display:flex;gap:14px;color:var(--text-3);cursor:pointer}
+
+  /* ── 右栏：聊天区 ── */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .chat-head{height:58px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 18px;background:var(--bg)}
+  .chat-head .avatar{width:34px;height:34px;font-size:18px}
+  .h-name{font-weight:600;font-size:15px}
+  .h-prof{font-size:11px;color:var(--text-3)}
+  .h-actions{margin-left:auto;display:flex;gap:8px}
+  .btn-ghost{border:1px solid var(--border);background:#fff;border-radius:9px;padding:6px 12px;font-size:12px;color:var(--text-2);cursor:pointer}
+  .btn-ghost:hover{background:var(--bg-hover)}
+  .stream{flex:1;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:16px}
+  .msg{display:flex;gap:10px;max-width:72%}
+  .msg .avatar{width:32px;height:32px;font-size:17px}
+  .msg .b{background:var(--bubble-ai);border:1px solid var(--border);border-radius:4px 14px 14px 14px;padding:10px 13px;font-size:13.5px;line-height:1.65}
+  .msg.me{align-self:flex-end;flex-direction:row-reverse}
+  .msg.me .b{background:var(--bubble-me);color:#fff;border:none;border-radius:14px 4px 14px 14px}
+  .day{align-self:center;font-size:11px;color:var(--text-3)}
+
+  /* ── 输入区（无模型选择器）── */
+  .composer{padding:10px 18px 16px}
+  .box{background:#fff;border:1px solid var(--border);border-radius:16px;padding:12px 14px 10px;box-shadow:0 1px 4px rgba(41,38,27,.04)}
+  .box textarea{width:100%;border:none;outline:none;resize:none;font-size:14px;color:var(--text);min-height:46px;background:transparent}
+  .box-bar{display:flex;align-items:center;gap:4px;margin-top:6px}
+  .ws{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);padding:5px 9px;border-radius:9px;cursor:pointer;position:relative}
+  .ws:hover{background:var(--bg-hover)}
+  .plus{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-2);cursor:pointer;font-size:17px}
+  .plus:hover{background:var(--bg-hover)}
+  .send{margin-left:auto;width:30px;height:30px;border-radius:10px;background:var(--clay);color:#fff;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px}
+  .ws-menu{position:absolute;bottom:34px;left:0;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(41,38,27,.12);padding:6px;width:230px;display:none;z-index:10}
+  .ws-menu.open{display:block}
+  .ws-item{padding:8px 10px;border-radius:8px;font-size:12.5px;color:var(--text);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ws-item:hover{background:var(--bg-hover)}
+  .ws-item small{display:block;color:var(--text-3);font-size:11px}
+
+  /* ── 会话历史抽屉（类飞书话题）── */
+  .drawer{position:fixed;top:0;right:-320px;width:320px;height:100vh;background:#fff;border-left:1px solid var(--border);box-shadow:-8px 0 24px rgba(41,38,27,.08);transition:right .22s ease;display:flex;flex-direction:column;z-index:20}
+  .drawer.open{right:0}
+  .d-head{padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .d-head b{font-size:14px}
+  .d-new{font-size:12px;color:var(--clay);cursor:pointer}
+  .d-list{flex:1;overflow-y:auto;padding:8px}
+  .d-item{padding:10px 12px;border-radius:10px;cursor:pointer;margin-bottom:2px}
+  .d-item:hover{background:var(--bg-hover)}
+  .d-item.cur{background:var(--clay-bg)}
+  .d-item .t{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .d-item .s{font-size:11.5px;color:var(--text-3);margin-top:2px;display:flex;justify-content:space-between}
+  .d-item.cur .t::after{content:"当前";font-size:10px;color:var(--clay);margin-left:6px;font-weight:400}
+  .scrim{position:fixed;inset:0;display:none;z-index:15}
+  .scrim.open{display:block}
+  .hint{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#29261b;color:#fff;padding:7px 16px;border-radius:99px;font-size:12px;opacity:.85}
+</style>
+</head>
+<body>
+
+<!-- 左栏：联系人 = 默认助手 + 雇佣的数字员工 -->
+<aside class="rail">
+  <div class="rail-head"><div class="search">🔍 搜索</div></div>
+  <div class="rail-title">数字员工</div>
+  <div class="contacts" id="contacts"></div>
+  <div class="rail-foot">👤 我 <span class="icons"><span title="设置">⚙️</span><span title="帮助">❓</span></span></div>
+</aside>
+
+<!-- 右栏：选中即对话（无需 @） -->
+<main class="main">
+  <header class="chat-head">
+    <div class="avatar" id="hAvatar">🍮</div>
+    <div><div class="h-name" id="hName">扶摇</div><div class="h-prof" id="hProf">默认助手</div></div>
+    <div class="h-actions">
+      <button class="btn-ghost" onclick="toggleDrawer(true)">🗂 会话历史</button>
+    </div>
+  </header>
+
+  <section class="stream" id="stream"></section>
+
+  <div class="composer">
+    <div class="box">
+      <textarea id="ta" placeholder="发消息给扶摇…"></textarea>
+      <div class="box-bar">
+        <div class="ws" onclick="toggleWs(event)">📁 添加工作区 ▾
+          <div class="ws-menu" id="wsMenu">
+            <div class="ws-item">📂 D:\工作\2026年6月报表<small>最近使用</small></div>
+            <div class="ws-item">📂 D:\内容\小红书素材库</div>
+            <div class="ws-item" style="color:var(--clay)">＋ 选择其他文件夹…</div>
+          </div>
+        </div>
+        <div class="plus" title="上传文件/图片">＋</div>
+        <button class="send" title="发送">↑</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- 会话历史抽屉 -->
+<div class="scrim" id="scrim" onclick="toggleDrawer(false)"></div>
+<aside class="drawer" id="drawer">
+  <div class="d-head"><b>会话历史 · <span id="dWho">扶摇</span></b><span class="d-new" onclick="newConv()">＋ 新建会话</span></div>
+  <div class="d-list" id="dList"></div>
+</aside>
+
+<div class="hint">原型说明：点左侧员工直接对话（免 @）· 右上角查看/切换该员工的历史会话 · 输入框无模型选择</div>
+
+<script>
+const DATA = {
+  fuyao: { name:'扶摇', tag:'默认助手', prof:'默认助手', avatar:'🍮', online:true, last:'好的，报表已整理到桌面～', time:'09:42', unread:0,
+    convs:[
+      {t:'整理6月报表', s:'刚刚 · 12条', msgs:[
+        ['me','帮我把桌面的销售表按月份归档'],
+        ['ai','收到～我先扫描桌面的表格文件，按月份建文件夹归档，完成后给你一份清单。'],
+        ['ai','✅ 已完成：14 个文件归入 2026-04 / 05 / 06 三个文件夹，清单已放在桌面「归档报告.md」。'],
+        ['me','谢谢，再帮我把6月的汇总成一张总表'],
+        ['ai','好的，报表已整理到桌面～'] ]},
+      {t:'写周报', s:'昨天 · 8条', msgs:[['me','帮我写本周周报'],['ai','本周周报草稿已生成，要点：①报表自动化上线 ②客户回访 12 家…']]},
+    ]},
+  yunxiaoyun: { name:'运小运', tag:'L2', prof:'新媒体内容运营专家', avatar:'🧜‍♀️', online:true, last:'下周选题建议已生成，点开看看', time:'昨天', unread:3,
+    convs:[
+      {t:'本周内容复盘', s:'昨天 · 23条', msgs:[
+        ['me','复盘一下这周小红书的数据'],
+        ['ai','本周 5 篇笔记：曝光 4.2w（+18%），互动率 5.1%。表现最好的是「办公室咖啡测评」——封面命中了"实拍+大字标题"模板。'],
+        ['ai','下周选题建议已生成，点开看看'] ]},
+      {t:'小红书5月计划', s:'6/2 · 41条', msgs:[['me','排一下5月发布计划'],['ai','5 月计划：每周二/四/六发布，主题轮换：测评→教程→好物…']]},
+    ]},
+  wenbaobao: { name:'文爆爆', tag:'L1', prof:'内容创作专家', avatar:'✍️', online:false, last:'两版标题我都放在文档里了', time:'周二', unread:0,
+    convs:[ {t:'品牌长文撰写', s:'周二 · 15条', msgs:[['me','帮我写一篇品牌故事长文'],['ai','两版标题我都放在文档里了']]} ]},
+  shujushi: { name:'数据师', tag:'L2', prof:'数据分析专家', avatar:'📊', online:true, last:'A/B 测试显著性已达 95%', time:'周一', unread:1,
+    convs:[ {t:'转化漏斗分析', s:'周一 · 9条', msgs:[['me','看下注册转化漏斗'],['ai','A/B 测试显著性已达 95%']]} ]},
+};
+let cur='fuyao', curConv=0;
+
+function renderContacts(){
+  document.getElementById('contacts').innerHTML = Object.entries(DATA).map(([id,c])=>`
+    <div class="contact ${id===cur?'active':''}" onclick="pick('${id}')">
+      <div class="avatar">${c.avatar}${c.online?'<span class="dot"></span>':''}</div>
+      <div class="c-main">
+        <div class="c-row1"><span class="c-name">${c.name}<span class="tag">${c.tag}</span></span><span class="c-time">${c.time}</span></div>
+        <div class="c-row2"><span class="c-last">${c.last}</span>${c.unread?`<span class="badge">${c.unread}</span>`:''}</div>
+      </div>
+    </div>`).join('');
+}
+function renderStream(){
+  const c=DATA[cur], conv=c.convs[curConv];
+  document.getElementById('hAvatar').textContent=c.avatar;
+  document.getElementById('hName').textContent=c.name;
+  document.getElementById('hProf').textContent=c.prof;
+  document.getElementById('dWho').textContent=c.name;
+  document.getElementById('ta').placeholder=`发消息给${c.name}…`;
+  document.getElementById('stream').innerHTML = `<div class="day">${conv.s.split('·')[0].trim()}</div>` +
+    conv.msgs.map(([who,txt])=> who==='me'
+      ? `<div class="msg me"><div class="b">${txt}</div></div>`
+      : `<div class="msg"><div class="avatar">${c.avatar}</div><div class="b">${txt}</div></div>`).join('');
+}
+function renderDrawer(){
+  document.getElementById('dList').innerHTML = DATA[cur].convs.map((v,i)=>`
+    <div class="d-item ${i===curConv?'cur':''}" onclick="pickConv(${i})">
+      <div class="t">${v.t}</div><div class="s"><span>${v.s}</span></div>
+    </div>`).join('');
+}
+function pick(id){ cur=id; curConv=0; DATA[id].unread=0; renderContacts(); renderStream(); renderDrawer(); }
+function pickConv(i){ curConv=i; renderStream(); renderDrawer(); toggleDrawer(false); }
+function newConv(){ DATA[cur].convs.unshift({t:'新会话', s:'刚刚 · 0条', msgs:[]}); curConv=0; renderStream(); renderDrawer(); }
+function toggleDrawer(open){ document.getElementById('drawer').classList.toggle('open',open); document.getElementById('scrim').classList.toggle('open',open); if(open) renderDrawer(); }
+function toggleWs(e){ e.stopPropagation(); document.getElementById('wsMenu').classList.toggle('open'); }
+document.addEventListener('click',()=>document.getElementById('wsMenu').classList.remove('open'));
+renderContacts(); renderStream(); renderDrawer();
+</script>
+</body>
+</html>
