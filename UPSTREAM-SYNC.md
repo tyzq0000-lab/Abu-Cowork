@@ -14,6 +14,12 @@ mirror    https://github.com/tyzq0000-lab/Abu-Cowork   # 自有 GitHub 镜像（
 
 `mirror` 是上游 fork 出来的自有 GitHub 仓,**仅用于跑 `upstream-watch.yml`**(GitHub Actions 只在 GitHub 仓运行)。`git push mirror dev` 同步本仓内容后,在该仓 Actions tab 点 Enable 并手动 `workflow_dispatch` 验证;监测 issue 会开在该仓。⚠️ scheduled workflows **60 天不活跃会被 GitHub 自动停用**,偶尔 push / 手动触发可保活。
 
+**接线状态(2026-06-13 已验证)**:`dev` 已 push 到 mirror;mirror 仓**默认分支已切为 `dev`**(否则 `workflow_dispatch` 不显示 Run 按钮);Actions 已 Enable;Issues 功能已开;手动跑 `upstream-watch` 成功,自动开出跟踪 issue。注意事项:
+- mirror 是 HTTPS 远程,本机走代理时遇 TLS-MITM,推送用 `git -c http.sslVerify=false push mirror dev`(仅本次,勿全局关校验)。
+- token 需 **classic PAT 且勾 `repo` + `workflow` scope**(仓内含 `.github/workflows/`,缺 `workflow` scope 会被 remote rejected)。
+- 首跑 job 会因仓内无 `upstream` label 在打标签步报 `exit 1`(issue 已成功创建,`continue-on-error` 故 run 仍 success);建仓内 `upstream` label 后即全绿。
+- **当前上游已到 v0.23.2(本地 0.23.1)**,合入按下方流程,留待后续。
+
 ⚠️ `upstream-watch.yml` 是 GitHub Actions——**只在 GitHub 仓库上运行**。gitee 为主仓时，需另建一个自己的 GitHub 仓（私有即可）作为镜像并 push 本仓内容，监测 issue 会开在该 GitHub 仓里；或改用本机定时任务轮询上游 releases API。
 
 首次配置：
