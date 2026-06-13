@@ -77,4 +77,55 @@ describe('EmployeeRuntimeSetupDialog', () => {
     expect(Object.keys(useScheduleStore.getState().tasks)).toHaveLength(0);
     expect(useDeepLinkStore.getState().runtimeSetup).toBeNull();
   });
+
+  it('leaves a non-recommended template unchecked: confirm installs nothing', () => {
+    useDeepLinkStore.getState().setRuntimeSetup({
+      name: 'new-media-ops',
+      level: 'L2',
+      profile: {
+        version: 1,
+        workflows: [
+          {
+            id: 'weekly-review',
+            kind: 'schedule',
+            name: '每周内容复盘',
+            prompt: '执行每周内容复盘',
+            // no `recommended` → unchecked by default
+            schedule: { frequency: 'weekly', dayOfWeek: 3 },
+          },
+        ],
+      },
+    });
+
+    render(<EmployeeRuntimeSetupDialog />);
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+
+    fireEvent.click(screen.getByRole('button', { name: '创建并启用' }));
+    expect(Object.keys(useScheduleStore.getState().tasks)).toHaveLength(0);
+  });
+
+  it('installs a non-recommended template once it is toggled on', () => {
+    useDeepLinkStore.getState().setRuntimeSetup({
+      name: 'new-media-ops',
+      level: 'L2',
+      profile: {
+        version: 1,
+        workflows: [
+          {
+            id: 'weekly-review',
+            kind: 'schedule',
+            name: '每周内容复盘',
+            prompt: '执行每周内容复盘',
+            schedule: { frequency: 'weekly', dayOfWeek: 3 },
+          },
+        ],
+      },
+    });
+
+    render(<EmployeeRuntimeSetupDialog />);
+    fireEvent.click(screen.getByRole('switch')); // opt in
+    fireEvent.click(screen.getByRole('button', { name: '创建并启用' }));
+
+    expect(Object.values(useScheduleStore.getState().tasks)[0]?.name).toBe('每周内容复盘');
+  });
 });

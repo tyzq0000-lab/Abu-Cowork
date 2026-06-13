@@ -10,11 +10,16 @@ export interface RuntimeTemplateInstallResult {
 export function installRuntimeTemplates(
   employeeName: string,
   profile: EmployeeRuntimeProfile,
+  opts?: { templateIds?: string[] },
 ): RuntimeTemplateInstallResult {
   const created: string[] = [];
   const skipped: string[] = [];
+  // When an explicit selection is passed, install only those templates. No
+  // selection = install all (preserves existing call sites and test semantics).
+  const selected = opts?.templateIds ? new Set(opts.templateIds) : null;
 
   for (const template of profile.workflows ?? []) {
+    if (selected && !selected.has(template.id)) continue;
     if (template.kind === 'schedule') {
       const store = useScheduleStore.getState();
       const duplicate = Object.values(store.tasks).some(
