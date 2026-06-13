@@ -600,8 +600,14 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // Set conversation status to running
   chatStore.setConversationStatus(conversationId, 'running');
 
-  // Route the input through the orchestrator
-  const route = routeInput(userMessage);
+  // Route the input through the orchestrator. A conversation bound to a
+  // digital-employee contact (IM 化 免@) routes override-free messages to that
+  // agent as the primary persona — read the binding fresh from the store so a
+  // contact picked just before send is reflected. IM/scheduled/trigger convs
+  // carry no agentName, so this is a no-op for them.
+  const boundAgentName = useChatStore.getState().conversations[conversationId]?.agentName
+    ?? useChatStore.getState().conversationIndex[conversationId]?.agentName;
+  const route = routeInput(userMessage, boundAgentName);
 
   // Refresh skill content from disk to ensure latest version
   if (route.type === 'skill' && route.skill?.filePath) {

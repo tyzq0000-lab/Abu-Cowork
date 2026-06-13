@@ -99,10 +99,18 @@ export interface RouteResult {
  * No @agent selection - users just describe their task.
  *
  * Routing priority:
- * 1. Slash command → exact skill match (user explicitly invokes)
- * 2. General → Claude decides if/when to use skills via use_skill tool
+ * 1. @agent delegation (explicit override — one-shot subagent)
+ * 2. Slash command → exact skill match (user explicitly invokes)
+ * 3. Bound contact (IM 化 免@): conversation pinned to a digital-employee →
+ *    that agent becomes the primary persona (route.type='agent'). Only when the
+ *    input carries no explicit @/ override, so typed overrides always win.
+ * 4. General → Claude decides if/when to use skills via use_skill tool
+ *
+ * @param boundAgentName — the conversation's bound contact (ConversationMeta.agentName).
+ *   When set to a non-'abu', enabled registry agent, an override-free message routes
+ *   to it as the primary persona. Absent / 'abu' / disabled → falls through to general.
  */
-export function routeInput(input: string): RouteResult {
+export function routeInput(input: string, boundAgentName?: string): RouteResult {
   const trimmed = input.trim();
 
   // Guard: empty input or bare slash
@@ -178,7 +186,27 @@ export function routeInput(input: string): RouteResult {
     }
   }
 
-  // 3. General: let Claude decide when to use skills via use_skill tool
+  // 3. Bound contact (IM 化 免@): the conversation is pinned to a digital-employee
+  // contact, so an override-free message routes to that agent as the primary persona.
+  // Reuses the fully-wired route.type==='agent' path in agentLoop (dedicated employee
+  // provider, allowed/blocked tools, agent systemPrompt). Explicit @/ above already
+  // returned, so typed overrides always win. Disabled / unknown / 'abu' → fall through.
+  if (boundAgentName && boundAgentName !== 'abu') {
+    const agent = agentRegistry.getAgent(boundAgentName);
+    if (agent && agent.name !== 'abu') {
+      const disabledAgents = useSettingsStore.getState().disabledAgents ?? [];
+      if (!disabledAgents.includes(agent.name)) {
+        return {
+          type: 'agent',
+          name: agent.name,
+          definition: agent,
+          cleanInput: trimmed,
+        };
+      }
+    }
+  }
+
+  // 4. General: let Claude decide when to use skills via use_skill tool
   // Skills are listed in system prompt, Claude can call use_skill when relevant
   return {
     type: 'general',

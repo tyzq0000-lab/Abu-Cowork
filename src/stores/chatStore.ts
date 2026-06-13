@@ -250,7 +250,7 @@ interface ChatState {
 }
 
 interface ChatActions {
-  createConversation: (workspacePath?: string | null, options?: { scheduledTaskId?: string; triggerId?: string; imChannelId?: string; imPlatform?: string; projectId?: string; skipActivate?: boolean }) => string;
+  createConversation: (workspacePath?: string | null, options?: { scheduledTaskId?: string; triggerId?: string; imChannelId?: string; imPlatform?: string; projectId?: string; agentName?: string; skipActivate?: boolean }) => string;
   startNewConversation: () => void;
   switchConversation: (id: string) => Promise<void>;
   setConversationWorkspace: (convId: string, path: string | null) => void;
@@ -375,6 +375,7 @@ export const useChatStore = create<ChatStore>()(
           ...(options?.triggerId ? { triggerId: options.triggerId } : {}),
           ...(options?.imChannelId ? { imChannelId: options.imChannelId, imPlatform: options.imPlatform } : {}),
           ...(resolvedProjectId ? { projectId: resolvedProjectId } : {}),
+          ...(options?.agentName && options.agentName !== 'abu' ? { agentName: options.agentName } : {}),
         };
         set((state) => {
           state.conversations[id] = {
@@ -1211,6 +1212,7 @@ export const useChatStore = create<ChatStore>()(
             scheduledTaskId: imported.scheduledTaskId,
             triggerId: imported.triggerId,
             projectId: imported.projectId,
+            agentName: imported.agentName,
             readOnly: imported.readOnly,
             importedFrom: imported.importedFrom,
           };
@@ -1277,6 +1279,7 @@ export const useChatStore = create<ChatStore>()(
               scheduledTaskId: meta.scheduledTaskId,
               triggerId: meta.triggerId,
               projectId: meta.projectId,
+              agentName: meta.agentName,
               readOnly: meta.readOnly,
               importedFrom: meta.importedFrom,
             };
@@ -1337,7 +1340,7 @@ export const useChatStore = create<ChatStore>()(
     })),
     {
       name: 'abu-chat',
-      version: 5,
+      version: 6,
       migrate: (persisted, version) => {
         const state = persisted as Record<string, unknown>;
         // v1 → v2: added executionSteps on Message (optional field, no-op migration)
@@ -1346,6 +1349,9 @@ export const useChatStore = create<ChatStore>()(
         if (version < 3) { /* no transform needed */ }
         // v4 → v5: added readOnly + importedFrom on ConversationMeta (optional fields, no-op migration)
         if (version < 5) { /* no transform needed */ }
+        // v5 → v6: added agentName on ConversationMeta (IM 化 contact binding) —
+        // optional field, absent entries default to the 扶摇 assistant. No transform needed.
+        if (version < 6) { /* no transform needed */ }
         // v3 → v4: migrate conversations from localStorage to file system
         if (version < 4) {
           // Mark for async migration in onRehydrateStorage

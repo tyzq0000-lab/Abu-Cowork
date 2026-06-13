@@ -274,3 +274,70 @@ describe('routeInput', () => {
     expect(result.type).toBe('general');
   });
 });
+
+describe('routeInput - bound contact (IM 化 免@)', () => {
+  it('routes an override-free message to the bound digital-employee as type=agent', async () => {
+    const { agentRegistry } = await import('./registry');
+    vi.mocked(agentRegistry.getAgent).mockImplementation((name: string) =>
+      name === '产品经理'
+        ? { name: '产品经理', systemPrompt: '你是产品经理', description: 'PM' } as never
+        : { name: 'abu', systemPrompt: '测试人格', description: '桌面助手' } as never,
+    );
+
+    const result = routeInput('帮我写一份需求文档', '产品经理');
+    expect(result.type).toBe('agent');
+    expect(result.name).toBe('产品经理');
+    expect(result.definition?.name).toBe('产品经理');
+    expect(result.cleanInput).toBe('帮我写一份需求文档');
+  });
+
+  it('does not switch persona when bound to the default 扶摇 assistant (abu)', () => {
+    const result = routeInput('你好', 'abu');
+    expect(result.type).toBe('general');
+    expect(result.name).toBe('abu');
+  });
+
+  it('falls back to general when the bound agent is disabled', async () => {
+    const { agentRegistry } = await import('./registry');
+    vi.mocked(agentRegistry.getAgent).mockImplementation((name: string) =>
+      name === '产品经理'
+        ? { name: '产品经理', systemPrompt: '你是产品经理', description: 'PM' } as never
+        : { name: 'abu', systemPrompt: '测试人格', description: '桌面助手' } as never,
+    );
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    vi.mocked(useSettingsStore.getState).mockReturnValueOnce({
+      computerUseEnabled: false, disabledSkills: [], disabledAgents: ['产品经理'],
+      contextWindowSize: 200000, allowSkillCommands: false,
+    } as never);
+
+    const result = routeInput('帮我写需求', '产品经理');
+    expect(result.type).toBe('general');
+    expect(result.name).toBe('abu');
+  });
+
+  it('lets an explicit @mention override the bound contact', async () => {
+    const { agentRegistry } = await import('./registry');
+    vi.mocked(agentRegistry.getAgent).mockImplementation((name: string) =>
+      name === '设计师'
+        ? { name: '设计师', systemPrompt: '你是设计师', description: 'Designer' } as never
+        : { name: 'abu', systemPrompt: '测试人格', description: '桌面助手' } as never,
+    );
+
+    // Conversation is bound to 产品经理, but the user explicitly @设计师 — the
+    // typed override wins and routes as a one-shot delegate, not the binding.
+    const result = routeInput('@设计师 做一张海报', '产品经理');
+    expect(result.type).toBe('delegate');
+    expect(result.name).toBe('设计师');
+  });
+
+  it('lets an explicit /skill override the bound contact', async () => {
+    const { skillLoader } = await import('../skill/loader');
+    vi.mocked(skillLoader.getSkill).mockReturnValue({
+      name: 'docx', description: '生成 Word', content: '步骤', filePath: '/s', skillDir: '/s',
+    } as never);
+
+    const result = routeInput('/docx 把报告转成 Word', '产品经理');
+    expect(result.type).toBe('skill');
+    expect(result.name).toBe('docx');
+  });
+});

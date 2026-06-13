@@ -243,6 +243,11 @@ export interface Conversation {
   imChannelId?: string;  // If set, this conversation was created by an IM channel
   imPlatform?: string;  // IM platform name (dchat/feishu/dingtalk/wecom/slack)
   projectId?: string;  // If set, this conversation belongs to a project
+  /** Bound digital-employee contact (agentRegistry key). When set to a non-'abu'
+   *  agent, the IM-style "免@路由" makes every message in this conversation route
+   *  to that agent as the primary persona (orchestrator → route.type='agent').
+   *  Absent / 'abu' = the default 扶摇 assistant. */
+  agentName?: string;
   contextCache?: ContextCache;  // Ephemeral compression cache (not persisted)
   // Ephemeral context usage state — NOT persisted (excluded by JSONL writer + chatStore partialize).
   // Published by agentLoop each turn from post-compression tokens. ContextIndicator

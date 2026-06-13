@@ -43,6 +43,8 @@ export interface ConversationMeta {
   scheduledTaskId?: string;
   triggerId?: string;
   projectId?: string;
+  /** Bound digital-employee contact (agentRegistry key). See Conversation.agentName. */
+  agentName?: string;
   totalCost?: number;
   /** Imported share bundle — conversation is read-only. See Conversation.readOnly. */
   readOnly?: boolean;
@@ -541,6 +543,7 @@ export function buildMeta(conv: {
   scheduledTaskId?: string;
   triggerId?: string;
   projectId?: string;
+  agentName?: string;
   readOnly?: boolean;
   importedFrom?: { schemaVersion: number; importedAt: number };
 }): ConversationMeta {
@@ -556,6 +559,7 @@ export function buildMeta(conv: {
     scheduledTaskId: conv.scheduledTaskId,
     triggerId: conv.triggerId,
     projectId: conv.projectId,
+    agentName: conv.agentName,
     readOnly: conv.readOnly,
     importedFrom: conv.importedFrom,
   };
@@ -633,6 +637,7 @@ export async function migrateConversation(conv: {
   scheduledTaskId?: string;
   triggerId?: string;
   projectId?: string;
+  agentName?: string;
 }): Promise<void> {
   // Write messages
   for (const msg of conv.messages) {
