@@ -5,11 +5,14 @@
 ## 远程仓布局
 
 ```
-origin    git@gitee.com:trustwork/fuyao-desktop.git   # 我们的主仓（推送目标）
-upstream  https://github.com/PM-Shawn/Abu-Cowork      # 上游（只拉不推）
+origin    git@gitee.com:trustwork/fuyao-desktop.git    # 我们的主仓（推送目标）
+upstream  https://github.com/PM-Shawn/Abu-Cowork       # 上游（只拉不推）
+mirror    https://github.com/tyzq0000-lab/Abu-Cowork   # 自有 GitHub 镜像（让 upstream-watch Actions 跑起来）
 ```
 
 ⚠️ **绝不向 upstream push**。
+
+`mirror` 是上游 fork 出来的自有 GitHub 仓,**仅用于跑 `upstream-watch.yml`**(GitHub Actions 只在 GitHub 仓运行)。`git push mirror dev` 同步本仓内容后,在该仓 Actions tab 点 Enable 并手动 `workflow_dispatch` 验证;监测 issue 会开在该仓。⚠️ scheduled workflows **60 天不活跃会被 GitHub 自动停用**,偶尔 push / 手动触发可保活。
 
 ⚠️ `upstream-watch.yml` 是 GitHub Actions——**只在 GitHub 仓库上运行**。gitee 为主仓时，需另建一个自己的 GitHub 仓（私有即可）作为镜像并 push 本仓内容，监测 issue 会开在该 GitHub 仓里；或改用本机定时任务轮询上游 releases API。
 

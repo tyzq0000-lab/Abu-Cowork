@@ -6,23 +6,24 @@
 - 平台名 = **uprow**;桌面端(及未来云端)产品名 = **扶摇 / Fuyao**。
 - 扶摇 = 本地 AI 办公助手桌面应用:**Tauri 2 + React 18 + TypeScript(strict)+ TailwindCSS v4 + Zustand**;灵感来自 Claude Code 的 Cowork 模式;多 agent 架构 + 可扩展 Skills/Subagents。
 - 本仓库从 **abu-cowork fork** 而来,正在做品牌改造 + 功能演进。与 console 控制台是**两个分开的仓库**(勿合并、脱敏约定,见父目录 `../CLAUDE.md`)。
-- Phase A = 员工面板:复用既有 agent 系统/工具箱,`employeeLoader` 读 `~/.abu/employees/` 的 WorkBuddy 包。
+- Phase A = 员工面板:复用既有 agent 系统/工具箱,`employeeLoader` 读 `~/.uprow/employees/` 的 WorkBuddy 包(旧 `~/.abu/` 仍兼容回退,见 §7)。
 
 ## 2. 当前实施状态 (Current state)
-- **品牌改造收尾完成**:`src/i18n/locales/en-US.ts`、`zh-CN.ts` 正文 Abu→扶摇/Fuyao;默认代理显示名 locale-aware;`alt` 文案改 `t.common.appName`;导出默认文件名 `fuyao-conversation-*.abu.json`。已提交(`6aa0373`、`bd1f8bb`)。
+- **品牌改造收尾完成**:`src/i18n/locales/en-US.ts`、`zh-CN.ts` 正文 Abu→扶摇/Fuyao;默认代理显示名 locale-aware;`alt` 文案改 `t.common.appName`;导出默认文件名 `conversation-<title>.fuyao.json`(`SHARE_EXT`,旧 `.abu.json` 导入仍兼容,见 §7)。已提交(`6aa0373`、`bd1f8bb`)。
 - **`fuyao://` URL scheme 已注册**(Tauri v2 deep-link 插件),提交 `1ef5729`。5 处改动:
   - `src-tauri/tauri.conf.json` → `plugins.deep-link.desktop.schemes: ["fuyao"]`
   - `src-tauri/Cargo.toml` → `+ tauri-plugin-deep-link = "2"`;`src-tauri/src/lib.rs` → `+ .plugin(tauri_plugin_deep_link::init())`
   - `src-tauri/capabilities/default.json` → `+ "deep-link:default"`;`gen/schemas/*` 已随之重生成
 - **deep-link 接收逻辑已实现**(平台下载+安装模式,用户选定):
   - **协议契约**:`fuyao://install?type=employee|skill&url=<encoded zip URL>&name=<显示名>`。`url` 域名白名单见 `src/core/deeplink/parser.ts` 的 `ALLOWED_DOWNLOAD_HOSTS`(现仅 OSS 域;http 仅放行 localhost/127.0.0.1 供本地调试);uprow 平台域名上线后在该常量追加。
-  - 链路:`src/core/deeplink/index.ts`(onOpenUrl 入口,去重+唤窗)→ `parser.ts`(校验)→ `DeepLinkInstallDialog.tsx`(确认弹窗)→ `installer.ts`(plugin-http 下载 → fflate 解压校验 → 落盘 `~/.abu/employees|skills/`,覆盖式部署)→ `discoveryStore.refresh()` + toast。
+  - 链路:`src/core/deeplink/index.ts`(onOpenUrl 入口,去重+唤窗)→ `parser.ts`(校验)→ `DeepLinkInstallDialog.tsx`(确认弹窗)→ `installer.ts`(plugin-http 下载 → fflate 解压校验 → 落盘 `~/.uprow/employees|skills/`,覆盖式部署)→ `discoveryStore.refresh()` + toast。
   - Rust:`tauri-plugin-single-instance`(deep-link feature,二次启动转发 URL);debug 构建 `register_all()` 运行时注册 scheme(会把 HKCU 的 fuyao 协议指到 dev exe,装正式包后会被重新覆盖)。
-  - capabilities 给 `$HOME/.abu/employees/*/.codebuddy-plugin(/**)` 补了 fs 白名单(Tauri glob 默认不匹配点前缀目录)。
+  - capabilities 给 `$HOME/.uprow/employees/*/.codebuddy-plugin(/**)` 补了 fs 白名单(Tauri glob 默认不匹配点前缀目录)。
   - 员工包解压兼容 Windows 反斜杠 zip 条目(PowerShell Compress-Archive 产物)。
   - **已真机 e2e 验证**(2026-06-12,Windows dev):本地 zip 服务 → 链接触发 → 弹窗 → 确认 → 完整落盘(含点目录)。踩坑记录:① App 启动 effect 里注册监听器**不能加模块级 started 守卫**——StrictMode 双挂载会让唯一监听器被 cleanup 注销(已修);② single-instance 的 deep-link 自动触发之外,回调里还手动 emit 了一次 `deep-link://new-url` 兜底,前端 3s 去重窗口吸收双投递。
 - **Windows 安装包已产出**:`src-tauri/target/release/bundle/nsis/扶摇_0.23.1_x64-setup.exe`(11.5 MB)。
-- **保留不动的技术标识符**(品牌只改展示文案,不动这些):`com.abu.app`(bundle id)、`~/.abu/`(数据目录)、`.abu.json`(分享格式后缀)、`ABU.md`(项目规则文件名)。
+- **保留不动的技术标识符**(品牌只改展示文案,不动这些):`com.abu.app`(bundle id)、workspace 维度 `{workspace}/.abu/`、`ABU_` env 前缀、`--abu-*` CSS 变量、`abu://command-output-` 内部事件名。
+  > ⚠️ 旧版本文曾把 `~/.abu/`、`.abu.json`、`ABU.md` 列为"保留不动"——**已不准确**。2026-06-12 档2 已改:`~/.abu`→`~/.uprow`(Rust 启动迁移)、`.abu.json`→`.fuyao.json`、`ABU.md`→`FUYAO.md`(三者均带兼容回退,详见 §7)。
 
 ## 3. 版本更新功能 (Version-update — 客户端已实现,别重造)
 - **客户端已完整实现**于 `src/core/updates/checker.ts`:
@@ -44,7 +45,7 @@
 - **建议正式发版在能直连 GitHub 的环境/CI 构建**(避开 NSIS 下载坑),并在 CI 注入签名私钥。
 
 ## 5. Git 状态 & 发版纪律
-- 当前 `dev` 分支,领先 `origin/dev` 6 个 commit,**未 push**(等用户确认)。`main` 禁止直接开发,只接受 dev→main merge。
+- 当前 `dev` 分支;领先 `origin/dev`(=gitee)的提交数**以 `git status -sb` 实时为准**(勿写死数字,易过期)。`main` 禁止直接开发,只接受 dev→main merge。**不自动 push**,等用户确认。
 - 发版三处版本号必须同步:`package.json` / `src-tauri/tauri.conf.json` / `src-tauri/Cargo.toml`(当前均 `0.23.1`)。Release notes 模板见 `RELEASING.md`。
 
 ## 6. 角色与工作约定 (新 session 必须延续)
@@ -55,6 +56,7 @@
 - 评审/子代理产出先 **sanity-check**(`CLAUDE.md` §15;本项目实测单轮 17 条曾 14 条误报),代码里复现再行动,不盲信外部权威。
 - **成本意识**:谨慎使用子代理与大规模构建(本交接前的会话成本极高)。
 - 环境:有 **GateGuard 钩子**会在每个文件首次编辑/首条 Bash 前要求"陈述事实",首次触发后照常重试即过。
+- **铁律(最高优先级,见 `CLAUDE.md` B4)**:① **只增不减**——扶摇在 fork 的 abu-cowork 上只增功能,任何减少/损坏/冲突既有功能的改动须先问用户;② **三端独立性**——桌面端/uprow 平台/数字员工包各自保通用性,不为单一功能或单一员工包削减通用性(适配层做成通用机制);③ **对齐上游**——及时跟进 abu-cowork 更新(机制见 `UPSTREAM-SYNC.md`)。
 
 ## 7. 2026-06-12 批次:去品牌/上游监测/模型注入/IM 原型(已完成)
 - **去品牌(档2)**:用户可见 abu/阿布/原作者痕迹全清(启动页/托盘/关于页/删反馈+赞助页/头像改名 fuyao-avatar);技术标识改三项:`~/.abu`→`~/.uprow`(Rust setup 一次性 rename 迁移,失败原地保留+toast)、`ABU.md`→`FUYAO.md`(读回退兼容)、`.abu.json`→`.fuyao.json`(导入兼容)。**保留**:`com.abu.app`、workspace `{workspace}/.abu/`、`ABU_` env、`--abu-*` CSS 变量、`abu://command-output-` 内部事件。品牌字面量收敛进 `src/core/branding.ts`。
