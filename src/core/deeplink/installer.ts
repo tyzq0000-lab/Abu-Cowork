@@ -21,6 +21,7 @@ import { joinPath } from '@/utils/pathUtils';
 import { parsePluginJson } from '@/core/agent/employeeLoader';
 import {
   auditEmployeePackage,
+  isValidEmployeeModelConfig,
   parseEmployeePlugin,
   type EmployeeAuditReport,
   type EmployeeModelConfig,
@@ -154,10 +155,27 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
     files: files.map((file) => file.path),
   });
 
+  // A maker-supplied modelConfig may be malformed (e.g. `{}` with no provider).
+  // Validate before any `.provider.*` access — skip injection and record a
+  // non-blocking gap instead of crashing the whole install.
+  const rawModelConfig = manifest?.modelConfig;
+  let modelConfig: EmployeeModelConfig | undefined;
+  if (rawModelConfig !== undefined) {
+    if (isValidEmployeeModelConfig(rawModelConfig)) {
+      modelConfig = rawModelConfig;
+    } else {
+      audit.gaps.push({
+        owner: 'employee-package',
+        code: 'INVALID_MODEL_CONFIG',
+        message: 'modelConfig is malformed (missing or invalid provider) — model injection skipped.',
+        blocking: false,
+      });
+    }
+  }
+
   // Never persist maker API keys to disk: rewrite the on-disk plugin.json
   // with blanked keys. The live key is handed to the encrypted secret store
   // by the install step (upsertEmployeeProvider).
-  const modelConfig = manifest?.modelConfig;
   if (modelConfig && (modelConfig.provider.apiKey || modelConfig.imageGen?.apiKey)) {
     const sanitized = {
       ...manifest,

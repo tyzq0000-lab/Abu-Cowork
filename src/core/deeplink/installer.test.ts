@@ -200,6 +200,35 @@ describe('deeplink installer', () => {
       expect(JSON.parse(onDisk).modelConfig.provider.model).toBe('deepseek-v3');
     });
 
+    it('does not throw on a malformed modelConfig: no injection, records a gap', () => {
+      const withBadModel = JSON.stringify({
+        ...JSON.parse(PLUGIN_JSON),
+        modelConfig: {}, // no provider — would crash a naive .provider.apiKey access
+      });
+      let plan!: ReturnType<typeof planEmployeeUnpack>;
+      expect(() => {
+        plan = planEmployeeUnpack(
+          entriesOf({
+            '.codebuddy-plugin/plugin.json': withBadModel,
+            'agents/new-media-ops.md': 'prompt',
+          }),
+        );
+      }).not.toThrow();
+
+      // Malformed config is not surfaced for injection…
+      expect(plan.modelConfig).toBeUndefined();
+      // …and a non-blocking gap is recorded.
+      expect(plan.audit.gaps).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            owner: 'employee-package',
+            code: 'INVALID_MODEL_CONFIG',
+            blocking: false,
+          }),
+        ]),
+      );
+    });
+
     it('rejects oversized files', () => {
       const big = new Uint8Array(10 * 1024 * 1024 + 1);
       expect(() =>

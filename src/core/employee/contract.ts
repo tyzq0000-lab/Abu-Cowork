@@ -336,6 +336,21 @@ export function employeeProviderId(agentName: string): string {
   return `employee:${agentName}`;
 }
 
+/**
+ * Structural guard for a maker-supplied modelConfig. A malformed config (e.g.
+ * `{}` with no `provider`) must never be dereferenced (`.provider.apiKey`) —
+ * callers should skip injection and record a non-blocking gap instead of
+ * crashing. apiKey/imageGen stay optional and unchecked here.
+ */
+export function isValidEmployeeModelConfig(value: unknown): value is EmployeeModelConfig {
+  if (!isRecord(value) || !isRecord(value.provider)) return false;
+  const p = value.provider;
+  if (p.apiFormat !== 'anthropic' && p.apiFormat !== 'openai-compatible') return false;
+  if (typeof p.baseUrl !== 'string' || p.baseUrl.trim() === '') return false;
+  if (typeof p.model !== 'string' || p.model.trim() === '') return false;
+  return true;
+}
+
 export function parseEmployeePlugin(raw: string): EmployeePluginManifest | null {
   try {
     const parsed = JSON.parse(raw) as unknown;

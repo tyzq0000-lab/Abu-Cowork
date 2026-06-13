@@ -4,6 +4,7 @@ import type { SubagentDefinition } from '../../types';
 import { joinPath, normalizeSeparators } from '../../utils/pathUtils';
 import {
   employeeProviderId,
+  isValidEmployeeModelConfig,
   parseEmployeePlugin,
   type EmployeeModelConfig,
   type EmployeeRuntimeProfile,
@@ -202,7 +203,7 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
     source: 'employee',
     // Maker-pinned model: conversations with this employee run on its
     // dedicated provider (registered at install time from modelConfig).
-    ...(plugin.modelConfig
+    ...(isValidEmployeeModelConfig(plugin.modelConfig)
       ? { model: plugin.modelConfig.provider.model, providerId: employeeProviderId(name) }
       : {}),
     systemPrompt,
