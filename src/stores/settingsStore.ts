@@ -591,6 +591,19 @@ export function providerRequiresApiKey(state: SettingsState): boolean {
   return id !== 'ollama' && id !== 'lmstudio';
 }
 
+/**
+ * Whether at least one employee-injected provider is enabled with a non-empty
+ * key. Used to relax the global "API Key not configured" gate: an employee
+ * conversation can route to its own provider even when the global active
+ * provider has no key. This is a loose pre-check run before the orchestrator —
+ * precise routing/fallback is handled later by resolveAgentExecution.
+ */
+export function hasUsableEmployeeProvider(state: SettingsState): boolean {
+  return state.providers.some(
+    p => p.source === 'employee' && p.enabled && p.apiKey.trim() !== '',
+  );
+}
+
 /** Returns the effective model ID (backward-compatible) */
 export function getEffectiveModel(state: SettingsState): string {
   return state.activeModel.modelId;

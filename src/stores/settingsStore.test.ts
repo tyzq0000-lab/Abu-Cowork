@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   getAllEnabledModels,
+  hasUsableEmployeeProvider,
   reconcileActiveProvider,
   resolveAgentExecution,
   useSettingsStore,
@@ -484,6 +485,40 @@ describe('employee dedicated providers (modelConfig injection)', () => {
     const state = makeState([employee], { providerId: 'gone', modelId: 'm1' });
     reconcileActiveProvider(state);
     expect(state.activeModel.providerId).toBe('gone'); // nothing eligible — unchanged
+  });
+
+  describe('hasUsableEmployeeProvider', () => {
+    it('is false when only the global provider exists', () => {
+      expect(hasUsableEmployeeProvider(useSettingsStore.getState())).toBe(false);
+    });
+
+    it('is true when an employee provider is enabled with a key', () => {
+      useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', MODEL_CONFIG);
+      expect(hasUsableEmployeeProvider(useSettingsStore.getState())).toBe(true);
+    });
+
+    it('is false when the only employee provider has an empty key', () => {
+      useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', {
+        provider: { ...MODEL_CONFIG.provider, apiKey: '' },
+      });
+      expect(hasUsableEmployeeProvider(useSettingsStore.getState())).toBe(false);
+    });
+
+    it('is false when the employee provider is disabled', () => {
+      useSettingsStore.setState({
+        providers: [
+          makeProvider({ id: 'global', apiKey: 'sk-global' }),
+          makeProvider({
+            id: 'employee:x',
+            source: 'employee',
+            enabled: false,
+            apiKey: 'sk-emp',
+          }),
+        ],
+        activeModel: { providerId: 'global', modelId: 'm1' },
+      });
+      expect(hasUsableEmployeeProvider(useSettingsStore.getState())).toBe(false);
+    });
   });
 
   describe('resolveAgentExecution', () => {
