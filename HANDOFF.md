@@ -66,13 +66,18 @@
 - **IM 化**:`mockups/im-layout.html` 交互原型(联系人列表/点选即聊/会话历史抽屉/无模型选择),**待用户走查对齐后再出实现计划**。
 
 ## 8. 下一步抓手 / 待办
-1. **IM 化实现**(待 mockup 对齐)。
+1. **IM 化实现 = 批次2**(下一个大块,交给新 session):对齐结论与实现要点见计划 `C:\Users\tyzq1\.claude\plans\d-codex-md-1-...glimmering-tiger.md` 的「批次2」段 + 视觉基准 `mockups/im-layout.html`。要点:左栏联系人列表(免@路由,`conversation.agentName` + chatStore 升版 migrate)、会话历史按员工归类、首页快捷功能收进输入框上方工具条、设置全保留。**铁律:功能只增不减**。完成后出新安装包(三处版本号同步)。
 2. **版本更新发版管线**:签名私钥经 CI 注入、产 updater 产物、发 `latest.json`;(用户决定:形成新版本后一并做)。
 3. **去品牌升档1**(后续再问用户):`com.abu.app`/`ABU_` env/CSS 变量/内部事件名全改+常量全收敛。
 4. **generate_video 生视频工具**(需视频 API 选型,用户要求记入待办)。
 5. **per-agent imageGen**(生图源按员工切换;现注入仅在全局 imageGen 为空时回填)。
 6. **deep-link 后续**:uprow 平台域名上线后加进 `ALLOWED_DOWNLOAD_HOSTS`。
-7. GitHub 镜像仓(让 upstream-watch 跑起来)。
+7. **批次3(员工能力大块)**:递归子技能发现 / 员工技能走标准激活管线 / Claude↔扶摇工具名映射层(铁律2:做成通用机制)/ 技能脚本 cwd 绑定 / 依赖检查清单化 / per-agent imageGen 路由。详见计划「批次3」段。
+
+### 进度记录
+- **2026-06-13 文档轮**(session 5):铁律入档(CLAUDE.md B4 / §6 / memory)、`PLATFORM-HANDOFF.md` 新建、GitHub 镜像 `mirror` 接好并验证(issue 自动开出)、HANDOFF §1-§5 去品牌信息清理。
+- **2026-06-13 批次1 codex 小修**(session 5,已提交 dev):① 全局 key 拦截放行员工 provider(`hasUsableEmployeeProvider`);② cron 非有限 interval 校验(contract + triggerEngine);③ modelConfig 结构校验(`isValidEmployeeModelConfig`,畸形不崩溃+记 gap);④ 员工运行时模板勾选安装(SetupDialog per-template Toggle)。全量 `build`+`lint`+`test`(2233)全绿。**未跑 tauri:dev 真机冒烟**(行为类验证留待出包前)。
+- **下一步 = 批次2 IM 化**,交给 session 6 新开。
 
 ## 9. 数字员工"开箱为空"约定
 - 安装包**不含**任何员工包(resources 只有 builtin-skills/builtin-agents(空)/python-runtime/browser-extension);全新机器装包后员工列表本来就是空的,由企业用户在平台雇佣后经 deep-link 部署进来。
