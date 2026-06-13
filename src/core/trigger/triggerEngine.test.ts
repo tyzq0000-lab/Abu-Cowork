@@ -349,14 +349,33 @@ describe('TriggerEngine', () => {
 
   // ── Cron timer ──
   describe('cron timer', () => {
-    it('rejects intervals shorter than 10s', () => {
+    it('starts a timer for a finite interval >= 10s', () => {
+      const before = vi.getTimerCount();
       const trigger = makeTrigger({
-        id: 'trigger-short-cron',
-        source: { type: 'cron', intervalSeconds: 5 },
+        id: 'trigger-valid-cron',
+        source: { type: 'cron', intervalSeconds: 60 },
       });
-      // startSourceWatcher is public — calling directly
       triggerEngine.startSourceWatcher(trigger);
-      // Should not have started — no timer to clean up
+      expect(vi.getTimerCount()).toBe(before + 1);
+      triggerEngine.stopSourceWatcher(trigger.id);
+    });
+
+    // Invalid intervals must not register a timer. NaN is the key case:
+    // `NaN < 10_000` is false, so a bare `< 10_000` guard would let it through
+    // and spin a NaN-delay setInterval.
+    it.each([
+      ['NaN interval', NaN],
+      ['missing interval (undefined → NaN)', undefined],
+      ['zero interval', 0],
+      ['9s interval', 9],
+    ])('rejects an invalid cron interval: %s', (_label, intervalSeconds) => {
+      const before = vi.getTimerCount();
+      const trigger = makeTrigger({
+        id: 'trigger-bad-cron',
+        source: { type: 'cron', intervalSeconds: intervalSeconds as number },
+      });
+      triggerEngine.startSourceWatcher(trigger);
+      expect(vi.getTimerCount()).toBe(before);
       triggerEngine.stopSourceWatcher(trigger.id);
     });
   });

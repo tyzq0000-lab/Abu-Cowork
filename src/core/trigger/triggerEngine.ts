@@ -635,8 +635,10 @@ class TriggerEngine {
     if (this.cronTimers.has(trigger.id)) return; // already running
 
     const intervalMs = trigger.source.intervalSeconds * 1000;
-    if (intervalMs < 10_000) {
-      console.warn(`[Trigger] Cron interval too short (${trigger.source.intervalSeconds}s), min 10s`);
+    // Reject non-finite (missing/NaN intervalSeconds) too — `NaN < 10_000` is
+    // false, so a bare `< 10_000` check would let a NaN delay reach setInterval.
+    if (!Number.isFinite(intervalMs) || intervalMs < 10_000) {
+      console.warn(`[Trigger] Cron interval invalid or too short (${trigger.source.intervalSeconds}s), min 10s`);
       return;
     }
 

@@ -196,3 +196,41 @@ describe('employee package contract', () => {
     );
   });
 });
+
+describe('cron trigger template validation', () => {
+  function manifestWithCron(source: Record<string, unknown>): string {
+    return JSON.stringify({
+      ...baseManifest(),
+      runtime: {
+        version: 1,
+        workflows: [
+          {
+            id: 'wf-cron',
+            name: 'Heartbeat',
+            prompt: 'tick',
+            kind: 'trigger',
+            source: { type: 'cron', ...source },
+            filter: { type: 'always' },
+          },
+        ],
+      },
+    });
+  }
+
+  it('keeps runtime when the cron interval is a finite value >= 10s', () => {
+    const parsed = parseEmployeePlugin(manifestWithCron({ intervalSeconds: 60 }));
+    expect(parsed?.runtime?.workflows).toHaveLength(1);
+  });
+
+  // A missing intervalSeconds is the real-world NaN source: undefined * 1000 = NaN,
+  // which slips past the engine's bare `< 10_000` guard. 0 and 9 are below the 10s floor.
+  it.each([
+    ['missing intervalSeconds (→ NaN at runtime)', {}],
+    ['zero intervalSeconds', { intervalSeconds: 0 }],
+    ['9s (below 10s minimum)', { intervalSeconds: 9 }],
+  ])('strips runtime for an invalid cron template: %s', (_label, source) => {
+    const parsed = parseEmployeePlugin(manifestWithCron(source));
+    // Invalid runtime is stripped (parseEmployeePlugin deletes manifest.runtime).
+    expect(parsed?.runtime).toBeUndefined();
+  });
+});

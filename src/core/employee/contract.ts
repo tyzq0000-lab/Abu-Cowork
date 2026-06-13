@@ -221,6 +221,13 @@ function isWorkflowTemplate(value: unknown): boolean {
   if (value.kind === 'trigger') {
     if (!isRecord(value.source) || !isRecord(value.filter)) return false;
     if (!['http', 'file', 'cron', 'im'].includes(String(value.source.type))) return false;
+    // Cron sources must carry a finite interval >= 10s. A missing/NaN interval
+    // would otherwise slip past the engine's `intervalMs < 10_000` guard
+    // (NaN < 10_000 is false) and spin a 0/NaN-delay setInterval.
+    if (value.source.type === 'cron') {
+      const interval = value.source.intervalSeconds;
+      if (typeof interval !== 'number' || !Number.isFinite(interval) || interval < 10) return false;
+    }
     if (!['always', 'keyword', 'regex'].includes(String(value.filter.type))) return false;
     if (value.permissions !== undefined && !isRecord(value.permissions)) return false;
     return value.capability === undefined
