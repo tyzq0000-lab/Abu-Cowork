@@ -125,6 +125,14 @@ export interface TranslationDict {
     triggers: string;
     toolbox: string;
     recents: string;
+    /** IM 化：左栏数字员工联系人区标题 */
+    contacts: string;
+    /** IM 化：扶摇(默认助手)联系人标签 */
+    defaultAssistant: string;
+    /** IM 化：右侧会话历史抽屉标题 / 聊天头部按钮 */
+    conversationHistory: string;
+    /** IM 化：会话历史抽屉顶部「新建会话」按钮 */
+    newConversation: string;
     searchPlaceholder: string;
     noSessionsYet: string;
     hideSidebar: string;
