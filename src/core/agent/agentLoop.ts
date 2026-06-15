@@ -27,7 +27,7 @@ import { AutoCompactTracker, getUsagePercent } from '../context/autoCompact';
 import { estimateToolSchemaTokens, estimateTokens, estimateMessageTokens, calibrateFromUsage, setActiveModel } from '../context/tokenEstimator';
 import { identifyRounds, RECENT_ROUNDS_TO_KEEP } from '../context/contextUtils';
 import { withRetry } from './retry';
-import { runSubagentLoop, extractParentConversationSummary } from './subagentLoop';
+import { runSubagentLoop, extractParentConversationSummary, buildBoundAgentSystemPrompt } from './subagentLoop';
 import type { SubagentProgressEvent } from './subagentLoop';
 import { createSubagentController } from './subagentAbort';
 import { drainQueuedInputs, clearInputQueue } from './userInputQueue';
@@ -618,8 +618,18 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     }
   }
 
-  // Build static system prompt sections once (active skills are injected dynamically per-turn)
-  const systemPromptSections = await buildSystemPromptSections(route, getCapabilityPrompt(), conversationId, options?.imContext, 0);
+  // Build static system prompt sections once (active skills are injected dynamically per-turn).
+  // IM 化 免@: a conversation bound to a digital-employee (route.type==='agent') builds its
+  // prompt from the SAME shared builder as @mention (subagentLoop.buildBoundAgentSystemPrompt),
+  // so the employee's own systemPrompt is the SOLE identity — identical persona/memory to @,
+  // with no 扶摇 capability/soul leak. All other routes keep the full main-loop prompt.
+  const _wsForPrompt = options?.imContext?.workspacePath
+    ?? useChatStore.getState().conversations[conversationId]?.workspacePath
+    ?? useWorkspaceStore.getState().currentPath;
+  const systemPromptSections: Awaited<ReturnType<typeof buildSystemPromptSections>> =
+    (route.type === 'agent' && route.definition)
+      ? [{ name: 'identity', text: await buildBoundAgentSystemPrompt(route.definition, { workspacePath: _wsForPrompt }), cacheable: true }]
+      : await buildSystemPromptSections(route, getCapabilityPrompt(), conversationId, options?.imContext, 0);
 
   // Build tool execution context — provides resolved workspace for tools like update_memory.
   // Priority: IM-injected path > conversation's own stored path > global store fallback.

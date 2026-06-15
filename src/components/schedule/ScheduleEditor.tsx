@@ -12,10 +12,21 @@ import type { ScheduleFrequency, ScheduleConfig } from '@/types/schedule';
 const FREQUENCIES: ScheduleFrequency[] = ['hourly', 'daily', 'weekly', 'weekdays', 'manual'];
 
 export default function ScheduleEditor() {
-  const { t } = useI18n();
-  const { showEditor, editingTaskId, closeEditor, createTask, updateTask, tasks } =
+  const { t, locale } = useI18n();
+  const { showEditor, editingTaskId, editorSeedAgentName, closeEditor, createTask, updateTask, tasks } =
     useScheduleStore();
   const skills = useDiscoveryStore((s) => s.skills);
+  const agents = useDiscoveryStore((s) => s.agents);
+  // Digital-employee options: default 扶摇 (empty value) + installed agents.
+  const agentOptions = useMemo(
+    () => [
+      { value: '', label: t.sidebar.defaultAssistant },
+      ...agents
+        .filter((a) => a.name !== 'abu') // 'abu' is the default assistant, already represented above
+        .map((a) => ({ value: a.name, label: a.displayNames?.[locale] ?? a.name })),
+    ],
+    [agents, locale, t.sidebar.defaultAssistant],
+  );
   const channelsMap = useIMChannelStore((s) => s.channels);
   const imChannels = useMemo(() => Object.values(channelsMap), [channelsMap]);
   const projectsMap = useProjectStore((s) => s.projects);
@@ -35,6 +46,7 @@ export default function ScheduleEditor() {
   const [minute, setMinute] = useState(0);
   const [dayOfWeek, setDayOfWeek] = useState(1);
   const [skillName, setSkillName] = useState('');
+  const [agentName, setAgentName] = useState('');
   const [workspacePath, setWorkspacePath] = useState('');
   const [projectId, setProjectId] = useState('');
   const [outputChannelId, setOutputChannelId] = useState('');
@@ -52,6 +64,7 @@ export default function ScheduleEditor() {
       setMinute(editingTask.schedule.time?.minute ?? 0);
       setDayOfWeek(editingTask.schedule.dayOfWeek ?? 1);
       setSkillName(editingTask.skillName ?? '');
+      setAgentName(editingTask.agentName ?? '');
       setWorkspacePath(editingTask.workspacePath ?? '');
       setProjectId(editingTask.projectId ?? '');
       setOutputChannelId(editingTask.outputChannelId ?? '');
@@ -66,13 +79,14 @@ export default function ScheduleEditor() {
       setMinute(0);
       setDayOfWeek(1);
       setSkillName('');
+      setAgentName(editorSeedAgentName ?? '');
       setWorkspacePath('');
       setProjectId('');
       setOutputChannelId('');
       setOutputChatIds('');
       setOutputUserIds('');
     }
-  }, [editingTask, showEditor]);
+  }, [editingTask, showEditor, editorSeedAgentName]);
 
   // Close on Escape key
   useEffect(() => {
@@ -129,6 +143,7 @@ export default function ScheduleEditor() {
         prompt: prompt.trim(),
         schedule,
         skillName: skillName || undefined,
+        agentName: agentName || undefined,
         workspacePath: effectiveWorkspace || undefined,
         projectId: projectId || undefined,
         outputChannelId: outputChannelId || undefined,
@@ -142,6 +157,7 @@ export default function ScheduleEditor() {
         prompt: prompt.trim(),
         schedule,
         skillName: skillName || undefined,
+        agentName: agentName || undefined,
         workspacePath: effectiveWorkspace || undefined,
         projectId: projectId || undefined,
         outputChannelId: outputChannelId || undefined,
@@ -294,6 +310,18 @@ export default function ScheduleEditor() {
               </div>
             </div>
           )}
+
+          {/* Digital-employee binding (IM 化 — who runs this task) */}
+          <div>
+            <label className="block text-[13px] font-medium text-[var(--abu-text-primary)] mb-1.5">
+              {t.sidebar.contacts}
+            </label>
+            <Select
+              value={agentName}
+              onChange={setAgentName}
+              options={agentOptions}
+            />
+          </div>
 
           {/* Skill binding */}
           {skills.length > 0 && (

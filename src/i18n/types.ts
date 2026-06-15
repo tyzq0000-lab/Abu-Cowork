@@ -133,6 +133,8 @@ export interface TranslationDict {
     conversationHistory: string;
     /** IM 化：会话历史抽屉顶部「新建会话」按钮 */
     newConversation: string;
+    /** IM 化：会话历史条目的消息数副标题，{count} 占位 */
+    messagesCount: string;
     searchPlaceholder: string;
     noSessionsYet: string;
     hideSidebar: string;

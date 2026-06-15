@@ -1,79 +1,29 @@
-import { useEffect, useLayoutEffect, useCallback, useState, useRef } from 'react';
-import { SHARE_EXT } from '@/core/branding';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { useProjectStore } from '@/stores/projectStore';
 import { useNoticeBadgeStore } from '@/stores/noticeBadgeStore';
 import { useI18n } from '@/i18n';
-import { Plus, Workflow, Wrench, Trash2, Settings, Download, Upload, Pencil, Undo2, HelpCircle, FolderInput, FolderClosed, ChevronRight, Minus, Search, X } from 'lucide-react';
+import { Workflow, Wrench, Settings, Upload, HelpCircle } from 'lucide-react';
 import GuideModal from '@/components/common/GuideModal';
 import ProfileEditModal from '@/components/common/ProfileEditModal';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { getPlatformShortLabel } from '@/core/im/platformLabels';
-import type { ConversationStatus } from '@/types';
 import ProjectsSection from '@/components/sidebar/ProjectsSection';
+import ContactList from '@/components/sidebar/ContactList';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { DEFAULT_AGENT_KEY, conversationContactKey, isPlainConversation } from '@/utils/contacts';
 import DefaultUserAvatar from '@/components/common/DefaultUserAvatar';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
-import ShareExportDialog from '@/components/share/ShareExportDialog';
-import ImportedBadge from './ImportedBadge';
 import { isMacOS } from '@/utils/platform';
-
-interface StatusIndicatorProps {
-  status: ConversationStatus;
-  onComplete: () => void;
-}
-
-function StatusIndicator({ status, onComplete }: StatusIndicatorProps) {
-  useEffect(() => {
-    if (status === 'completed') {
-      const timer = setTimeout(onComplete, 3000);
-      return () => clearTimeout(timer);
-    }
-    if (status === 'error') {
-      // Auto-clear error indicator after 10 seconds (user has seen it)
-      const timer = setTimeout(onComplete, 10_000);
-      return () => clearTimeout(timer);
-    }
-  }, [status, onComplete]);
-
-  if (status === 'running') {
-    return <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />;
-  }
-  if (status === 'completed') {
-    return <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />;
-  }
-  if (status === 'error') {
-    return <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />;
-  }
-  return null;
-}
-
-function IMPlatformDot({ platform }: { platform: string }) {
-  return (
-    <span
-      className="shrink-0 h-4 w-4 rounded text-[8px] font-bold leading-4 text-center bg-[var(--abu-clay-bg-15)] text-[var(--abu-clay)]"
-      title={platform}
-    >
-      {getPlatformShortLabel(platform)}
-    </span>
-  );
-}
 
 export default function Sidebar() {
   const conversationIndex = useChatStore((s) => s.conversationIndex);
-  const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const startNewConversation = useChatStore((s) => s.startNewConversation);
   const switchConversation = useChatStore((s) => s.switchConversation);
-  const deleteConversation = useChatStore((s) => s.deleteConversation);
-  const renameConversation = useChatStore((s) => s.renameConversation);
-  const clearCompletedStatus = useChatStore((s) => s.clearCompletedStatus);
-  const exportConversation = useChatStore((s) => s.exportConversation);
   const importConversation = useChatStore((s) => s.importConversation);
-  const loadConversation = useChatStore((s) => s.loadConversation);
+  const pendingAgentName = useChatStore((s) => s.pendingAgentName);
+  const setPendingAgent = useChatStore((s) => s.setPendingAgent);
   const openToolbox = useSettingsStore((s) => s.openToolbox);
   const openAutomation = useSettingsStore((s) => s.openAutomation);
   const openSystemSettings = useSettingsStore((s) => s.openSystemSettings);
@@ -82,26 +32,6 @@ export default function Sidebar() {
   const updateInfo = useSettingsStore((s) => s.updateInfo);
   const clearBadge = useNoticeBadgeStore((s) => s.clear);
   const { t } = useI18n();
-
-  // Context menu state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; convId: string } | null>(null);
-  const [shareConvId, setShareConvId] = useState<string | null>(null);
-  const contextMenuRef = useRef<HTMLDivElement>(null);
-  const moveSubmenuRef = useRef<HTMLDivElement>(null);
-  const [showMoveSubmenu, setShowMoveSubmenu] = useState(false);
-  const [moveSubmenuStyle, setMoveSubmenuStyle] = useState<React.CSSProperties>({});
-  const projectsMap = useProjectStore((s) => s.projects);
-  const [recentsCollapsed, setRecentsCollapsed] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
-  // Undo delete state
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; data: string } | null>(null);
-  const undoTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  // Inline rename state
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Guide modal state — auto-open on first launch only
   const setGuideShown = useSettingsStore((s) => s.setGuideShown);
@@ -132,101 +62,27 @@ export default function Sidebar() {
   const userNickname = useSettingsStore((s) => s.userNickname);
   const userAvatar = useSettingsStore((s) => s.userAvatar);
 
-  // Close context menu when clicking outside
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleClick = () => { setContextMenu(null); setShowMoveSubmenu(false); };
-    document.addEventListener('click', handleClick);
-    return () => document.removeEventListener('click', handleClick);
-  }, [contextMenu]);
+  // IM 化: the "current contact" highlights the ContactList. Derived from the
+  // active conversation's binding, falling back to the pending agent (set when a
+  // contact is picked but no message sent yet), then the default 扶摇 assistant.
+  const activeMeta = activeConversationId ? conversationIndex[activeConversationId] : null;
 
-  // Clamp context menu inside viewport once its real size is known.
-  useLayoutEffect(() => {
-    if (!contextMenu) return;
-    const el = contextMenuRef.current;
-    if (!el) return;
-    const margin = 8;
-    const rect = el.getBoundingClientRect();
-    const overflowX = rect.right - (window.innerWidth - margin);
-    const overflowY = rect.bottom - (window.innerHeight - margin);
-    if (overflowX <= 0 && overflowY <= 0) return;
-    setContextMenu((prev) => prev && {
-      ...prev,
-      x: Math.max(margin, prev.x - Math.max(0, overflowX)),
-      y: Math.max(margin, prev.y - Math.max(0, overflowY)),
-    });
-  }, [contextMenu]);
-
-  // Position "move to project" submenu: clamp to viewport, flip up when there isn't enough space below.
-  useLayoutEffect(() => {
-    if (!showMoveSubmenu) { setMoveSubmenuStyle({}); return; }
-    const el = moveSubmenuRef.current;
-    const trigger = el?.parentElement;
-    if (!el || !trigger) return;
-    const margin = 8;
-    const triggerRect = trigger.getBoundingClientRect();
-    const viewportH = window.innerHeight;
-    const spaceBelow = viewportH - triggerRect.top - margin;
-    const spaceAbove = triggerRect.bottom - margin;
-    const contentH = el.scrollHeight;
-    const flipUp = contentH > spaceBelow && spaceAbove > spaceBelow;
-    const maxH = Math.max(120, flipUp ? spaceAbove : spaceBelow);
-    setMoveSubmenuStyle(flipUp
-      ? { bottom: 0, top: 'auto', maxHeight: `${maxH}px` }
-      : { top: 0, maxHeight: `${maxH}px` });
-  }, [showMoveSubmenu]);
-
-  // Sort by createdAt to keep positions stable during status updates
-  // Filter out conversations belonging to projects, scheduled tasks, or triggers — they appear in their own sections
-  // Use conversationIndex (lightweight metadata) instead of full conversations for listing
-  const sortedConvs = Object.values(conversationIndex)
-    .filter((c) => !c.scheduledTaskId && !c.triggerId && !c.projectId)
-    .filter((c) => !searchQuery || c.title.toLowerCase().includes(searchQuery.toLowerCase()))
-    .sort((a, b) => b.createdAt - a.createdAt);
-
-  const handleDeleteConversation = async (e: React.MouseEvent, convId: string) => {
-    e.stopPropagation();
-    // Ensure conversation is loaded before exporting for undo
-    await loadConversation(convId);
-    // Save conversation data for undo before deleting
-    const json = exportConversation(convId);
-    deleteConversation(convId);
-    if (json) {
-      // Cancel any previous undo timer
-      clearTimeout(undoTimerRef.current);
-      setPendingDelete({ id: convId, data: json });
-      undoTimerRef.current = setTimeout(() => setPendingDelete(null), 5000);
+  // Picking a contact: jump to its most-recent conversation, or — if it has none
+  // — start a fresh conversation with the pending agent bound (so the welcome
+  // banner shows the persona and handleSend stamps agentName on first message).
+  const handlePickContact = useCallback((agentKey: string) => {
+    const recent = Object.values(useChatStore.getState().conversationIndex)
+      .filter((c) => isPlainConversation(c) && conversationContactKey(c) === agentKey)
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (recent) {
+      switchConversation(recent.id);
+      clearBadge(recent.id);
+    } else {
+      startNewConversation();
+      setPendingAgent(agentKey === DEFAULT_AGENT_KEY ? null : agentKey);
     }
-  };
-
-  const handleUndoDelete = () => {
-    if (pendingDelete) {
-      importConversation(pendingDelete.data);
-      clearTimeout(undoTimerRef.current);
-      setPendingDelete(null);
-    }
-  };
-
-  const handleClearCompletedStatus = useCallback((convId: string) => {
-    clearCompletedStatus(convId);
-  }, [clearCompletedStatus]);
-
-  const handleContextMenu = (e: React.MouseEvent, convId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    // Initial position — useLayoutEffect below fine-tunes after measuring real size.
-    setContextMenu({ x: e.clientX, y: e.clientY, convId });
-  };
-
-  const handleExport = async (convId: string) => {
-    // Ensure the conversation is loaded before the dialog reads from it;
-    // the dialog itself will call exportConversationForShare which also
-    // guards with loadConversation, but awaiting here means the dialog
-    // opens straight into the "ready" state when possible.
-    await loadConversation(convId);
-    setShareConvId(convId);
-    setContextMenu(null);
-  };
+    setViewMode('chat');
+  }, [switchConversation, clearBadge, startNewConversation, setPendingAgent, setViewMode]);
 
   const handleImport = async () => {
     try {
@@ -250,179 +106,22 @@ export default function Sidebar() {
         data-tauri-drag-region
         className={isMacOS() ? 'h-11 shrink-0' : 'h-8 shrink-0'}
       />
-      {/* Top Navigation */}
-      <nav className="px-4 pb-2 space-y-0.5" aria-label="Main navigation">
-        <button
-          onClick={() => { startNewConversation(); setViewMode('chat'); }}
-          className={cn(
-            'btn-ghost flex items-center gap-3 w-full px-3 py-2.5 text-[14px] font-medium rounded-lg',
-            activeConversationId === null && viewMode === 'chat'
-              ? 'bg-[var(--abu-bg-active)] text-[var(--abu-text-primary)]'
-              : 'text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
-          )}
-        >
-          <Plus className={cn('h-[18px] w-[18px]', activeConversationId === null && viewMode === 'chat' ? 'text-[var(--abu-clay)]' : 'text-[var(--abu-text-tertiary)]')} strokeWidth={2} />
-          <span>{t.sidebar.newTask}</span>
-        </button>
-        <button
-          onClick={() => openToolbox()}
-          className={cn(
-            'btn-ghost flex items-center gap-3 w-full px-3 py-2.5 text-[14px] rounded-lg',
-            viewMode === 'toolbox'
-              ? 'bg-[var(--abu-bg-active)] text-[var(--abu-text-primary)]'
-              : 'text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-hover)]'
-          )}
-        >
-          <Wrench className={cn('h-[18px] w-[18px]', viewMode === 'toolbox' ? 'text-[var(--abu-clay)]' : 'text-[var(--abu-text-tertiary)]')} strokeWidth={1.75} />
-          <span>{t.sidebar.toolbox}</span>
-        </button>
-        <button
-          onClick={() => openAutomation()}
-          className={cn(
-            'btn-ghost flex items-center gap-3 w-full px-3 py-2.5 text-[14px] rounded-lg',
-            viewMode === 'automation'
-              ? 'bg-[var(--abu-bg-active)] text-[var(--abu-text-primary)]'
-              : 'text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-hover)]'
-          )}
-        >
-          <Workflow className={cn('h-[18px] w-[18px]', viewMode === 'automation' ? 'text-[var(--abu-clay)]' : 'text-[var(--abu-text-tertiary)]')} strokeWidth={1.75} />
-          <span>{t.sidebar.automation}</span>
-        </button>
-      </nav>
 
-      {/* Scrollable middle section: projects + scheduled + triggers + recents */}
+      {/* Scrollable middle section: contacts + projects */}
       <ScrollArea className="flex-1 min-h-0">
+        {/* Digital-employee contacts (IM 化) */}
+        <div className="px-4 pt-2 pb-0">
+          <div className="px-2 py-1.5 text-[13px] font-medium text-[var(--abu-text-muted)]">
+            {t.sidebar.contacts}
+          </div>
+        </div>
+        <ContactList
+          selectedAgentName={activeMeta?.agentName || pendingAgentName}
+          onPick={handlePickContact}
+        />
+
         {/* Projects Section */}
         <ProjectsSection />
-
-        {/* Recents Section */}
-        <div className="px-4 pt-2 pb-0">
-          <div className="flex items-center justify-between pr-1">
-            <button
-              onClick={() => setRecentsCollapsed(!recentsCollapsed)}
-              className="flex items-center gap-1 px-2 py-1.5 text-[13px] font-medium text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)]"
-            >
-              <span>{t.sidebar.recents}</span>
-            </button>
-            {!recentsCollapsed && (
-              <button
-                onClick={() => {
-                  const next = !searchOpen;
-                  setSearchOpen(next);
-                  if (!next) setSearchQuery('');
-                  else setTimeout(() => searchInputRef.current?.focus(), 0);
-                }}
-                className="p-1 rounded hover:bg-[var(--abu-bg-hover)] text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)]"
-                title={t.sidebar.searchPlaceholder}
-              >
-                <Search className="h-3.5 w-3.5" strokeWidth={2} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Search Box */}
-        {!recentsCollapsed && searchOpen && (
-          <div className="px-4 pt-1 pb-1">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--abu-text-muted)]" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Escape') {
-                    setSearchQuery('');
-                    setSearchOpen(false);
-                  }
-                }}
-                placeholder={t.sidebar.searchPlaceholder}
-                className="w-full h-7 pl-8 pr-7 rounded-md text-xs bg-[var(--abu-bg-muted)] border border-[var(--abu-border-subtle)] focus:border-[var(--abu-clay-40)] focus:outline-none text-[var(--abu-text-primary)] placeholder:text-[var(--abu-text-muted)]"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--abu-text-muted)] hover:text-[var(--abu-text-primary)]"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Conversation List */}
-        {!recentsCollapsed && (
-        <div className="px-4">
-        {sortedConvs.length === 0 ? (
-          <div className="px-4 py-3">
-            <p className="text-[13px] text-[var(--abu-text-tertiary)]">{t.sidebar.noSessionsYet}</p>
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {sortedConvs.map((conv) => {
-              // Look up runtime status from loaded conversations (ConversationMeta doesn't have status)
-              const convStatus = conversations[conv.id]?.status ?? 'idle';
-              return (
-              <div
-                key={conv.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => { switchConversation(conv.id); setViewMode('chat'); clearBadge(conv.id); if (convStatus === 'error') clearCompletedStatus(conv.id); }}
-                onContextMenu={(e) => handleContextMenu(e, conv.id)}
-                aria-current={conv.id === activeConversationId && viewMode === 'chat' ? 'true' : undefined}
-                className={cn(
-                  'group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors w-full text-left',
-                  conv.id === activeConversationId && viewMode === 'chat'
-                    ? 'bg-[var(--abu-bg-active)] text-[var(--abu-text-primary)]'
-                    : 'text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-hover)]'
-                )}
-              >
-                {conv.imPlatform && (
-                  <IMPlatformDot platform={conv.imPlatform} />
-                )}
-                {conv.importedFrom && (
-                  <ImportedBadge importedAt={conv.importedFrom.importedAt} />
-                )}
-                {editingId === conv.id ? (
-                  <input
-                    autoFocus
-                    defaultValue={conv.title}
-                    className="flex-1 text-[13px] bg-transparent border-b border-[var(--abu-clay)] outline-none min-w-0"
-                    onClick={(e) => e.stopPropagation()}
-                    onBlur={(e) => {
-                      const val = e.target.value.trim();
-                      if (val && val !== conv.title) renameConversation(conv.id, val);
-                      setEditingId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                      if (e.key === 'Escape') setEditingId(null);
-                    }}
-                  />
-                ) : (
-                  <span className="flex-1 truncate text-[13px]">{conv.title.replace(/\[Attachment:\s*`[^`]*`\]\s*/g, '').trim() || conv.title}</span>
-                )}
-                <StatusIndicator
-                  status={convStatus}
-                  onComplete={() => handleClearCompletedStatus(conv.id)}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => handleDeleteConversation(e, conv.id)}
-                  className="h-5 w-5 opacity-0 group-hover:opacity-100 text-[var(--abu-text-tertiary)] hover:text-red-500 hover:bg-transparent shrink-0"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              );
-            })}
-          </div>
-        )}
-        </div>
-        )}
       </ScrollArea>
 
       {/* User Section */}
@@ -456,6 +155,7 @@ export default function Sidebar() {
               {userNickname || t.sidebar.defaultNickname}
             </div>
           </button>
+          {/* Import session */}
           <button
             onClick={handleImport}
             className="btn-ghost p-1.5 text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-md"
@@ -463,6 +163,33 @@ export default function Sidebar() {
           >
             <Upload className="h-3.5 w-3.5" />
           </button>
+          {/* Toolbox (entry relocated from top nav → next to settings) */}
+          <button
+            onClick={() => openToolbox()}
+            className={cn(
+              'btn-ghost p-1.5 rounded-md',
+              viewMode === 'toolbox'
+                ? 'text-[var(--abu-clay)] bg-[var(--abu-bg-active)]'
+                : 'text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
+            )}
+            title={t.sidebar.toolbox}
+          >
+            <Wrench className="h-3.5 w-3.5" />
+          </button>
+          {/* Automation (entry relocated from top nav → next to settings) */}
+          <button
+            onClick={() => openAutomation()}
+            className={cn(
+              'btn-ghost p-1.5 rounded-md',
+              viewMode === 'automation'
+                ? 'text-[var(--abu-clay)] bg-[var(--abu-bg-active)]'
+                : 'text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
+            )}
+            title={t.sidebar.automation}
+          >
+            <Workflow className="h-3.5 w-3.5" />
+          </button>
+          {/* Settings */}
           <button
             onClick={() => openSystemSettings(updateInfo ? 'about' : undefined)}
             className={cn(
@@ -477,6 +204,7 @@ export default function Sidebar() {
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
             )}
           </button>
+          {/* Help */}
           <button
             onClick={() => setGuideOpen(true)}
             className="btn-ghost p-1.5 text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-md"
@@ -486,102 +214,6 @@ export default function Sidebar() {
           </button>
         </div>
       </div>
-
-      {/* Context menu */}
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="fixed z-50 bg-white rounded-lg shadow-lg border border-[var(--abu-border)] py-1 min-w-[140px]"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          <button
-            onClick={() => {
-              setEditingId(contextMenu.convId);
-              setContextMenu(null);
-            }}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-active)]"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            {t.sidebar.renameConversation}
-          </button>
-          <button
-            onClick={() => handleExport(contextMenu.convId)}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-active)]"
-          >
-            <Download className="h-3.5 w-3.5" />
-            {t.sidebar.exportConversation}
-          </button>
-          {/* Move to project — submenu with project list */}
-          {(() => {
-            const activeProjects = Object.values(projectsMap).filter(p => !p.archived);
-            if (activeProjects.length === 0) return null;
-            const convMeta = conversationIndex[contextMenu.convId];
-            return (
-              <div className="relative">
-                <button
-                  onClick={(e) => { e.stopPropagation(); setShowMoveSubmenu(!showMoveSubmenu); }}
-                  className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-[var(--abu-text-secondary)] hover:bg-[var(--abu-bg-active)]"
-                >
-                  <FolderInput className="h-3.5 w-3.5" />
-                  <span className="flex-1 text-left">{t.project.moveToProject}</span>
-                  <ChevronRight className="h-3 w-3" />
-                </button>
-                {showMoveSubmenu && (
-                  <div
-                    ref={moveSubmenuRef}
-                    style={moveSubmenuStyle}
-                    className="absolute left-full ml-1 bg-white rounded-lg shadow-lg border border-[var(--abu-border)] py-1 min-w-[140px] overflow-y-auto overscroll-contain z-10"
-                  >
-                    {activeProjects.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          useChatStore.getState().setConversationProject(contextMenu.convId, p.id);
-                          setContextMenu(null);
-                          setShowMoveSubmenu(false);
-                        }}
-                        className={cn(
-                          'flex items-center gap-2 w-full px-3 py-1.5 text-[13px] hover:bg-[var(--abu-bg-active)]',
-                          convMeta?.projectId === p.id ? 'text-[var(--abu-clay)]' : 'text-[var(--abu-text-secondary)]'
-                        )}
-                      >
-                        <FolderClosed className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        <span className="truncate">{p.name}</span>
-                      </button>
-                    ))}
-                    {convMeta?.projectId && (
-                      <>
-                        <div className="my-1 border-t border-[var(--abu-border)]" />
-                        <button
-                          onClick={() => {
-                            useChatStore.getState().setConversationProject(contextMenu.convId, undefined);
-                            setContextMenu(null);
-                            setShowMoveSubmenu(false);
-                          }}
-                          className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-[var(--abu-text-tertiary)] hover:bg-[var(--abu-bg-active)]"
-                        >
-                          <Minus className="h-3.5 w-3.5" />
-                          {t.project.removeFromProject}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-          <button
-            onClick={(e) => {
-              handleDeleteConversation(e, contextMenu.convId);
-              setContextMenu(null);
-            }}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-[13px] text-red-500 hover:bg-[var(--abu-bg-active)]"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {t.sidebar.deleteConversation}
-          </button>
-        </div>
-      )}
 
       {/* Guide modal */}
       <GuideModal
@@ -594,30 +226,6 @@ export default function Sidebar() {
 
       {/* Profile edit modal */}
       <ProfileEditModal open={profileOpen} onClose={() => setProfileOpen(false)} />
-
-      {/* Share export preview */}
-      {shareConvId && (
-        <ShareExportDialog
-          convId={shareConvId}
-          defaultFilename={`conversation-${conversationIndex[shareConvId]?.title || shareConvId}${SHARE_EXT}`}
-          onClose={() => setShareConvId(null)}
-        />
-      )}
-
-
-      {/* Undo delete toast */}
-      {pendingDelete && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 bg-[var(--abu-text-primary)] text-white rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200" role="alert" aria-live="assertive">
-          <span className="text-sm">{t.sidebar.conversationDeleted}</span>
-          <button
-            onClick={handleUndoDelete}
-            className="flex items-center gap-1 text-sm font-medium text-[var(--abu-clay)] hover:text-[var(--abu-clay)] transition-colors"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-            {t.sidebar.undo}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

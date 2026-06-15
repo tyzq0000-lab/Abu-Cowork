@@ -133,6 +133,9 @@ interface ScheduleState {
   selectedTaskId: string | null;
   showEditor: boolean;
   editingTaskId: string | null;
+  /** Seed agentName for a NEW task — pre-binds the editor to a digital employee
+   *  when opened from that employee's chat (IM 化). Ephemeral, not persisted. */
+  editorSeedAgentName: string | null;
 }
 
 interface ScheduleActions {
@@ -186,7 +189,7 @@ interface ScheduleActions {
   // UI state
   setActiveTaskId: (id: string | null) => void;
   setSelectedTaskId: (id: string | null) => void;
-  openEditor: (taskId?: string) => void;
+  openEditor: (taskId?: string, seed?: { agentName?: string }) => void;
   closeEditor: () => void;
 }
 
@@ -200,6 +203,7 @@ export const useScheduleStore = create<ScheduleStore>()(
       selectedTaskId: null,
       showEditor: false,
       editingTaskId: null,
+      editorSeedAgentName: null,
 
       // CRUD
       createTask: (data) => {
@@ -379,10 +383,11 @@ export const useScheduleStore = create<ScheduleStore>()(
         });
       },
 
-      openEditor: (taskId) => {
+      openEditor: (taskId, seed) => {
         set((state) => {
           state.showEditor = true;
           state.editingTaskId = taskId ?? null;
+          state.editorSeedAgentName = seed?.agentName ?? null;
         });
       },
 
@@ -390,6 +395,7 @@ export const useScheduleStore = create<ScheduleStore>()(
         set((state) => {
           state.showEditor = false;
           state.editingTaskId = null;
+          state.editorSeedAgentName = null;
         });
       },
     })),

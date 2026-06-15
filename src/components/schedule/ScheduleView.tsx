@@ -5,7 +5,6 @@ import { Plus, Clock, Info, Wand2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import ScheduleTaskCard from './ScheduleTaskCard';
 import ScheduleTaskDetail from './ScheduleTaskDetail';
-import ScheduleEditor from './ScheduleEditor';
 
 export default function ScheduleView() {
   const { t } = useI18n();
@@ -22,7 +21,6 @@ export default function ScheduleView() {
     return (
       <div className="flex flex-col h-full bg-[var(--abu-bg-base)]">
         <ScheduleTaskDetail />
-        <ScheduleEditor />
       </div>
     );
   }
@@ -97,8 +95,6 @@ export default function ScheduleView() {
         </ScrollArea>
       )}
 
-      {/* Editor modal */}
-      <ScheduleEditor />
     </div>
   );
 }

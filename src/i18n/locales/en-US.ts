@@ -103,6 +103,7 @@ const enUS: TranslationDict = {
     defaultAssistant: 'Default Assistant',
     conversationHistory: 'Chat History',
     newConversation: 'New Chat',
+    messagesCount: '{count} messages',
     searchPlaceholder: 'Search chats...',
     noSessionsYet: 'No sessions yet',
     hideSidebar: 'Hide sidebar',

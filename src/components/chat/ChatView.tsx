@@ -10,6 +10,8 @@ import type { PermissionDuration } from '@/stores/permissionStore';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useI18n } from '@/i18n';
 import MessageGroup from './MessageGroup';
+import ChatHeader from './ChatHeader';
+import ConversationHistoryDrawer from './ConversationHistoryDrawer';
 import ChatInput from './ChatInput';
 import BackgroundAgents from './BackgroundAgents';
 import ScenarioGuide from './ScenarioGuide';
@@ -90,6 +92,11 @@ export default function ChatView() {
         intro: pendingAgent.intros?.[locale] ?? pendingAgent.intro,
       }
     : null;
+
+  // IM 化: current contact = the active conversation's binding, else the pending
+  // agent. Drives the chat header + history drawer. null → default 扶摇.
+  const currentContactKey = activeConv?.agentName ?? pendingAgentName ?? null;
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Subscribe to command confirmation state using useSyncExternalStore
   const commandConfirmRequest = useSyncExternalStore(
@@ -190,7 +197,12 @@ export default function ChatView() {
     let convId = activeConv?.id;
     const isNewConversation = !convId;
     if (!convId) {
-      convId = createConversation(workspacePath);
+      // IM 化: bind the conversation to the pending contact so 免@ routing picks
+      // the right digital employee. createConversation ignores 'abu' (default).
+      convId = createConversation(
+        workspacePath,
+        pendingAgentName ? { agentName: pendingAgentName } : undefined,
+      );
     }
     // Auto-collapse sidebar when sending first message in a new conversation
     if (isNewConversation && !useSettingsStore.getState().sidebarCollapsed) {
@@ -265,6 +277,12 @@ export default function ChatView() {
   if (!activeConv || activeConv.messages.length === 0) {
     return (
       <div className="flex flex-col h-full bg-[var(--abu-bg-base)]">
+        <ChatHeader contactKey={currentContactKey} onOpenHistory={() => setHistoryOpen(true)} />
+        <ConversationHistoryDrawer
+          contactKey={currentContactKey}
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+        />
         <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto px-8 pt-[12vh] pb-12">
           <div className="w-full max-w-2xl">
             {/* Title */}
@@ -334,6 +352,7 @@ export default function ChatView() {
                 onSend={handleSend}
                 scenarioPlaceholder={scenarioPlaceholder}
                 onInputChange={handleWelcomeInputChange}
+                contactKey={currentContactKey}
               />
             </div>
 
@@ -357,6 +376,14 @@ export default function ChatView() {
 
   return (
     <div className="flex flex-col h-full min-h-0 min-w-0 bg-[var(--abu-bg-base)]">
+      {/* IM 化 chat header + conversation-history drawer */}
+      <ChatHeader contactKey={currentContactKey} onOpenHistory={() => setHistoryOpen(true)} />
+      <ConversationHistoryDrawer
+        contactKey={currentContactKey}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+      />
+
       {/* Command Confirmation Dialog — only show if it belongs to this conversation */}
       {commandConfirmRequest && commandConfirmRequest.conversationId === activeConvId && (
         <CommandConfirmDialog
@@ -447,7 +474,7 @@ export default function ChatView() {
       <div className="shrink-0 px-6 md:px-10 pb-4 pt-1.5 bg-[var(--abu-bg-base)]">
         <div className="max-w-4xl mx-auto flex flex-col gap-1.5">
           <BackgroundAgents />
-          <ChatInput variant="chat" onSend={handleSend} />
+          <ChatInput variant="chat" onSend={handleSend} contactKey={currentContactKey} />
           <div className="flex items-center justify-center gap-3 mt-1.5">
             <UsageChip conversationId={activeConv.id} />
             <p className="text-[11px] text-[var(--abu-text-muted)]">

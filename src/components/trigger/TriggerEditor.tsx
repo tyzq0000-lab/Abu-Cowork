@@ -17,10 +17,21 @@ const SOURCE_TYPES: TriggerSourceType[] = ['http', 'file', 'cron', 'im'];
 const FILTER_TYPES: TriggerFilterType[] = ['always', 'keyword', 'regex'];
 
 export default function TriggerEditor() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { showEditor, editingTriggerId, editorTemplateDefaults, closeEditor, createTrigger, updateTrigger, triggers, setSelectedTriggerId } =
     useTriggerStore();
   const skills = useDiscoveryStore((s) => s.skills);
+  const agents = useDiscoveryStore((s) => s.agents);
+  // Digital-employee options: default 扶摇 (empty value) + installed agents.
+  const agentOptions = useMemo(
+    () => [
+      { value: '', label: t.sidebar.defaultAssistant },
+      ...agents
+        .filter((a) => a.name !== 'abu') // 'abu' is the default assistant, already represented above
+        .map((a) => ({ value: a.name, label: a.displayNames?.[locale] ?? a.name })),
+    ],
+    [agents, locale, t.sidebar.defaultAssistant],
+  );
   const channelsMap = useIMChannelStore((s) => s.channels);
   const imChannels = useMemo(() => Object.values(channelsMap), [channelsMap]);
   const projectsMap = useProjectStore((s) => s.projects);
@@ -40,6 +51,7 @@ export default function TriggerEditor() {
   const [regexPattern, setRegexPattern] = useState('');
   const [filterField, setFilterField] = useState('');
   const [skillName, setSkillName] = useState('');
+  const [agentName, setAgentName] = useState('');
   const [workspacePath, setWorkspacePath] = useState('');
   const [projectId, setProjectId] = useState('');
   const [sourceType, setSourceType] = useState<TriggerSourceType>('http');
@@ -102,6 +114,7 @@ export default function TriggerEditor() {
       setRegexPattern(editingTrigger.filter.pattern ?? '');
       setFilterField(editingTrigger.filter.field ?? '');
       setSkillName(editingTrigger.action.skillName ?? '');
+      setAgentName(editingTrigger.action.agentName ?? '');
       setWorkspacePath(editingTrigger.action.workspacePath ?? '');
       setProjectId(editingTrigger.projectId ?? '');
       setDebounceEnabled(editingTrigger.debounce.enabled);
@@ -143,6 +156,7 @@ export default function TriggerEditor() {
       setRegexPattern('');
       setFilterField('');
       setSkillName('');
+      setAgentName(tpl?.agentName ?? '');
       setWorkspacePath('');
       setProjectId('');
       setDebounceEnabled(true);
@@ -220,6 +234,7 @@ export default function TriggerEditor() {
     const action = {
       prompt: prompt.trim(),
       skillName: skillName || undefined,
+      agentName: agentName || undefined,
       workspacePath: effectiveWorkspace || undefined,
     };
 
@@ -910,6 +925,18 @@ export default function TriggerEditor() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Digital-employee binding (IM 化 — who handles this event) */}
+          <div>
+            <label className="block text-[13px] font-medium text-[var(--abu-text-primary)] mb-1.5">
+              {t.sidebar.contacts}
+            </label>
+            <Select
+              value={agentName}
+              onChange={setAgentName}
+              options={agentOptions}
+            />
           </div>
 
           {/* Skill binding */}

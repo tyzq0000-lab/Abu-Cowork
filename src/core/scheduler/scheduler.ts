@@ -95,7 +95,7 @@ class SchedulerEngine {
     // Create a new conversation for this run (skipActivate to avoid disturbing user)
     const conversationId = chatStore.createConversation(
       task.workspacePath ?? null,
-      { scheduledTaskId: task.id, projectId: task.projectId, skipActivate: true }
+      { scheduledTaskId: task.id, projectId: task.projectId, skipActivate: true, agentName: task.agentName }
     );
 
     // Set conversation title

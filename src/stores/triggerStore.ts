@@ -32,6 +32,8 @@ export interface EditorTemplateDefaults {
   filterType?: TriggerFilterType;
   prompt?: string;
   keywords?: string;
+  /** Pre-bind a NEW trigger to a digital employee (IM 化 — opened from chat). */
+  agentName?: string;
 }
 
 interface TriggerState {

@@ -6,7 +6,6 @@ import { Plus, Zap, Info, Wand2, AlertTriangle, FileText, Timer } from 'lucide-r
 import { ScrollArea } from '@/components/ui/scroll-area';
 import TriggerCard from './TriggerCard';
 import TriggerDetail from './TriggerDetail';
-import TriggerEditor from './TriggerEditor';
 import type { TranslationDict } from '@/i18n/types';
 
 interface TriggerTemplate {
@@ -73,7 +72,6 @@ export default function TriggerView() {
     return (
       <div className="flex flex-col h-full bg-[var(--abu-bg-base)]">
         <TriggerDetail />
-        <TriggerEditor />
       </div>
     );
   }
@@ -170,8 +168,6 @@ export default function TriggerView() {
         </ScrollArea>
       )}
 
-      {/* Editor modal */}
-      <TriggerEditor />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Plus, ArrowUp, Square, X, FileText } from 'lucide-react';
+import { Plus, ArrowUp, Square, X, FileText, Clock, Zap } from 'lucide-react';
 // AgentSelector hidden from UI; import kept for easy restore
 // import AgentSelector from '@/components/chat/AgentSelector';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -14,7 +14,10 @@ import { getCurrentLoopContext } from '@/core/agent/permissionBridge';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
 import ContextIndicator from '@/components/chat/ContextIndicator';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
+import { useScheduleStore } from '@/stores/scheduleStore';
+import { useTriggerStore } from '@/stores/triggerStore';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { DEFAULT_AGENT_KEY } from '@/utils/contacts';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { usePermissionStore } from '@/stores/permissionStore';
 import type { PermissionDuration } from '@/stores/permissionStore';
@@ -35,6 +38,45 @@ interface ChatInputProps {
   scenarioPlaceholder?: string | null;
   /** Called when input text changes (welcome variant only, for hiding guide) */
   onInputChange?: (hasText: boolean) => void;
+  /** Current digital-employee contact (IM 化) — pre-binds 定时任务/监听事件
+   *  created from this chat to that employee. null / 'abu' = default 扶摇. */
+  contactKey?: string | null;
+}
+
+/**
+ * 定时任务 / 监听事件 quick-create buttons (IM 化). Open the global automation
+ * editors pre-bound to the current digital-employee contact, so any employee —
+ * not just 扶摇 — can own scheduled tasks and event triggers.
+ */
+function AutomationButtons({ contactKey }: { contactKey?: string | null }) {
+  const { t } = useI18n();
+  const seed = contactKey && contactKey !== DEFAULT_AGENT_KEY ? { agentName: contactKey } : undefined;
+  const btnClass =
+    'btn-ghost h-7 w-7 text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)] rounded-lg';
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => useScheduleStore.getState().openEditor(undefined, seed)}
+        aria-label={t.sidebar.scheduledTasks}
+        title={t.sidebar.scheduledTasks}
+        className={btnClass}
+      >
+        <Clock className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => useTriggerStore.getState().openEditor(undefined, seed)}
+        aria-label={t.sidebar.triggers}
+        title={t.sidebar.triggers}
+        className={btnClass}
+      >
+        <Zap className="h-4 w-4" />
+      </Button>
+    </>
+  );
 }
 
 interface SuggestionItem {
@@ -86,7 +128,7 @@ async function processFilePaths(
   }
 }
 
-export default function ChatInput({ variant, onSend, disabled, scenarioPlaceholder, onInputChange }: ChatInputProps) {
+export default function ChatInput({ variant, onSend, disabled, scenarioPlaceholder, onInputChange, contactKey }: ChatInputProps) {
   const isWelcome = variant === 'welcome';
   // Context usage indicator shows only in chat variant once a conversation exists.
   const activeConvIdForIndicator = useChatStore((s) => (isWelcome ? null : s.activeConversationId));
@@ -774,6 +816,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
               >
                 <Plus className="h-4 w-4" />
               </Button>
+              <AutomationButtons contactKey={contactKey} />
               <div className="flex-1" />
 
               {/* Model picker hidden for the end-user build — the text model
@@ -816,6 +859,7 @@ export default function ChatInput({ variant, onSend, disabled, scenarioPlacehold
                 >
                   <Plus className="h-4 w-4" />
                 </Button>
+                <AutomationButtons contactKey={contactKey} />
               </div>
 
               {/* Right Actions: Context indicator + Send / Stop. Model picker

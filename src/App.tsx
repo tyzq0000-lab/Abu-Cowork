@@ -60,6 +60,8 @@ import { useToastStore } from '@/stores/toastStore';
 import CloseDialog from '@/components/common/CloseDialog';
 import DeepLinkInstallDialog from '@/components/common/DeepLinkInstallDialog';
 import EmployeeRuntimeSetupDialog from '@/components/common/EmployeeRuntimeSetupDialog';
+import ScheduleEditor from '@/components/schedule/ScheduleEditor';
+import TriggerEditor from '@/components/trigger/TriggerEditor';
 import { initDeepLink } from '@/core/deeplink';
 import SensitiveAuditDialog from '@/components/settings/SensitiveAuditDialog';
 import { checkForUpdate } from '@/core/updates/checker';
@@ -542,6 +544,12 @@ function App() {
             deepLinkStore.pending, staged by initDeepLink(). */}
         <DeepLinkInstallDialog />
         <EmployeeRuntimeSetupDialog />
+
+        {/* Automation editors — mounted globally so they can be opened from any
+            view (e.g. a digital-employee chat's 定时任务/监听事件 buttons), not
+            just the Automation page. Controlled by their stores' showEditor. */}
+        <ScheduleEditor />
+        <TriggerEditor />
 
         <CloseDialog
           open={showCloseDialog}

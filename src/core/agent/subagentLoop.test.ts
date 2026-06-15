@@ -1,5 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { isNoProgressTurn } from './subagentLoop';
+import { isNoProgressTurn, buildBoundAgentSystemPrompt } from './subagentLoop';
+
+describe('buildBoundAgentSystemPrompt (免@==@ shared builder)', () => {
+  it('uses the agent systemPrompt as the sole identity, with no 扶摇 soul leak', async () => {
+    // Regression for the 免@ persona bug: a bound digital-employee prompt must be
+    // built from the employee's OWN systemPrompt only — no 扶摇 capability/soul.
+    const agent = { name: '数据分析师', systemPrompt: '你是资深数据分析师_PERSONA_MARKER', memory: 'session' } as never;
+    const prompt = await buildBoundAgentSystemPrompt(agent, { workspacePath: null });
+    expect(prompt).toContain('你是资深数据分析师_PERSONA_MARKER');
+    expect(prompt).toContain('## 当前时间');
+    expect(prompt).toContain('## 安全规则');
+    // The default 扶摇 personality (soul) must NOT leak into a bound employee.
+    expect(prompt).not.toContain('## 你的性格');
+  });
+
+  it('includes the workspace section when a workspace path is provided', async () => {
+    const agent = { name: 'x', systemPrompt: 'P', memory: 'session' } as never;
+    const prompt = await buildBoundAgentSystemPrompt(agent, { workspacePath: 'D:/proj' });
+    expect(prompt).toContain('## 当前工作区');
+    expect(prompt).toContain('D:/proj');
+  });
+});
 
 describe('isNoProgressTurn', () => {
   it('flags a turn where every tool call is unparseable', () => {

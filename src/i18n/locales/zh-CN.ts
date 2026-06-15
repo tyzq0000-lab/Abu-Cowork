@@ -103,6 +103,7 @@ const zhCN: TranslationDict = {
     defaultAssistant: '默认助手',
     conversationHistory: '会话历史',
     newConversation: '新建会话',
+    messagesCount: '{count} 条消息',
     searchPlaceholder: '搜索对话...',
     noSessionsYet: '暂无会话',
     hideSidebar: '隐藏侧栏',
