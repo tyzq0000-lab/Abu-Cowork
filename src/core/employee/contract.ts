@@ -19,6 +19,58 @@ export interface EmployeeDependency {
   required: boolean;
   description?: string;
   platforms?: string[];
+  runtimeId?: 'python';
+}
+
+export interface EmployeeWorkspaceRequirement {
+  required: boolean;
+  selection: 'user-selected' | 'current-workspace';
+  stateDirectory?: string;
+  initializeWith?: string;
+}
+
+export type EmployeeCapabilityState =
+  | 'ready'
+  | 'needs-authorization'
+  | 'available-to-configure'
+  | 'unavailable'
+  | 'fallback';
+
+export interface EmployeeOnboarding {
+  minimumInputCount?: number;
+  clueTypes?: string[];
+  setupMode?: string;
+  platformSelection?: string;
+  launchMode: 'create-or-open-conversation' | 'open-employee';
+  incrementalUnlock?: boolean;
+  coreMustRemainRunnable?: boolean;
+  capabilityStates?: EmployeeCapabilityState[];
+}
+
+export interface EmployeeAuthorization {
+  type: string;
+  required: 'always' | 'when-used' | 'optional';
+  description: string;
+  fallback: string;
+}
+
+export interface EmployeeReliability {
+  idempotency: {
+    scope: string;
+    keyFields: string[];
+  };
+  retry: {
+    maxAttempts: number;
+    retryableClasses: string[];
+    nonRetryableClasses: string[];
+  };
+  errorClasses: string[];
+  evidenceRequired: string[];
+  humanEscalation: {
+    afterConsecutiveFailures: number;
+    preserveArtifacts: boolean;
+    preserveLogs: boolean;
+  };
 }
 
 export interface EmployeeSourceCapability {
@@ -59,6 +111,8 @@ export type EmployeeWorkflowTemplate = EmployeeScheduleTemplate | EmployeeTrigge
 export interface EmployeeRuntimeProfile {
   version: 1;
   targetMaturity?: 'L2' | 'L3';
+  workspace?: EmployeeWorkspaceRequirement;
+  onboarding?: EmployeeOnboarding;
   memory?: {
     scope: 'session' | 'project' | 'user';
     autoCapture?: Array<'preference' | 'feedback' | 'failure' | 'project' | 'reference'>;
@@ -89,6 +143,8 @@ export interface EmployeeRuntimeProfile {
     assertions: string[];
   }>;
   dependencies?: EmployeeDependency[];
+  authorizations?: EmployeeAuthorization[];
+  reliability?: EmployeeReliability;
   sources?: EmployeeSourceCapability[];
 }
 
@@ -274,7 +330,84 @@ function isDependency(value: unknown): boolean {
     && ['command', 'environment', 'workspace', 'service', 'account'].includes(String(value.type))
     && typeof value.required === 'boolean'
     && hasOptionalString(value, 'description')
-    && (value.platforms === undefined || isStringArray(value.platforms));
+    && (value.platforms === undefined || isStringArray(value.platforms))
+    && (value.runtimeId === undefined || value.runtimeId === 'python');
+}
+
+function isWorkspaceRequirement(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.required === 'boolean'
+    && ['user-selected', 'current-workspace'].includes(String(value.selection))
+    && hasOptionalString(value, 'stateDirectory')
+    && hasOptionalString(value, 'initializeWith');
+}
+
+function isOnboarding(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (!['create-or-open-conversation', 'open-employee'].includes(String(value.launchMode))) {
+    return false;
+  }
+  if (
+    value.minimumInputCount !== undefined
+    && (
+      typeof value.minimumInputCount !== 'number'
+      || !Number.isInteger(value.minimumInputCount)
+      || value.minimumInputCount < 0
+    )
+  ) return false;
+  if (value.clueTypes !== undefined && !isStringArray(value.clueTypes)) return false;
+  if (!hasOptionalString(value, 'setupMode') || !hasOptionalString(value, 'platformSelection')) {
+    return false;
+  }
+  if (
+    value.incrementalUnlock !== undefined
+    && typeof value.incrementalUnlock !== 'boolean'
+  ) return false;
+  if (
+    value.coreMustRemainRunnable !== undefined
+    && typeof value.coreMustRemainRunnable !== 'boolean'
+  ) return false;
+  if (value.capabilityStates !== undefined) {
+    const states = [
+      'ready',
+      'needs-authorization',
+      'available-to-configure',
+      'unavailable',
+      'fallback',
+    ];
+    if (
+      !isStringArray(value.capabilityStates)
+      || !value.capabilityStates.every((state) => states.includes(state))
+    ) return false;
+  }
+  return true;
+}
+
+function isAuthorization(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.type === 'string'
+    && ['always', 'when-used', 'optional'].includes(String(value.required))
+    && typeof value.description === 'string'
+    && typeof value.fallback === 'string';
+}
+
+function isReliability(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.idempotency) || !isRecord(value.retry)) return false;
+  if (!isRecord(value.humanEscalation)) return false;
+  return typeof value.idempotency.scope === 'string'
+    && isStringArray(value.idempotency.keyFields)
+    && typeof value.retry.maxAttempts === 'number'
+    && Number.isInteger(value.retry.maxAttempts)
+    && value.retry.maxAttempts >= 1
+    && isStringArray(value.retry.retryableClasses)
+    && isStringArray(value.retry.nonRetryableClasses)
+    && isStringArray(value.errorClasses)
+    && isStringArray(value.evidenceRequired)
+    && typeof value.humanEscalation.afterConsecutiveFailures === 'number'
+    && Number.isInteger(value.humanEscalation.afterConsecutiveFailures)
+    && value.humanEscalation.afterConsecutiveFailures >= 1
+    && typeof value.humanEscalation.preserveArtifacts === 'boolean'
+    && typeof value.humanEscalation.preserveLogs === 'boolean';
 }
 
 function isSourceCapability(value: unknown): boolean {
@@ -298,6 +431,8 @@ function isRuntimeProfile(value: unknown): value is EmployeeRuntimeProfile {
   ) {
     return false;
   }
+  if (value.workspace !== undefined && !isWorkspaceRequirement(value.workspace)) return false;
+  if (value.onboarding !== undefined && !isOnboarding(value.onboarding)) return false;
   if (value.memory !== undefined) {
     if (!isRecord(value.memory)) return false;
     if (!['session', 'project', 'user'].includes(String(value.memory.scope))) return false;
@@ -324,6 +459,11 @@ function isRuntimeProfile(value: unknown): value is EmployeeRuntimeProfile {
     value.dependencies !== undefined
     && (!Array.isArray(value.dependencies) || !value.dependencies.every(isDependency))
   ) return false;
+  if (
+    value.authorizations !== undefined
+    && (!Array.isArray(value.authorizations) || !value.authorizations.every(isAuthorization))
+  ) return false;
+  if (value.reliability !== undefined && !isReliability(value.reliability)) return false;
   if (
     value.sources !== undefined
     && (!Array.isArray(value.sources) || !value.sources.every(isSourceCapability))

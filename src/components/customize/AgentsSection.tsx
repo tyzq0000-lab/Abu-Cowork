@@ -8,9 +8,9 @@ import AgentEditor from './AgentEditor';
 import { Toggle } from '@/components/ui/toggle';
 import { ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2, MessageCircle, Eye, Code, Search, Plus, X, Wand2, PenLine, Upload, Check } from 'lucide-react';
 import { remove } from '@tauri-apps/plugin-fs';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { getParentDir } from '@/utils/pathUtils';
 import { isImageAvatarPath } from '@/core/agent/employeeLoader';
+import { useAvatarDataUrl } from '@/hooks/useAvatarDataUrl';
 import type { SubagentDefinition } from '@/types';
 import MarkdownRenderer from '@/components/chat/MarkdownRenderer';
 import fuyaoAvatar from '@/assets/fuyao-avatar.png';
@@ -27,11 +27,16 @@ function isSystemAgent(agent: SubagentDefinition): boolean {
 function AgentAvatar({ agent, size = 'md' }: { agent: SubagentDefinition; size?: 'sm' | 'md' }) {
   const { t } = useI18n();
   const cls = size === 'sm' ? 'h-5 w-5' : 'h-6 w-6';
+  const dataUrl = useAvatarDataUrl(agent.avatar);
   if (agent.name === 'abu') {
     return <img src={fuyaoAvatar} alt={t.common.appName} className={`${cls} rounded-full object-cover`} />;
   }
+  if (dataUrl) {
+    return <img src={dataUrl} alt={agent.name} className={`${cls} rounded-full object-cover`} />;
+  }
+  // Image-path avatar that hasn't resolved → show the name initial instead of the raw path.
   if (isImageAvatarPath(agent.avatar)) {
-    return <img src={convertFileSrc(agent.avatar!)} alt={agent.name} className={`${cls} rounded-full object-cover`} />;
+    return <span className={size === 'sm' ? 'text-base' : 'text-xl'}>{agent.name?.[0] ?? '🤖'}</span>;
   }
   return <span className={size === 'sm' ? 'text-base' : 'text-xl'}>{agent.avatar || '🤖'}</span>;
 }

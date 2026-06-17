@@ -22,6 +22,66 @@ function baseManifest(): EmployeePluginManifest {
 }
 
 describe('employee package contract', () => {
+  it('preserves generic onboarding, workspace, authorization, and reliability fields', () => {
+    const parsed = parseEmployeePlugin(JSON.stringify({
+      ...baseManifest(),
+      version: '1.2.3',
+      defaultInitPrompt: { en: 'Start the first generic task.' },
+      runtime: {
+        version: 1,
+        workspace: {
+          required: true,
+          selection: 'user-selected',
+          stateDirectory: '.fuyao/generic',
+          initializeWith: 'starter-template',
+        },
+        onboarding: {
+          launchMode: 'create-or-open-conversation',
+          capabilityStates: [
+            'ready',
+            'needs-authorization',
+            'available-to-configure',
+            'unavailable',
+            'fallback',
+          ],
+        },
+        authorizations: [
+          {
+            type: 'external-write',
+            required: 'always',
+            description: 'Write to an external system.',
+            fallback: 'Produce a reviewable draft.',
+          },
+        ],
+        reliability: {
+          idempotency: {
+            scope: 'project-action',
+            keyFields: ['projectId', 'action'],
+          },
+          retry: {
+            maxAttempts: 3,
+            retryableClasses: ['transient'],
+            nonRetryableClasses: ['authorization'],
+          },
+          errorClasses: ['transient', 'authorization'],
+          evidenceRequired: ['source', 'confidence'],
+          humanEscalation: {
+            afterConsecutiveFailures: 3,
+            preserveArtifacts: true,
+            preserveLogs: true,
+          },
+        },
+      },
+    }));
+
+    expect(parsed?.version).toBe('1.2.3');
+    expect(parsed?.defaultInitPrompt?.en).toBe('Start the first generic task.');
+    expect(parsed?.runtime?.workspace?.stateDirectory).toBe('.fuyao/generic');
+    expect(parsed?.runtime?.onboarding?.launchMode).toBe('create-or-open-conversation');
+    expect(parsed?.runtime?.authorizations?.[0]?.type).toBe('external-write');
+    expect(parsed?.runtime?.reliability?.retry.maxAttempts).toBe(3);
+  });
+
   it('parses a valid manifest and rejects non-object JSON', () => {
     expect(parseEmployeePlugin(JSON.stringify(baseManifest()))?.agentName).toBe('new-media-ops');
     expect(parseEmployeePlugin('[]')).toBeNull();

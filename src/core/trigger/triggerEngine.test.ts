@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useTriggerStore } from '../../stores/triggerStore';
 import { useChatStore } from '../../stores/chatStore';
 import type { Trigger, TriggerEventPayload } from '../../types/trigger';
+import { exists, mkdir, watch } from '@tauri-apps/plugin-fs';
 
 // Mock agentLoop to avoid full LLM execution
 vi.mock('../agent/agentLoop', () => ({
@@ -68,6 +69,13 @@ function makeTrigger(overrides: Partial<Trigger> = {}): Trigger {
     totalRuns: 0,
     ...overrides,
   };
+}
+
+async function flushFileWatcherStart(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('TriggerEngine', () => {
@@ -172,6 +180,44 @@ describe('TriggerEngine', () => {
 
       // Should not throw, just skip
       await triggerEngine.handleEvent(trigger.id, { data: { text: 'hello' } });
+      expect(runAgentLoop).not.toHaveBeenCalled();
+    });
+
+    it('file-source regex filter matches the changed file path (not the whole payload)', async () => {
+      // Regression: a filename-anchored filter like /\.(csv|json|jsonl)$/ must be
+      // tested against the changed file path, not JSON.stringify(payload.data) —
+      // otherwise the trailing `$` can never match and the trigger is wrongly skipped.
+      const trigger = makeTrigger({
+        id: 'trigger-file-regex',
+        source: { type: 'file', path: '.fuyao/x/imports', events: ['create', 'modify'], pattern: '*.*' },
+        filter: { type: 'regex', pattern: '\\.(csv|json|jsonl)$' },
+      });
+      useTriggerStore.setState({ triggers: { [trigger.id]: trigger } });
+
+      const { runAgentLoop } = await import('../agent/agentLoop');
+      vi.mocked(runAgentLoop).mockClear();
+      vi.mocked(runAgentLoop).mockResolvedValueOnce({ reason: 'completed' });
+
+      await triggerEngine.handleEvent(trigger.id, {
+        data: { event: 'create', paths: ['D:/ws/.fuyao/x/imports/account_metrics.csv'], watchPath: 'D:/ws/.fuyao/x/imports' },
+      });
+      expect(runAgentLoop).toHaveBeenCalled();
+    });
+
+    it('file-source regex filter skips a non-matching file path', async () => {
+      const trigger = makeTrigger({
+        id: 'trigger-file-regex-skip',
+        source: { type: 'file', path: '.fuyao/x/imports', events: ['create', 'modify'], pattern: '*.*' },
+        filter: { type: 'regex', pattern: '\\.(csv|json|jsonl)$' },
+      });
+      useTriggerStore.setState({ triggers: { [trigger.id]: trigger } });
+
+      const { runAgentLoop } = await import('../agent/agentLoop');
+      vi.mocked(runAgentLoop).mockClear();
+
+      await triggerEngine.handleEvent(trigger.id, {
+        data: { event: 'create', paths: ['D:/ws/.fuyao/x/imports/readme.txt'], watchPath: 'D:/ws/.fuyao/x/imports' },
+      });
       expect(runAgentLoop).not.toHaveBeenCalled();
     });
 
@@ -381,6 +427,64 @@ describe('TriggerEngine', () => {
   });
 
   // ── skipChecks option ──
+  describe('file watcher paths', () => {
+    it('resolves a relative file source path inside the trigger workspace at runtime', async () => {
+      const trigger = makeTrigger({
+        id: 'trigger-relative-file',
+        source: {
+          type: 'file',
+          path: '.fuyao/generic/imports',
+          events: ['create'],
+        },
+        action: {
+          prompt: 'Handle $EVENT_DATA',
+          workspacePath: 'D:/workspace/acme',
+        },
+      });
+      vi.mocked(watch).mockClear();
+
+      triggerEngine.startSourceWatcher(trigger);
+      await flushFileWatcherStart();
+
+      expect(watch).toHaveBeenCalledWith(
+        'D:/workspace/acme/.fuyao/generic/imports',
+        expect.any(Function),
+        { recursive: true },
+      );
+      triggerEngine.stopSourceWatcher(trigger.id);
+    });
+
+    it('creates a missing directory watch path before starting the watcher', async () => {
+      const trigger = makeTrigger({
+        id: 'trigger-missing-dir',
+        source: {
+          type: 'file',
+          path: '.fuyao/generic/imports',
+          events: ['create'],
+          pattern: '*.csv',
+        },
+        action: {
+          prompt: 'Handle $EVENT_DATA',
+          workspacePath: 'D:/workspace/acme',
+        },
+      });
+      vi.mocked(exists).mockResolvedValueOnce(false);
+      vi.mocked(mkdir).mockClear();
+      vi.mocked(watch).mockClear();
+
+      triggerEngine.startSourceWatcher(trigger);
+      await flushFileWatcherStart();
+
+      expect(mkdir).toHaveBeenCalledWith('D:/workspace/acme/.fuyao/generic/imports', { recursive: true });
+      expect(watch).toHaveBeenCalledWith(
+        'D:/workspace/acme/.fuyao/generic/imports',
+        expect.any(Function),
+        { recursive: true },
+      );
+      triggerEngine.stopSourceWatcher(trigger.id);
+    });
+  });
+
   describe('skipChecks', () => {
     it('bypasses status/filter/debounce checks when skipChecks is true', async () => {
       const trigger = makeTrigger({

@@ -2,6 +2,7 @@ import { History } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { useContactDisplay } from '@/hooks/useContactDisplay';
+import EmployeeAvatar from '@/components/common/EmployeeAvatar';
 
 /**
  * IM-style chat header: shows the current digital-employee contact (avatar + name
@@ -21,8 +22,8 @@ export default function ChatHeader({
 
   return (
     <div className="shrink-0 h-14 flex items-center gap-3 px-5 border-b border-[var(--abu-border)] bg-[var(--abu-bg-base)]">
-      <div className="w-9 h-9 rounded-[10px] bg-[var(--abu-bg-subtle)] border border-[var(--abu-border)] flex items-center justify-center text-[19px] select-none shrink-0">
-        {c.avatar}
+      <div className="w-9 h-9 rounded-[10px] bg-[var(--abu-bg-subtle)] border border-[var(--abu-border)] flex items-center justify-center text-[19px] select-none shrink-0 overflow-hidden">
+        <EmployeeAvatar avatar={c.avatar} name={c.name} />
       </div>
       <div className="min-w-0">
         <div className="text-[14px] font-semibold text-[var(--abu-text-primary)] truncate leading-tight">

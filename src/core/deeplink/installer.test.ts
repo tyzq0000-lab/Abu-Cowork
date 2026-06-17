@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest';
-import { strToU8 } from 'fflate';
-import { planEmployeeUnpack, DeepLinkInstallError } from './installer';
+import { describe, it, expect, vi } from 'vitest';
+import { strToU8, zipSync } from 'fflate';
+import { fetch } from '@tauri-apps/plugin-http';
+import { rename, writeFile } from '@tauri-apps/plugin-fs';
+import {
+  planEmployeeUnpack,
+  installFromDeepLink,
+  DeepLinkInstallError,
+} from './installer';
 
 /** Build zip-entry maps like unzipSync would return. */
 function entriesOf(files: Record<string, string>): Record<string, Uint8Array> {
@@ -19,7 +25,89 @@ const PLUGIN_JSON = JSON.stringify({
 });
 
 describe('deeplink installer', () => {
+  it('installs a minimum unrelated employee package through the generic path', async () => {
+    const archive = zipSync(entriesOf({
+      '.codebuddy-plugin/plugin.json': JSON.stringify({
+        name: 'inventory-clerk',
+        agentName: 'inventory-clerk',
+        version: '0.1.0',
+        agents: ['./agents/inventory-clerk.md'],
+      }),
+      'agents/inventory-clerk.md': 'Maintain an inventory ledger.',
+    }));
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(archive, { status: 200 }));
+
+    const installed = await installFromDeepLink({
+      action: 'install',
+      pkgType: 'employee',
+      url: 'https://abu-agent.oss-cn-beijing.aliyuncs.com/employees/inventory-clerk.zip',
+      packageId: 'inventory-clerk',
+      packageVersion: '0.1.0',
+    });
+
+    expect(installed).toEqual(expect.objectContaining({
+      kind: 'employee',
+      name: 'inventory-clerk',
+      packageId: 'inventory-clerk',
+      packageVersion: '0.1.0',
+    }));
+    expect(vi.mocked(writeFile)).toHaveBeenCalled();
+    expect(vi.mocked(rename)).toHaveBeenCalledWith(
+      expect.stringContaining('.inventory-clerk.installing-'),
+      '/Users/testuser/.uprow/employees/inventory-clerk',
+    );
+  });
+
+  it('bypasses the Tauri HTTP proxy path for loopback package URLs', async () => {
+    const archive = zipSync(entriesOf({
+      '.codebuddy-plugin/plugin.json': JSON.stringify({
+        name: 'local-test-clerk',
+        agentName: 'local-test-clerk',
+        version: '0.1.0',
+        agents: ['./agents/local-test-clerk.md'],
+      }),
+      'agents/local-test-clerk.md': 'Validate local package delivery.',
+    }));
+    vi.mocked(fetch).mockClear();
+    const browserFetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(archive, { status: 200 }));
+
+    await installFromDeepLink({
+      action: 'install',
+      pkgType: 'employee',
+      url: 'http://127.0.0.1:3102/api/skills/local-test-clerk/zip',
+      packageId: 'local-test-clerk',
+      packageVersion: '0.1.0',
+    });
+
+    expect(browserFetch).toHaveBeenCalledWith(
+      'http://127.0.0.1:3102/api/skills/local-test-clerk/zip',
+      { method: 'GET' },
+    );
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    browserFetch.mockRestore();
+  });
+
   describe('planEmployeeUnpack', () => {
+    it('preserves generic package identity and first-launch metadata', () => {
+      const plugin = JSON.stringify({
+        ...JSON.parse(PLUGIN_JSON),
+        version: '1.2.3',
+        defaultInitPrompt: { en: 'Start the first generic task.' },
+      });
+      const plan = planEmployeeUnpack(
+        entriesOf({
+          '.codebuddy-plugin/plugin.json': plugin,
+          'agents/new-media-ops.md': 'prompt',
+        }),
+      );
+
+      expect(plan.packageId).toBe('new-media-ops');
+      expect(plan.packageVersion).toBe('1.2.3');
+      expect(plan.defaultInitPrompt?.en).toBe('Start the first generic task.');
+    });
+
     it('plans a root-level package and keeps the dot-prefixed manifest dir', () => {
       const plan = planEmployeeUnpack(
         entriesOf({

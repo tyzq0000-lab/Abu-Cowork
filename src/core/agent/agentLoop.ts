@@ -406,12 +406,15 @@ async function loadActiveSkillContent(
   conversationId?: string,
 ): Promise<string> {
   if (!activeSkills || activeSkills.length === 0) return '';
+  const workspacePath = conversationId
+    ? useChatStore.getState().conversations[conversationId]?.workspacePath ?? undefined
+    : undefined;
   const skillContents: string[] = [];
   for (const name of activeSkills) {
     const s = skillLoader.getSkill(name);
     if (!s) continue;
     const args = activeSkillArgs?.[name] ?? '';
-    const processed = substituteVariables(s.content, args, s.skillDir, conversationId ?? '');
+    const processed = substituteVariables(s.content, args, s.skillDir, conversationId ?? '', workspacePath ?? undefined);
     let block = `### ${s.name}\n${processed}`;
 
     // SK-5: List supporting files for progressive disclosure

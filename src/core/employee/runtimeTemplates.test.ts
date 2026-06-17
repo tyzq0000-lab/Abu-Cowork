@@ -79,4 +79,101 @@ describe('employee runtime templates', () => {
     expect(Object.keys(useScheduleStore.getState().tasks)).toHaveLength(1);
     expect(Object.keys(useTriggerStore.getState().triggers)).toHaveLength(1);
   });
+
+  it('upgrades existing employee trigger templates with the selected workspace without duplicating them', () => {
+    installRuntimeTemplates('generic-agent', {
+      ...PROFILE,
+      workflows: [
+        {
+          id: 'relative-file-watch',
+          kind: 'trigger',
+          name: 'Watch relative path',
+          prompt: 'Handle $EVENT_DATA',
+          source: {
+            type: 'file',
+            path: '.fuyao/generic/imports',
+            events: ['create'],
+          },
+          filter: { type: 'always' },
+          capability: 'safe_tools',
+        },
+      ],
+    });
+
+    const result = installRuntimeTemplates('generic-agent', {
+      ...PROFILE,
+      workflows: [
+        {
+          id: 'relative-file-watch',
+          kind: 'trigger',
+          name: 'Watch relative path',
+          prompt: 'Handle $EVENT_DATA',
+          source: {
+            type: 'file',
+            path: '.fuyao/generic/imports',
+            events: ['create'],
+          },
+          filter: { type: 'always' },
+          capability: 'safe_tools',
+        },
+      ],
+    }, { workspacePath: 'D:/workspace/acme' });
+
+    expect(result).toEqual({ created: [], skipped: ['relative-file-watch'] });
+    const triggers = Object.values(useTriggerStore.getState().triggers);
+    expect(triggers).toHaveLength(1);
+    expect(triggers[0].source).toEqual(expect.objectContaining({
+      type: 'file',
+      path: 'D:/workspace/acme/.fuyao/generic/imports',
+    }));
+    expect(triggers[0].action.workspacePath).toBe('D:/workspace/acme');
+  });
+
+  it('resolves relative file trigger paths inside the selected workspace', () => {
+    installRuntimeTemplates('generic-agent', {
+      ...PROFILE,
+      workflows: [
+        {
+          id: 'relative-file-watch',
+          kind: 'trigger',
+          name: 'Watch relative path',
+          prompt: 'Handle $EVENT_DATA',
+          source: {
+            type: 'file',
+            path: '.fuyao/generic/imports',
+            events: ['create'],
+          },
+          filter: { type: 'always' },
+          capability: 'safe_tools',
+        },
+      ],
+    }, { workspacePath: 'D:/workspace/acme' });
+
+    const trigger = Object.values(useTriggerStore.getState().triggers)[0];
+    expect(trigger.source).toEqual(expect.objectContaining({
+      type: 'file',
+      path: 'D:/workspace/acme/.fuyao/generic/imports',
+    }));
+    expect(trigger.action.workspacePath).toBe('D:/workspace/acme');
+  });
+
+  it('rejects relative file trigger paths that escape the selected workspace', () => {
+    expect(() => installRuntimeTemplates('generic-agent', {
+      ...PROFILE,
+      workflows: [
+        {
+          id: 'escaping-file-watch',
+          kind: 'trigger',
+          name: 'Watch escaping path',
+          prompt: 'Handle $EVENT_DATA',
+          source: {
+            type: 'file',
+            path: '../outside',
+            events: ['create'],
+          },
+          filter: { type: 'always' },
+        },
+      ],
+    }, { workspacePath: 'D:/workspace/acme' })).toThrow('escapes the selected workspace');
+  });
 });

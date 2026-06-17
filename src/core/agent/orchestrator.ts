@@ -295,11 +295,15 @@ export async function buildSystemPromptSections(
   let processedSkillContent = route.skillContent ?? '';
   if (isSkillMode && route.skill) {
     const settings = useSettingsStore.getState();
+    const { useChatStore } = await import('../../stores/chatStore');
+    const workspacePath =
+      useChatStore.getState().conversations[conversationId]?.workspacePath ?? undefined;
     processedSkillContent = substituteVariables(
       processedSkillContent,
       route.args ?? '',
       route.skill.skillDir,
       conversationId,
+      workspacePath ?? undefined,
     );
     if (settings.allowSkillCommands) {
       processedSkillContent = await executeInlineCommands(processedSkillContent, route.skill.skillDir);

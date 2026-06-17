@@ -159,6 +159,44 @@ describe('tauri capabilities — workspace .abu reachability under $HOME', () =>
   });
 });
 
+describe('tauri capabilities — employee runtime .fuyao reachability', () => {
+  const REQUIRED_BOTH = [
+    'fs:allow-read-text-file',
+    'fs:allow-read-file',
+    'fs:allow-write-text-file',
+    'fs:allow-write-file',
+    'fs:allow-read-dir',
+    'fs:allow-exists',
+    'fs:allow-mkdir',
+    'fs:allow-stat',
+    'fs:allow-copy-file',
+    'fs:allow-rename',
+    'fs:allow-watch',
+  ] as const;
+
+  it.each(REQUIRED_BOTH)(
+    '%s declares both $HOME/**/.fuyao and $HOME/**/.fuyao/**',
+    (identifier) => {
+      const paths = permissionScopePaths(loadCapabilities().permissions, identifier);
+      expect(paths).toContain('$HOME/**/.fuyao');
+      expect(paths).toContain('$HOME/**/.fuyao/**');
+    }
+  );
+
+  it('fs:allow-remove declares $HOME/**/.fuyao/** contents only', () => {
+    const paths = permissionScopePaths(loadCapabilities().permissions, 'fs:allow-remove');
+    expect(paths).toContain('$HOME/**/.fuyao/**');
+    expect(paths).not.toContain('$HOME/**/.fuyao');
+  });
+
+  it('Windows non-home workspaces can use file watchers', () => {
+    const windowsExtras = loadAllCapabilities().find((cap) => cap.identifier === 'windows-extras');
+    expect(windowsExtras).toBeDefined();
+    const paths = permissionScopePaths(windowsExtras!.permissions, 'fs:allow-watch');
+    expect(paths).toContain('**');
+  });
+});
+
 // Rebrand guard: the home-level data dir is ~/.uprow (was ~/.abu). Workspace
 // dirs ({workspace}/.abu via $HOME/**/.abu) deliberately keep the old name —
 // see src/core/branding.ts. A literal "$HOME/.abu..." entry reappearing means

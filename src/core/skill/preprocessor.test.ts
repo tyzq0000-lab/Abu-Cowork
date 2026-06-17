@@ -46,9 +46,30 @@ describe('substituteVariables', () => {
     expect(result).toBe(`Dir: ${skillDir}`);
   });
 
+  it('replaces {baseDir} as a package compatibility alias', () => {
+    const result = substituteVariables('Dir: {baseDir}/scripts/task.py', '', skillDir, sessionId);
+    expect(result).toBe(`Dir: ${skillDir}/scripts/task.py`);
+  });
+
   it('replaces ${ABU_SESSION_ID}', () => {
     const result = substituteVariables('Session: ${ABU_SESSION_ID}', '', skillDir, sessionId);
     expect(result).toBe('Session: sess-123');
+  });
+
+  it('replaces ${ABU_WORKSPACE} with the workspace root', () => {
+    const result = substituteVariables(
+      'out: ${ABU_WORKSPACE}/.fuyao/x/profile.json',
+      '',
+      skillDir,
+      sessionId,
+      'D:/ws/project',
+    );
+    expect(result).toBe('out: D:/ws/project/.fuyao/x/profile.json');
+  });
+
+  it('falls back ${ABU_WORKSPACE} to "." when no workspace is bound', () => {
+    const result = substituteVariables('out: ${ABU_WORKSPACE}/.fuyao/x', '', skillDir, sessionId);
+    expect(result).toBe('out: ./.fuyao/x');
   });
 
   it('replaces ${CLAUDE_SKILL_DIR} and ${CLAUDE_SESSION_ID} (compat)', () => {

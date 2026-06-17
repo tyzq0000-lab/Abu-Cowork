@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Mock imChannelStore before importing triggerStore
 const mockChannels: Record<string, { id: string; platform: string; appId: string; appSecret: string; name: string }> = {};
 let addChannelCounter = 0;
+const mockDeployments: Record<string, { agentName: string; workspacePath: string | null; configuredAt: number }> = {};
 
 vi.mock('./imChannelStore', () => ({
   useIMChannelStore: {
@@ -21,7 +22,15 @@ vi.mock('./imChannelStore', () => ({
   },
 }));
 
-import { useTriggerStore } from './triggerStore';
+vi.mock('./employeeDeploymentStore', () => ({
+  useEmployeeDeploymentStore: {
+    getState: () => ({
+      deployments: mockDeployments,
+    }),
+  },
+}));
+
+import { backfillEmployeeTemplateTriggerWorkspaces, useTriggerStore } from './triggerStore';
 
 describe('triggerStore', () => {
   beforeEach(() => {
@@ -35,6 +44,7 @@ describe('triggerStore', () => {
     });
     // Reset mock channels
     for (const key of Object.keys(mockChannels)) delete mockChannels[key];
+    for (const key of Object.keys(mockDeployments)) delete mockDeployments[key];
     addChannelCounter = 0;
   });
 
@@ -318,6 +328,50 @@ describe('triggerStore', () => {
       // Should be unchanged
       const source = migrated.triggers['t'].source as Record<string, unknown>;
       expect(source.channelId).toBe('ch-1');
+    });
+  });
+
+  describe('employee template trigger workspace backfill', () => {
+    it('fills missing workspacePath on old employee file triggers from deployment records', () => {
+      mockDeployments['pkg-growth'] = {
+        agentName: '增长运营官',
+        workspacePath: 'D:/workspaces/growth',
+        configuredAt: 100,
+      };
+
+      const state = {
+        triggers: {
+          'trigger-1': {
+            id: 'trigger-1',
+            name: '账号表现数据导入',
+            status: 'active',
+            source: {
+              type: 'file',
+              path: '.fuyao/new-media-growth/accounts/imports',
+              events: ['create'],
+            },
+            filter: { type: 'always' },
+            action: {
+              agentName: '增长运营官',
+              prompt: 'import $EVENT_DATA',
+            },
+            debounce: { enabled: true, windowSeconds: 30 },
+            sourceTemplate: {
+              kind: 'employee-template',
+              employeeName: '增长运营官',
+              templateId: 'account-metrics-import',
+            },
+            runs: [],
+            totalRuns: 0,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      };
+
+      backfillEmployeeTemplateTriggerWorkspaces(state);
+
+      expect(state.triggers['trigger-1'].action.workspacePath).toBe('D:/workspaces/growth');
     });
   });
 });

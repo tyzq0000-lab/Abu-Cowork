@@ -16,12 +16,62 @@ import type {
   QuietHoursConfig,
 } from '../types/trigger';
 import { useIMChannelStore } from './imChannelStore';
+import { useEmployeeDeploymentStore } from './employeeDeploymentStore';
+import { isLocalFilePath } from '../utils/pathUtils';
 
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
 }
 
 const MAX_RUNS_PER_TRIGGER = 20;
+
+type PersistedTriggerState = {
+  triggers?: Record<string, Trigger | Record<string, unknown>>;
+};
+
+function getStringValue(obj: unknown, key: string): string | undefined {
+  if (!obj || typeof obj !== 'object') return undefined;
+  const value = (obj as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function getWorkspaceForEmployeeTrigger(trigger: Record<string, unknown>): string | undefined {
+  const sourceTemplate = trigger.sourceTemplate as Record<string, unknown> | undefined;
+  if (sourceTemplate?.kind !== 'employee-template') return undefined;
+
+  const action = trigger.action as Record<string, unknown> | undefined;
+  const employeeName = getStringValue(sourceTemplate, 'employeeName');
+  const agentName = getStringValue(action, 'agentName');
+  const matchName = employeeName ?? agentName;
+  if (!matchName) return undefined;
+
+  const deployments = Object.values(useEmployeeDeploymentStore.getState().deployments);
+  const matched = deployments
+    .filter((deployment) =>
+      !!deployment.workspacePath
+      && (deployment.agentName === matchName || deployment.agentName === agentName || deployment.agentName === employeeName)
+    )
+    .sort((a, b) => b.configuredAt - a.configuredAt)[0];
+  return matched?.workspacePath ?? undefined;
+}
+
+export function backfillEmployeeTemplateTriggerWorkspaces(state: PersistedTriggerState): void {
+  if (!state.triggers) return;
+
+  for (const trigger of Object.values(state.triggers)) {
+    const record = trigger as Record<string, unknown>;
+    const source = record.source as Record<string, unknown> | undefined;
+    const action = record.action as Record<string, unknown> | undefined;
+    if (!source || !action) continue;
+    if (source.type !== 'file') continue;
+    if (typeof source.path !== 'string' || !source.path.trim() || isLocalFilePath(source.path)) continue;
+    if (typeof action.workspacePath === 'string' && action.workspacePath.trim()) continue;
+
+    const workspacePath = getWorkspaceForEmployeeTrigger(record);
+    if (!workspacePath) continue;
+    action.workspacePath = workspacePath;
+  }
+}
 
 // --- Store types ---
 
@@ -303,7 +353,7 @@ export const useTriggerStore = create<TriggerStore>()(
     })),
     {
       name: 'abu-triggers',
-      version: 5,
+      version: 6,
       partialize: (state) => ({
         triggers: state.triggers,
       }),
@@ -371,6 +421,11 @@ export const useTriggerStore = create<TriggerStore>()(
         if (version < 5) {
           // v4→v5 added optional employee template provenance and agent binding.
         }
+        if (version < 6) {
+          // v5→v6 backfills workspacePath for older employee-template file triggers.
+        }
+
+        backfillEmployeeTemplateTriggerWorkspaces(persisted as PersistedTriggerState);
 
         return persisted;
       },
@@ -381,6 +436,7 @@ export const useTriggerStore = create<TriggerStore>()(
         state.showEditor = false;
         state.editingTriggerId = null;
         state.editorTemplateDefaults = null;
+        backfillEmployeeTemplateTriggerWorkspaces(state);
         // Reset any stuck running runs and pending output statuses
         const now = Date.now();
         for (const trigger of Object.values(state.triggers)) {

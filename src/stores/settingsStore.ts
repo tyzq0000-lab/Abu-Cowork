@@ -821,11 +821,31 @@ export const useSettingsStore = create<SettingsStore>()(
         fafSecret(deleteSecret(SECRET_KEYS.provider(id)), `removeProvider(${id})`);
       },
 
-      toggleProvider: (id) => set((s) => ({
-        providers: s.providers.map(p =>
+      toggleProvider: (id) => set((s) => {
+        const target = s.providers.find((p) => p.id === id);
+        const providers = s.providers.map((p) =>
           p.id === id ? { ...p, enabled: !p.enabled } : p
-        ),
-      })),
+        );
+        const update: Partial<SettingsState> = { providers };
+
+        if (target?.enabled && s.activeModel.providerId === id) {
+          const fallback = providers.find(
+            (p) =>
+              p.id !== id &&
+              p.source !== 'employee' &&
+              p.enabled &&
+              (p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio')
+          );
+          if (fallback) {
+            update.activeModel = {
+              providerId: fallback.id,
+              modelId: fallback.models[0]?.id ?? '',
+            };
+          }
+        }
+
+        return update;
+      }),
 
       reorderProviders: (ids) => set((s) => ({
         providers: s.providers.map(p => ({
@@ -1874,10 +1894,14 @@ export async function bootstrapSecrets(): Promise<void> {
   // Apply hydration — overwrite in-memory apiKey only when we fetched a
   // non-null value from the store (backfilled keys already match in-memory).
   useSettingsStore.setState((s) => {
-    const providers = s.providers.map((p) => {
-      const fetched = providerUpdates.get(p.id);
-      return fetched ? { ...p, apiKey: fetched } : p;
-    });
+    const next = {
+      providers: s.providers.map((p) => {
+        const fetched = providerUpdates.get(p.id);
+        return fetched ? { ...p, apiKey: fetched } : p;
+      }),
+      activeModel: { ...s.activeModel },
+    };
+    reconcileActiveProvider(next);
 
     const auxiliaryServices = { ...s.auxiliaryServices };
     if (webSearchSecret && auxiliaryServices.webSearch) {
@@ -1887,7 +1911,12 @@ export async function bootstrapSecrets(): Promise<void> {
       auxiliaryServices.imageGen = { ...auxiliaryServices.imageGen, apiKey: imageGenSecret };
     }
 
-    return { providers, auxiliaryServices, failedSecretKeys };
+    return {
+      providers: next.providers,
+      activeModel: next.activeModel,
+      auxiliaryServices,
+      failedSecretKeys,
+    };
   });
 
   // Flip the gate only if everything round-tripped cleanly. Subsequent

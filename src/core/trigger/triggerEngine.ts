@@ -17,7 +17,8 @@ import { resolveTriggerCallbacks } from './triggerPermission';
 import { cacheTriggerContext } from '../im/triggerContextCache';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { watch, type UnwatchFn } from '@tauri-apps/plugin-fs';
+import { exists, mkdir, watch, type UnwatchFn } from '@tauri-apps/plugin-fs';
+import { getParentDir, resolveWorkspaceRelativePath } from '../../utils/pathUtils';
 
 const DEFAULT_PORT = 18080;
 
@@ -453,26 +454,36 @@ class TriggerEngine {
       }
     }
 
-    // Determine text to match against (supports nested paths like "data.content")
-    let text: string;
+    // Determine the text(s) to match against. A filter can match any one of
+    // several candidates (supports nested field paths like "data.content").
+    let candidates: string[];
     if (filter.field) {
       const value = filter.field.split('.').reduce<unknown>((obj, key) => {
         if (obj && typeof obj === 'object') return (obj as Record<string, unknown>)[key];
         return undefined;
       }, payload.data);
-      text = value !== undefined ? String(value) : JSON.stringify(payload.data);
+      candidates = [value !== undefined ? String(value) : JSON.stringify(payload.data)];
+    } else if (trigger.source.type === 'file') {
+      // File events carry the changed file paths. Match against each path so
+      // filename-anchored patterns (e.g. /\.(csv|json)$/) authored by employee
+      // packages work — matching the whole JSON payload would never satisfy a
+      // trailing `$`. Falls back to the full payload when no paths are present.
+      const rawPaths = (payload.data as Record<string, unknown> | undefined)?.paths;
+      const paths = Array.isArray(rawPaths) ? rawPaths.map((p) => String(p)) : [];
+      candidates = paths.length > 0 ? paths : [JSON.stringify(payload.data)];
     } else {
-      text = JSON.stringify(payload.data);
+      candidates = [JSON.stringify(payload.data)];
     }
 
     switch (filter.type) {
       case 'always':
         return true;
       case 'keyword':
-        return (filter.keywords ?? []).some((kw) => text.includes(kw));
+        return candidates.some((text) => (filter.keywords ?? []).some((kw) => text.includes(kw)));
       case 'regex':
         try {
-          return new RegExp(filter.pattern ?? '').test(text);
+          const re = new RegExp(filter.pattern ?? '');
+          return candidates.some((text) => re.test(text));
         } catch {
           console.warn(`[Trigger] Invalid regex: ${filter.pattern}`);
           return false;
@@ -573,9 +584,14 @@ class TriggerEngine {
     if (trigger.source.type !== 'file') return;
     if (this.fileWatchers.has(trigger.id)) return; // already watching
 
-    const { path: watchPath, events: watchEvents, pattern } = trigger.source;
+    const { events: watchEvents, pattern } = trigger.source;
 
     try {
+      const watchPath = resolveWorkspaceRelativePath(
+        trigger.source.path,
+        trigger.action.workspacePath,
+      );
+      await this.ensureWatchPathReady(trigger, watchPath);
       const unwatch = await watch(watchPath, (event) => {
         // Tauri 2.0 event.type can be a string ("create") or object ({ create: { kind: "file" } })
         let eventType: string;
@@ -628,6 +644,16 @@ class TriggerEngine {
         message: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  private async ensureWatchPathReady(trigger: Trigger, watchPath: string): Promise<void> {
+    if (trigger.source.type !== 'file') return;
+    if (await exists(watchPath).catch(() => false)) return;
+
+    const leaf = watchPath.split(/[\\/]/).pop() ?? '';
+    const isDirectoryWatch = !!trigger.source.pattern || !leaf.includes('.');
+    const targetDir = isDirectoryWatch ? watchPath : getParentDir(watchPath);
+    await mkdir(targetDir, { recursive: true });
   }
 
   private startCronTimer(trigger: Trigger) {

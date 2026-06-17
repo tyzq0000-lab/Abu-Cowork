@@ -15,7 +15,7 @@ vi.mock('../skill/loader', () => ({
 }));
 
 describe('buildEmployeeSkillsSection', () => {
-  it('injects every available skill declared by the employee package', () => {
+  it('lists declared employee skills without inlining their workflow bodies', () => {
     const agent = {
       name: 'new-media-ops',
       description: 'New media operator',
@@ -24,9 +24,11 @@ describe('buildEmployeeSkillsSection', () => {
       source: 'employee',
     } as SubagentDefinition;
 
-    expect(buildEmployeeSkillsSection(agent)).toContain(
-      '### content-review\nFollow the content review workflow.',
-    );
-    expect(buildEmployeeSkillsSection(agent)).not.toContain('missing-skill');
+    const section = buildEmployeeSkillsSection(agent);
+
+    expect(section).toContain('/content-review — Review content');
+    expect(section).toContain('use_skill');
+    expect(section).not.toContain('Follow the content review workflow.');
+    expect(section).not.toContain('missing-skill');
   });
 });

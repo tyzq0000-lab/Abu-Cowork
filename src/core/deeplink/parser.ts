@@ -23,6 +23,14 @@ export interface DeepLinkInstallRequest {
   url: string;
   /** Optional display name for the confirm dialog. */
   name?: string;
+  /** Platform employee record that initiated this deployment. */
+  employeeId?: string;
+  /** Platform package identifier. */
+  packageId?: string;
+  /** Requested package version. */
+  packageVersion?: string;
+  /** Generic post-install destination. */
+  launchTarget?: 'conversation' | 'employee';
 }
 
 export type DeepLinkParseError =
@@ -41,9 +49,15 @@ export type DeepLinkParseResult =
  * Hosts the desktop will download packages from. Extend when the uprow
  * platform download endpoint goes live. Exact hostname match, https only.
  */
-export const ALLOWED_DOWNLOAD_HOSTS: readonly string[] = [
+const configuredDownloadHosts = String(import.meta.env.VITE_FUYAO_PACKAGE_HOSTS ?? '')
+  .split(',')
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
+
+export const ALLOWED_DOWNLOAD_HOSTS: readonly string[] = Array.from(new Set([
   'abu-agent.oss-cn-beijing.aliyuncs.com',
-];
+  ...configuredDownloadHosts,
+]));
 
 /** Plain-http hosts allowed for local development / demo only. */
 const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1']);
@@ -97,10 +111,31 @@ export function parseDeepLink(raw: string): DeepLinkParseResult {
     return { ok: false, code: 'URL_NOT_ALLOWED', message: `Download host not allowlisted: ${downloadUrl}` };
   }
 
-  const name = u.searchParams.get('name') ?? undefined;
+  const optionalParam = (key: string): string | undefined => {
+    const value = u.searchParams.get(key)?.trim();
+    return value || undefined;
+  };
+  const name = optionalParam('name');
+  const employeeId = optionalParam('employeeId');
+  const packageId = optionalParam('packageId');
+  const packageVersion = optionalParam('packageVersion');
+  const rawLaunchTarget = optionalParam('launchTarget');
+  const launchTarget =
+    rawLaunchTarget === 'conversation' || rawLaunchTarget === 'employee'
+      ? rawLaunchTarget
+      : undefined;
 
   return {
     ok: true,
-    request: { action: 'install', pkgType, url: downloadUrl, name },
+    request: {
+      action: 'install',
+      pkgType,
+      url: downloadUrl,
+      ...(name ? { name } : {}),
+      ...(employeeId ? { employeeId } : {}),
+      ...(packageId ? { packageId } : {}),
+      ...(packageVersion ? { packageVersion } : {}),
+      ...(launchTarget ? { launchTarget } : {}),
+    },
   };
 }

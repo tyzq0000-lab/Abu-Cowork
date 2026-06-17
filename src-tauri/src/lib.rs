@@ -971,11 +971,23 @@ struct DataDirMigration {
     failed: bool,
 }
 
+#[derive(Default)]
+struct PendingDeepLinks(Mutex<Vec<String>>);
+
 /// True when the legacy data dir exists but could not be renamed — the
 /// frontend shows a one-time warning toast asking the user to retry.
 #[tauri::command]
 fn get_data_migration_status(state: tauri::State<DataDirMigration>) -> bool {
     state.failed
+}
+
+#[tauri::command]
+fn take_pending_deep_links(state: tauri::State<PendingDeepLinks>) -> Vec<String> {
+    state
+        .0
+        .lock()
+        .map(|mut queue| std::mem::take(&mut *queue))
+        .unwrap_or_default()
 }
 
 fn show_main_window(app: &AppHandle) {
@@ -1214,6 +1226,7 @@ fn update_tray_notice_count(app: AppHandle, count: u32) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(PendingDeepLinks::default())
         // single-instance must be the first plugin so a second launch
         // (e.g. the OS opening a fuyao:// link while we're running) is
         // forwarded here and exits before doing any other work. The
@@ -1226,9 +1239,19 @@ pub fn run() {
             // checked from argv manually — do it explicitly so the warm path
             // works in both dev (register_all) and installed builds. The JS
             // handler dedups if both paths deliver.
-            if let Some(url) = args.iter().skip(1).find(|a| a.starts_with("fuyao://")) {
+            let urls = args
+                .iter()
+                .filter(|arg| arg.starts_with("fuyao://"))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !urls.is_empty() {
                 use tauri::Emitter;
-                let _ = app.emit("deep-link://new-url", vec![url.clone()]);
+                if let Some(pending) = app.try_state::<PendingDeepLinks>() {
+                    if let Ok(mut queue) = pending.0.lock() {
+                        queue.extend(urls.iter().cloned());
+                    }
+                }
+                let _ = app.emit("deep-link://new-url", urls);
             }
             show_main_window(app);
         }))
@@ -1383,6 +1406,7 @@ pub fn run() {
             window_hide,
             window_show,
             get_data_migration_status,
+            take_pending_deep_links,
             start_network_proxy,
             update_network_whitelist,
             get_network_proxy_port,

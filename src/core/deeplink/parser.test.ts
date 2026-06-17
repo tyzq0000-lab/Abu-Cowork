@@ -30,6 +30,28 @@ describe('deeplink parser', () => {
       }
     });
 
+    it('preserves generic platform deployment context', () => {
+      const pkgUrl = `https://${OSS}/employees/generic-package.zip`;
+      const result = parseDeepLink(
+        `fuyao://install?type=employee&url=${encodeURIComponent(pkgUrl)}`
+        + '&employeeId=employee-42&packageId=generic-package'
+        + '&packageVersion=1.2.3&launchTarget=conversation',
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.request).toEqual({
+          action: 'install',
+          pkgType: 'employee',
+          url: pkgUrl,
+          employeeId: 'employee-42',
+          packageId: 'generic-package',
+          packageVersion: '1.2.3',
+          launchTarget: 'conversation',
+        });
+      }
+    });
+
     it('tolerates a trailing slash after the action (Windows URL normalization)', () => {
       const pkgUrl = `https://${OSS}/a.zip`;
       const result = parseDeepLink(`fuyao://install/?type=employee&url=${encodeURIComponent(pkgUrl)}`);

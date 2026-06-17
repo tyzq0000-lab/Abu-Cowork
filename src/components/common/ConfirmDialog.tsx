@@ -11,6 +11,7 @@ interface ConfirmDialogProps {
   onConfirm: () => void;
   onCancel: () => void;
   variant?: 'danger' | 'normal';
+  confirmDisabled?: boolean;
 }
 
 export default function ConfirmDialog({
@@ -22,6 +23,7 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
   variant = 'normal',
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   useEffect(() => {
     if (!open) return;
@@ -64,8 +66,10 @@ export default function ConfirmDialog({
           </button>
           <button
             onClick={onConfirm}
+            disabled={confirmDisabled}
             className={cn(
               'px-4 py-2 rounded-lg text-[13px] font-medium text-white transition-colors',
+              confirmDisabled && 'cursor-not-allowed opacity-50',
               variant === 'danger'
                 ? 'bg-red-500 hover:bg-red-600'
                 : 'bg-[var(--abu-clay)] hover:bg-[var(--abu-clay-hover)]'

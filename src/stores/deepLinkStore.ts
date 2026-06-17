@@ -7,6 +7,10 @@ import type {
 
 export interface EmployeeRuntimeSetupRequest {
   name: string;
+  packageId?: string;
+  packageVersion?: string;
+  employeeId?: string;
+  defaultInitPrompt?: { zh?: string; en?: string };
   level: EmployeeMaturityLevel;
   profile: EmployeeRuntimeProfile;
 }

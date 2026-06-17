@@ -1,13 +1,47 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import EmployeeRuntimeSetupDialog from './EmployeeRuntimeSetupDialog';
 import { useDeepLinkStore } from '@/stores/deepLinkStore';
 import { useScheduleStore } from '@/stores/scheduleStore';
+
+const mocks = vi.hoisted(() => ({
+  completeEmployeeDeployment: vi.fn().mockResolvedValue({
+    conversationId: 'conversation-1',
+    created: true,
+  }),
+}));
+
+vi.mock('@/core/employee/deploymentFlow', () => ({
+  checkEmployeeDependencies: vi.fn().mockResolvedValue([]),
+  completeEmployeeDeployment: mocks.completeEmployeeDeployment,
+}));
+
+function setRuntimeSetup(recommended = false) {
+  useDeepLinkStore.getState().setRuntimeSetup({
+    name: 'generic-agent',
+    packageId: 'generic-package',
+    level: 'L2',
+    profile: {
+      version: 1,
+      workflows: [
+        {
+          id: 'weekly-review',
+          kind: 'schedule',
+          name: 'Weekly review',
+          prompt: 'Run the weekly review',
+          recommended,
+          schedule: { frequency: 'weekly', dayOfWeek: 3 },
+        },
+      ],
+    },
+  });
+}
 
 describe('EmployeeRuntimeSetupDialog', () => {
   afterEach(cleanup);
 
   beforeEach(() => {
+    mocks.completeEmployeeDeployment.mockClear();
     useDeepLinkStore.setState({
       pending: null,
       installing: false,
@@ -16,116 +50,60 @@ describe('EmployeeRuntimeSetupDialog', () => {
     useScheduleStore.setState({ tasks: {} });
   });
 
-  it('shows recommended templates and creates them only after confirmation', () => {
-    useDeepLinkStore.getState().setRuntimeSetup({
-      name: 'new-media-ops',
-      level: 'L2',
-      profile: {
-        version: 1,
-        targetMaturity: 'L3',
-        memory: { scope: 'project', autoCapture: ['feedback'] },
-        workflows: [
-          {
-            id: 'weekly-review',
-            kind: 'schedule',
-            name: '每周内容复盘',
-            description: '复盘本周表现',
-            prompt: '执行每周内容复盘',
-            recommended: true,
-            schedule: {
-              frequency: 'weekly',
-              dayOfWeek: 3,
-              time: { hour: 9, minute: 0 },
-            },
-          },
-        ],
-      },
-    });
-
+  it('creates recommended templates and opens the employee conversation', async () => {
+    setRuntimeSetup(true);
     render(<EmployeeRuntimeSetupDialog />);
 
-    expect(screen.getByText('每周内容复盘')).toBeInTheDocument();
+    expect(screen.getByText('Weekly review')).toBeInTheDocument();
     expect(Object.keys(useScheduleStore.getState().tasks)).toHaveLength(0);
 
-    fireEvent.click(screen.getByRole('button', { name: '创建并启用' }));
+    const confirm = await screen.findByRole('button', { name: '完成配置并开始工作' });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
 
-    expect(Object.values(useScheduleStore.getState().tasks)[0]?.name).toBe('每周内容复盘');
+    await waitFor(() => expect(useDeepLinkStore.getState().runtimeSetup).toBeNull());
+    expect(Object.values(useScheduleStore.getState().tasks)[0]?.name).toBe('Weekly review');
+    expect(mocks.completeEmployeeDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        packageId: 'generic-package',
+        agentName: 'generic-agent',
+      }),
+    );
+  });
+
+  it('allows postponing setup without creating templates or conversations', () => {
+    setRuntimeSetup(false);
+    render(<EmployeeRuntimeSetupDialog />);
+    fireEvent.click(screen.getByRole('button', { name: '稍后配置' }));
+
+    expect(Object.keys(useScheduleStore.getState().tasks)).toHaveLength(0);
+    expect(mocks.completeEmployeeDeployment).not.toHaveBeenCalled();
     expect(useDeepLinkStore.getState().runtimeSetup).toBeNull();
   });
 
-  it('allows skipping automation setup without creating tasks', () => {
-    useDeepLinkStore.getState().setRuntimeSetup({
-      name: 'new-media-ops',
-      level: 'L2',
-      profile: {
-        version: 1,
-        workflows: [
-          {
-            id: 'weekly-review',
-            kind: 'schedule',
-            name: '每周内容复盘',
-            prompt: '执行每周内容复盘',
-            schedule: { frequency: 'weekly', dayOfWeek: 3 },
-          },
-        ],
-      },
-    });
-
-    render(<EmployeeRuntimeSetupDialog />);
-    fireEvent.click(screen.getByRole('button', { name: '暂不创建' }));
-
-    expect(Object.keys(useScheduleStore.getState().tasks)).toHaveLength(0);
-    expect(useDeepLinkStore.getState().runtimeSetup).toBeNull();
-  });
-
-  it('leaves a non-recommended template unchecked: confirm installs nothing', () => {
-    useDeepLinkStore.getState().setRuntimeSetup({
-      name: 'new-media-ops',
-      level: 'L2',
-      profile: {
-        version: 1,
-        workflows: [
-          {
-            id: 'weekly-review',
-            kind: 'schedule',
-            name: '每周内容复盘',
-            prompt: '执行每周内容复盘',
-            // no `recommended` → unchecked by default
-            schedule: { frequency: 'weekly', dayOfWeek: 3 },
-          },
-        ],
-      },
-    });
-
+  it('leaves a non-recommended template unchecked', async () => {
+    setRuntimeSetup(false);
     render(<EmployeeRuntimeSetupDialog />);
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
 
-    fireEvent.click(screen.getByRole('button', { name: '创建并启用' }));
+    const confirm = screen.getByRole('button', { name: '完成配置并开始工作' });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(mocks.completeEmployeeDeployment).toHaveBeenCalledOnce());
     expect(Object.keys(useScheduleStore.getState().tasks)).toHaveLength(0);
   });
 
-  it('installs a non-recommended template once it is toggled on', () => {
-    useDeepLinkStore.getState().setRuntimeSetup({
-      name: 'new-media-ops',
-      level: 'L2',
-      profile: {
-        version: 1,
-        workflows: [
-          {
-            id: 'weekly-review',
-            kind: 'schedule',
-            name: '每周内容复盘',
-            prompt: '执行每周内容复盘',
-            schedule: { frequency: 'weekly', dayOfWeek: 3 },
-          },
-        ],
-      },
-    });
-
+  it('installs a non-recommended template after opt-in', async () => {
+    setRuntimeSetup(false);
     render(<EmployeeRuntimeSetupDialog />);
-    fireEvent.click(screen.getByRole('switch')); // opt in
-    fireEvent.click(screen.getByRole('button', { name: '创建并启用' }));
+    fireEvent.click(screen.getByRole('switch'));
 
-    expect(Object.values(useScheduleStore.getState().tasks)[0]?.name).toBe('每周内容复盘');
+    const confirm = screen.getByRole('button', { name: '完成配置并开始工作' });
+    await waitFor(() => expect(confirm).not.toBeDisabled());
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(mocks.completeEmployeeDeployment).toHaveBeenCalledOnce());
+    expect(Object.values(useScheduleStore.getState().tasks)[0]?.name).toBe('Weekly review');
   });
 });

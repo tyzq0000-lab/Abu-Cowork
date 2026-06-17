@@ -79,6 +79,36 @@ export function isLocalFilePath(s: string): boolean {
   return s.startsWith('/') || WIN_DRIVE_RE.test(s);
 }
 
+/**
+ * Resolve a package/runtime-declared relative path inside a selected workspace.
+ * Absolute local paths are returned unchanged. Relative paths that attempt to
+ * escape the workspace are rejected.
+ */
+export function resolveWorkspaceRelativePath(path: string, workspacePath?: string | null): string {
+  const normalized = normalizeSeparators(path.trim());
+  if (!normalized || isLocalFilePath(normalized)) return normalized;
+  if (!workspacePath) {
+    throw new Error(`Relative path "${path}" requires a selected workspace.`);
+  }
+  if (normalized === '~' || normalized.startsWith('~/')) {
+    throw new Error(`Path "${path}" must be absolute or relative to the selected workspace.`);
+  }
+
+  const segments: string[] = [];
+  for (const segment of normalized.split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (segments.length === 0) {
+        throw new Error(`Path "${path}" escapes the selected workspace.`);
+      }
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return joinPath(workspacePath, ...segments);
+}
+
 /** MIME types for common image extensions */
 export const IMAGE_MIME_MAP: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',

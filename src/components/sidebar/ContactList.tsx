@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import { useNoticeBadgeStore } from '@/stores/noticeBadgeStore';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
+import EmployeeAvatar from '@/components/common/EmployeeAvatar';
 import { DEFAULT_AGENT_KEY, conversationContactKey, isPlainConversation } from '@/utils/contacts';
 
 interface Contact {
@@ -97,8 +98,8 @@ export default function ContactList({
                 : 'hover:bg-[var(--abu-bg-hover)]',
             )}
           >
-            <div className="relative shrink-0 w-9 h-9 rounded-[10px] bg-[var(--abu-bg-base)] border border-[var(--abu-border)] flex items-center justify-center text-[19px] select-none">
-              {c.avatar}
+            <div className="relative shrink-0 w-9 h-9 rounded-[10px] bg-[var(--abu-bg-base)] border border-[var(--abu-border)] flex items-center justify-center text-[19px] select-none overflow-hidden">
+              <EmployeeAvatar avatar={c.avatar} name={c.name} />
               {c.unread > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-[var(--abu-clay)] text-white text-[10px] font-medium leading-4 text-center">
                   {c.unread > 99 ? '99+' : c.unread}

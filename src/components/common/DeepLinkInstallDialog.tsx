@@ -5,6 +5,8 @@ import { useToastStore } from '@/stores/toastStore';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
 import { installFromDeepLink } from '@/core/deeplink/installer';
 import { useI18n, format } from '@/i18n';
+import { useEmployeeDeploymentStore } from '@/stores/employeeDeploymentStore';
+import { completeEmployeeDeployment } from '@/core/employee/deploymentFlow';
 
 /**
  * Confirm dialog for fuyao://install deep links. Renders when the deep-link
@@ -29,9 +31,51 @@ export default function DeepLinkInstallDialog() {
     setInstalling(true);
     addToast({ type: 'info', title: i18n.deepLink.installingTitle, duration: 5000 });
 
-    void installFromDeepLink(req)
-      .then((installed) => {
+    void (async () => {
+      try {
+        const installed = await installFromDeepLink(req);
         const displayName = req.name ?? installed.name;
+        await useDiscoveryStore.getState().refresh();
+        if (installed.kind === 'employee') {
+          const discovered = useDiscoveryStore
+            .getState()
+            .agents
+            .some((agent) => agent.name === installed.name);
+          if (!discovered) {
+            throw new Error(`Employee "${installed.name}" was installed but could not be loaded.`);
+          }
+          const packageId = req.packageId ?? installed.packageId ?? installed.name;
+          const existing = useEmployeeDeploymentStore.getState().deployments[packageId];
+          if (existing && existing.agentName === installed.name) {
+            await completeEmployeeDeployment({
+              packageId,
+              packageVersion: req.packageVersion ?? installed.packageVersion,
+              employeeId: req.employeeId,
+              agentName: installed.name,
+              workspacePath: existing.workspacePath,
+              defaultInitPrompt: installed.defaultInitPrompt,
+            });
+          } else if (installed.runtimeProfile) {
+          useDeepLinkStore.getState().setRuntimeSetup({
+            name: installed.name,
+              packageId,
+              packageVersion: req.packageVersion ?? installed.packageVersion,
+              employeeId: req.employeeId,
+              defaultInitPrompt: installed.defaultInitPrompt,
+            level: installed.audit?.level ?? 'L1',
+            profile: installed.runtimeProfile,
+          });
+          } else {
+            await completeEmployeeDeployment({
+              packageId,
+              packageVersion: req.packageVersion ?? installed.packageVersion,
+              employeeId: req.employeeId,
+              agentName: installed.name,
+              workspacePath: null,
+              defaultInitPrompt: installed.defaultInitPrompt,
+            });
+          }
+        }
         addToast({
           type: 'success',
           title: i18n.deepLink.installSuccessTitle,
@@ -42,29 +86,16 @@ export default function DeepLinkInstallDialog() {
             { name: displayName },
           ),
         });
-        if (
-          installed.kind === 'employee'
-          && installed.runtimeProfile
-          && (installed.runtimeProfile.workflows?.length ?? 0) > 0
-        ) {
-          useDeepLinkStore.getState().setRuntimeSetup({
-            name: installed.name,
-            level: installed.audit?.level ?? 'L1',
-            profile: installed.runtimeProfile,
-          });
-        }
-        return useDiscoveryStore.getState().refresh();
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         addToast({
           type: 'error',
           title: i18n.deepLink.installFailedTitle,
           message: err instanceof Error ? err.message : String(err),
         });
-      })
-      .finally(() => {
+      } finally {
         useDeepLinkStore.getState().setInstalling(false);
-      });
+      }
+    })();
   }, [t]);
 
   const handleCancel = useCallback(() => {

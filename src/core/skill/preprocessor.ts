@@ -26,7 +26,11 @@ interface CommandOutput {
  * - $0, $1, ... $N    — shorthand for positional arguments
  * - ${ABU_SESSION_ID} — current session/conversation ID
  * - ${ABU_SKILL_DIR}  — absolute path to skill directory
- * - ${CLAUDE_SESSION_ID} / ${CLAUDE_SKILL_DIR} — Claude Code compatible aliases
+ * - ${ABU_WORKSPACE}  — absolute path to the current project workspace root
+ *                       (deterministic; lets packages address their state dir
+ *                       without the model having to guess the workspace path)
+ * - ${CLAUDE_SESSION_ID} / ${CLAUDE_SKILL_DIR} / ${CLAUDE_WORKSPACE} — Claude Code compatible aliases
+ * - {baseDir}         — legacy package-compatible alias for the skill directory
  *
  * If content does not contain $ARGUMENTS and args is non-empty,
  * appends "ARGUMENTS: <value>" at the end.
@@ -36,6 +40,7 @@ export function substituteVariables(
   args: string,
   skillDir: string,
   sessionId: string,
+  workspacePath?: string,
 ): string {
   const positionalArgs = parseArgs(args);
   const hasArgsPlaceholder = content.includes('$ARGUMENTS');
@@ -55,9 +60,15 @@ export function substituteVariables(
   // Replace environment variables
   result = result.replace(/\$\{ABU_SESSION_ID\}/g, sessionId);
   result = result.replace(/\$\{ABU_SKILL_DIR\}/g, skillDir);
+  result = result.replace(/\{baseDir\}/g, skillDir);
+  // Workspace root — deterministic, so packages never have to guess it. Fall
+  // back to "." (CWD-relative) when no workspace is bound to the conversation.
+  const workspace = workspacePath && workspacePath.length > 0 ? workspacePath : '.';
+  result = result.replace(/\$\{ABU_WORKSPACE\}/g, workspace);
   // Claude Code compatible aliases
   result = result.replace(/\$\{CLAUDE_SESSION_ID\}/g, sessionId);
   result = result.replace(/\$\{CLAUDE_SKILL_DIR\}/g, skillDir);
+  result = result.replace(/\$\{CLAUDE_WORKSPACE\}/g, workspace);
 
   // Auto-append if no $ARGUMENTS placeholder and args provided
   if (args && !hasArgsPlaceholder) {

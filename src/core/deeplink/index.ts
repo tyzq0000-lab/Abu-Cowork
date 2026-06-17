@@ -7,7 +7,7 @@
  * a pending install request for DeepLinkInstallDialog to confirm.
  */
 
-import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { invoke } from '@tauri-apps/api/core';
 import { parseDeepLink } from './parser';
 import { useDeepLinkStore } from '@/stores/deepLinkStore';
@@ -55,9 +55,14 @@ function handleUrl(raw: string): void {
  */
 export async function initDeepLink(): Promise<(() => void) | null> {
   try {
-    return await onOpenUrl((urls) => {
+    const unlisten = await onOpenUrl((urls) => {
       for (const url of urls) handleUrl(url);
     });
+    const current = await getCurrent();
+    for (const url of current ?? []) handleUrl(url);
+    const queued = await invoke<string[]>('take_pending_deep_links');
+    for (const url of queued ?? []) handleUrl(url);
+    return unlisten;
   } catch (err) {
     // Browser dev mode (no Tauri) or plugin unavailable — deep links simply
     // don't arrive; not fatal.

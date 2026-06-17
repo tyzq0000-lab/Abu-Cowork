@@ -14,8 +14,8 @@
 
 import { strToU8, strFromU8, unzipSync } from 'fflate';
 import { DATA_DIR_NAME } from '@/core/branding';
-import { fetch } from '@tauri-apps/plugin-http';
-import { writeFile, mkdir, exists, remove } from '@tauri-apps/plugin-fs';
+import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { writeFile, mkdir, exists, remove, rename } from '@tauri-apps/plugin-fs';
 import { homeDir } from '@tauri-apps/api/path';
 import { joinPath } from '@/utils/pathUtils';
 import { parsePluginJson } from '@/core/agent/employeeLoader';
@@ -64,6 +64,9 @@ export interface InstalledPackage {
   kind: 'employee' | 'skill';
   /** Canonical package name (= directory name under ~/.uprow/...). */
   name: string;
+  packageId?: string;
+  packageVersion?: string;
+  defaultInitPrompt?: { zh?: string; en?: string };
   fileCount: number;
   runtimeProfile?: EmployeeRuntimeProfile;
   audit?: EmployeeAuditReport;
@@ -74,6 +77,9 @@ export interface InstalledPackage {
 export interface EmployeeUnpackPlan {
   /** Canonical agent name (registry key + target directory name). */
   name: string;
+  packageId: string;
+  packageVersion?: string;
+  defaultInitPrompt?: { zh?: string; en?: string };
   /** Files to write, paths relative to the package root. */
   files: Array<{ path: string; data: Uint8Array }>;
   modelConfig?: EmployeeModelConfig;
@@ -194,6 +200,9 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
 
   return {
     name,
+    packageId: manifest?.name || name,
+    packageVersion: manifest?.version,
+    defaultInitPrompt: manifest?.defaultInitPrompt,
     files,
     modelConfig,
     runtimeProfile: manifest?.runtime,
@@ -207,7 +216,14 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
 async function downloadArchive(url: string): Promise<Uint8Array> {
   let res: Response;
   try {
-    res = await fetch(url, { method: 'GET' });
+    const host = new URL(url).hostname;
+    const isLoopback = host === 'localhost' || host === '127.0.0.1';
+    // Local platform development should not be routed through a system proxy.
+    // The WebView transport is sufficient because the platform ZIP endpoint
+    // explicitly allows CORS; production HTTPS downloads keep using Tauri.
+    res = isLoopback
+      ? await globalThis.fetch(url, { method: 'GET' })
+      : await tauriFetch(url, { method: 'GET' });
   } catch (err) {
     throw new DeepLinkInstallError('DOWNLOAD_FAILED', `Download failed: ${String(err)}`);
   }
@@ -233,23 +249,40 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
   const plan = planEmployeeUnpack(entries);
 
   const home = await homeDir();
-  const targetDir = joinPath(home, DATA_DIR_NAME, 'employees', plan.name);
+  const employeesDir = joinPath(home, DATA_DIR_NAME, 'employees');
+  const targetDir = joinPath(employeesDir, plan.name);
+  const operationId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const stagingDir = joinPath(employeesDir, `.${plan.name}.installing-${operationId}`);
+  const backupDir = joinPath(employeesDir, `.${plan.name}.backup-${operationId}`);
+  let movedExisting = false;
 
   try {
-    // Overwrite semantics: clear a previous deployment so stale files
-    // (removed skills, renamed agents) don't linger.
-    if (await exists(targetDir)) {
-      await remove(targetDir, { recursive: true });
-    }
+    await mkdir(employeesDir, { recursive: true });
     for (const file of plan.files) {
-      const targetPath = joinPath(targetDir, file.path);
+      const targetPath = joinPath(stagingDir, file.path);
       const parentDir = targetPath.substring(0, targetPath.lastIndexOf('/'));
       if (parentDir) {
         await mkdir(parentDir, { recursive: true });
       }
       await writeFile(targetPath, file.data);
     }
+    if (await exists(targetDir)) {
+      await rename(targetDir, backupDir);
+      movedExisting = true;
+    }
+    await rename(stagingDir, targetDir);
+    if (movedExisting && await exists(backupDir)) {
+      await remove(backupDir, { recursive: true });
+    }
   } catch (err) {
+    try {
+      if (await exists(stagingDir)) await remove(stagingDir, { recursive: true });
+      if (movedExisting && !(await exists(targetDir)) && await exists(backupDir)) {
+        await rename(backupDir, targetDir);
+      }
+    } catch {
+      // Preserve the original install error; recovery is best effort.
+    }
     if (err instanceof DeepLinkInstallError) throw err;
     throw new DeepLinkInstallError('WRITE_FAILED', `Failed to write package: ${String(err)}`);
   }
@@ -264,6 +297,9 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
   return {
     kind: 'employee',
     name: plan.name,
+    packageId: plan.packageId,
+    packageVersion: plan.packageVersion,
+    defaultInitPrompt: plan.defaultInitPrompt,
     fileCount: plan.files.length,
     runtimeProfile: plan.runtimeProfile,
     audit: plan.audit,
