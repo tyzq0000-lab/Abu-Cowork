@@ -233,11 +233,9 @@ export default function TaskBlock({ steps, executionSteps, isActive, onRetry }: 
     return [];
   }, [steps, executionSteps]);
 
-  // Lazy initializer: when the block mounts during a live execution, start in 'preview'
-  // so the body (with running thinking content / inline tool steps) is visible without
-  // requiring the user to click. The auto-collapse useEffect below handles the
-  // active→inactive transition to tuck everything away after the loop ends.
-  const [displayMode, setDisplayMode] = useState<DisplayMode>(() => isActive ? 'preview' : 'collapsed');
+  // Always start collapsed so the timeline stays tucked away during execution.
+  // The user can expand at any time by clicking the header.
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('collapsed');
 
   // Auto-collapse when execution finishes (isActive: true → false)
   const prevIsActiveRef = useRef(isActive);

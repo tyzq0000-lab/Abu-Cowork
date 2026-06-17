@@ -79,8 +79,11 @@ export default function Sidebar() {
       clearBadge(recent.id);
     } else {
       startNewConversation();
-      setPendingAgent(agentKey === DEFAULT_AGENT_KEY ? null : agentKey);
     }
+    // Always sync pendingAgentName to the picked contact so the sidebar
+    // highlight and ChatView welcome banner reflect the correct agent
+    // immediately — even when switchConversation's async load hasn't settled yet.
+    setPendingAgent(agentKey === DEFAULT_AGENT_KEY ? null : agentKey);
     setViewMode('chat');
   }, [switchConversation, clearBadge, startNewConversation, setPendingAgent, setViewMode]);
 
