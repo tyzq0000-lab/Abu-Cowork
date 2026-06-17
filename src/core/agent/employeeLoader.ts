@@ -9,6 +9,7 @@ import {
   type EmployeeModelConfig,
   type EmployeeRuntimeProfile,
 } from '@/core/employee/contract';
+import type { EmployeeRuntimeSetupRequest } from '@/stores/deepLinkStore';
 
 /**
  * Employee Loader — load WorkBuddy / CodeBuddy "expert" packages into Abu's
@@ -230,4 +231,41 @@ export async function scanEmployees(rootDir: string): Promise<SubagentDefinition
     // Root unreadable — treat as no employees.
   }
   return result;
+}
+
+/**
+ * Build a workspace-setup request for an already-installed employee when a NEW
+ * conversation is started with it. Mirrors the deep-link install path (which
+ * triggers EmployeeRuntimeSetupDialog): employees that declare a required
+ * workspace must have one selected, otherwise their bundled skills never enter
+ * the SkillLoader index (loader gates them per active agent + workspace) and the
+ * model falls back to built-in skills.
+ *
+ * Re-reads the employee's plugin.json (via the agent's stored filePath) so the
+ * full runtime profile / workflows / dependencies are available to the dialog.
+ * Returns null when the agent is not an employee, has no parseable plugin, or
+ * does not declare a required workspace — callers then proceed normally.
+ */
+export async function buildEmployeeWorkspaceSetup(
+  agent: SubagentDefinition,
+): Promise<EmployeeRuntimeSetupRequest | null> {
+  if (agent.source !== 'employee' || !agent.filePath) return null;
+  let rawPlugin: string;
+  try {
+    rawPlugin = await readTextFile(agent.filePath);
+  } catch {
+    return null;
+  }
+  const plugin = parsePluginJson(rawPlugin);
+  if (!plugin) return null;
+  const runtime = plugin.runtime;
+  if (!runtime || runtime.workspace?.required !== true) return null;
+  return {
+    name: agent.name,
+    packageId: plugin.name ?? agent.name,
+    packageVersion: (plugin as { version?: string }).version,
+    defaultInitPrompt: plugin.defaultInitPrompt,
+    level: runtime.targetMaturity ?? 'L1',
+    profile: runtime,
+  };
 }

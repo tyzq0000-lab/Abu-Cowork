@@ -13,6 +13,13 @@ export interface EmployeeRuntimeSetupRequest {
   defaultInitPrompt?: { zh?: string; en?: string };
   level: EmployeeMaturityLevel;
   profile: EmployeeRuntimeProfile;
+  /**
+   * Optional first message the user already typed before the workspace-setup
+   * dialog interrupted them. Restored into the new employee conversation's input
+   * (via chatStore.setPendingInput) AFTER the dialog opens it, so the text isn't
+   * lost. Only set by the new-conversation path (ChatView), not by deep-link install.
+   */
+  pendingInput?: string;
 }
 
 /**

@@ -38,22 +38,39 @@ export const generateImageTool: ToolDefinition = {
 
       const state = useSettingsStore.getState();
 
-      // Resolve API key: auxiliaryServices.imageGen > active provider key (if OpenAI-compatible)
+      // Resolve API key + base URL coherently from a single source so we never
+      // send one provider's key to another provider's endpoint:
+      //   1. dedicated image-generation aux service (设置 → 图像生成)
+      //   2. the active provider, if OpenAI-compatible and keyed
+      //   3. any enabled OpenAI-compatible provider that has a key
+      // Digital-employee packages normally generate images via their LibTV / 百炼
+      // CLI skills, not this built-in tool — this fallback is for the generic path.
       let apiKey = state.auxiliaryServices.imageGen?.apiKey ?? '';
+      let providerBaseUrl = state.auxiliaryServices.imageGen?.baseUrl ?? '';
       if (!apiKey) {
         const activeProvider = getActiveProvider(state);
-        if (activeProvider?.apiFormat === 'openai-compatible') {
-          apiKey = getActiveApiKey(state);
+        const activeKey = getActiveApiKey(state);
+        if (activeProvider?.apiFormat === 'openai-compatible' && activeKey?.trim()) {
+          apiKey = activeKey;
+          providerBaseUrl = providerBaseUrl || activeProvider.baseUrl || '';
+        } else {
+          const fallback = state.providers.find(
+            (p) => p.apiFormat === 'openai-compatible' && p.apiKey?.trim(),
+          );
+          if (fallback) {
+            apiKey = fallback.apiKey;
+            providerBaseUrl = providerBaseUrl || fallback.baseUrl || '';
+          }
         }
       }
       if (!apiKey) {
-        return 'Error: No API key configured for image generation. Please set an OpenAI API key in Settings → Image Generation, or configure an OpenAI provider.';
+        return '错误：未配置生图密钥。请在 设置 → 图像生成 配置生图模型，或绑定一个 OpenAI 兼容的模型供应商。（数字员工包通常通过 LibTV / 百炼 CLI 出图，无需此内置生图工具。）';
       }
 
       const model = state.auxiliaryServices.imageGen?.model || 'dall-e-3';
 
-      // Resolve base URL: auxiliaryServices.imageGen.baseUrl > default OpenAI
-      const baseUrl = (state.auxiliaryServices.imageGen?.baseUrl || 'https://api.openai.com').replace(/\/+$/, '');
+      // Base URL paired with the key source resolved above; default to OpenAI.
+      const baseUrl = (providerBaseUrl || 'https://api.openai.com').replace(/\/+$/, '');
 
       // Call image generation API via Tauri fetch (bypasses CORS)
       const fetchFn = await getTauriFetch();

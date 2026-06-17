@@ -786,9 +786,28 @@ export const useSettingsStore = create<SettingsStore>()(
         const cleanPatch: Partial<ProviderInstance> = { ...patch };
         if (patch.baseUrl !== undefined) cleanPatch.baseUrl = patch.baseUrl.trim();
         if (patch.apiKey !== undefined) cleanPatch.apiKey = patch.apiKey.trim();
-        set((s) => ({
-          providers: s.providers.map(p => p.id === id ? { ...p, ...cleanPatch } : p),
-        }));
+        set((s) => {
+          const providers = s.providers.map(p => p.id === id ? { ...p, ...cleanPatch } : p);
+          const update: Partial<SettingsState> = { providers };
+          // Additive: saving a non-empty key for an enabled provider auto-activates
+          // it when no usable provider is active yet (so first-config doesn't leave
+          // the send gate blocked). Only fills an empty/unusable activeModel; never
+          // overrides a still-valid selection, never re-enables a disabled provider,
+          // and does nothing for non-key patches (e.g. { enabled: false }).
+          const addedKey =
+            Object.prototype.hasOwnProperty.call(patch, 'apiKey') && (cleanPatch.apiKey ?? '').length > 0;
+          if (addedKey) {
+            const usable = (p: ProviderInstance) =>
+              p.source !== 'employee' && p.enabled &&
+              (p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio');
+            const activeStillUsable = providers.some((p) => p.id === s.activeModel.providerId && usable(p));
+            const keyed = providers.find((p) => p.id === id);
+            if (!activeStillUsable && keyed && usable(keyed)) {
+              update.activeModel = { providerId: keyed.id, modelId: keyed.models[0]?.id ?? '' };
+            }
+          }
+          return update;
+        });
         // Only touch the secret store when apiKey is actually being updated;
         // other patches (enabled flag, status, model list) must not clobber it.
         if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) {
@@ -823,24 +842,34 @@ export const useSettingsStore = create<SettingsStore>()(
 
       toggleProvider: (id) => set((s) => {
         const target = s.providers.find((p) => p.id === id);
+        const willEnable = !target?.enabled;
         const providers = s.providers.map((p) =>
           p.id === id ? { ...p, enabled: !p.enabled } : p
         );
         const update: Partial<SettingsState> = { providers };
+        const usable = (p: ProviderInstance) =>
+          p.source !== 'employee' && p.enabled &&
+          (p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio');
 
+        // Disabling the currently-active provider → switch to a usable fallback.
         if (target?.enabled && s.activeModel.providerId === id) {
-          const fallback = providers.find(
-            (p) =>
-              p.id !== id &&
-              p.source !== 'employee' &&
-              p.enabled &&
-              (p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio')
-          );
+          const fallback = providers.find((p) => p.id !== id && usable(p));
           if (fallback) {
-            update.activeModel = {
-              providerId: fallback.id,
-              modelId: fallback.models[0]?.id ?? '',
-            };
+            update.activeModel = { providerId: fallback.id, modelId: fallback.models[0]?.id ?? '' };
+          }
+        }
+
+        // Additive: enabling a usable provider when no usable provider is active
+        // yet → auto-activate it (so first-config / re-enable doesn't leave the
+        // send gate blocked). Only fills an empty/unusable activeModel; never
+        // overrides a still-valid explicit selection, never re-enables anything.
+        if (willEnable) {
+          const activeStillUsable = providers.some(
+            (p) => p.id === s.activeModel.providerId && usable(p),
+          );
+          const toggled = providers.find((p) => p.id === id);
+          if (!activeStillUsable && toggled && usable(toggled)) {
+            update.activeModel = { providerId: toggled.id, modelId: toggled.models[0]?.id ?? '' };
           }
         }
 

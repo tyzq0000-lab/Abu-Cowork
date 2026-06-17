@@ -5,6 +5,7 @@ import { Toggle } from '@/components/ui/toggle';
 import { useDeepLinkStore } from '@/stores/deepLinkStore';
 import { useToastStore } from '@/stores/toastStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
+import { useChatStore } from '@/stores/chatStore';
 import { installRuntimeTemplates } from '@/core/employee/runtimeTemplates';
 import {
   checkEmployeeDependencies,
@@ -81,6 +82,12 @@ export default function EmployeeRuntimeSetupDialog() {
           workspacePath,
           defaultInitPrompt: request.defaultInitPrompt,
         });
+        // Restore the first message the user typed before this dialog interrupted
+        // them — now that the employee conversation is open, its ChatInput picks it
+        // up from pendingInput instead of the (now-replaced) welcome input.
+        if (request.pendingInput) {
+          useChatStore.getState().setPendingInput(request.pendingInput);
+        }
         useDeepLinkStore.getState().clearRuntimeSetup();
         useToastStore.getState().addToast({
           type: 'success',

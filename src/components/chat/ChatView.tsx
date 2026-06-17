@@ -16,6 +16,8 @@ import ChatInput from './ChatInput';
 import BackgroundAgents from './BackgroundAgents';
 import ScenarioGuide from './ScenarioGuide';
 import { agentRegistry } from '@/core/agent/registry';
+import { buildEmployeeWorkspaceSetup } from '@/core/agent/employeeLoader';
+import { useDeepLinkStore } from '@/stores/deepLinkStore';
 import PermissionDialog from '@/components/common/PermissionDialog';
 import CommandConfirmDialog from '@/components/common/CommandConfirmDialog';
 import { ChevronDown, Settings } from 'lucide-react';
@@ -197,6 +199,22 @@ export default function ChatView() {
     let convId = activeConv?.id;
     const isNewConversation = !convId;
     if (!convId) {
+      // New employee conversation: if the employee declares a required project
+      // workspace and none is selected yet, route through the runtime-setup
+      // dialog (same flow as deep-link install) so its bundled skills get
+      // discovered into the SkillLoader index. Without a workspace the loader
+      // gates the employee's skills out and the model only sees built-in skills.
+      if (pendingAgent?.source === 'employee' && !workspacePath && !useWorkspaceStore.getState().currentPath) {
+        const setup = await buildEmployeeWorkspaceSetup(pendingAgent);
+        if (setup) {
+          // Carry the user's typed first message THROUGH the setup request. The
+          // dialog restores it (via pendingInput) AFTER it opens the employee
+          // conversation — restoring it now would let the welcome input consume
+          // and clear it before the conversation switch, losing the text.
+          useDeepLinkStore.getState().setRuntimeSetup({ ...setup, pendingInput: text });
+          return;
+        }
+      }
       // IM 化: bind the conversation to the pending contact so 免@ routing picks
       // the right digital employee. createConversation ignores 'abu' (default).
       convId = createConversation(
