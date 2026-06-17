@@ -8,6 +8,7 @@ import {
   parseEmployeePlugin,
   type EmployeeModelConfig,
   type EmployeeRuntimeProfile,
+  type LocalePair,
 } from '@/core/employee/contract';
 import type { EmployeeRuntimeSetupRequest } from '@/stores/deepLinkStore';
 
@@ -26,10 +27,21 @@ import type { EmployeeRuntimeSetupRequest } from '@/stores/deepLinkStore';
  * updates take effect on the next discovery pass.
  */
 
-/** Multilingual string pair used throughout plugin.json. */
-interface LocalePair {
-  zh?: string;
-  en?: string;
+/** Build a { 'zh-CN': ..., 'en-US': ... } map from a LocalePair; returns undefined when both are absent. */
+function toLocaleMap(pair: LocalePair | undefined): Record<string, string> | undefined {
+  if (!pair?.zh && !pair?.en) return undefined;
+  return {
+    ...(pair.zh ? { 'zh-CN': pair.zh } : {}),
+    ...(pair.en ? { 'en-US': pair.en } : {}),
+  };
+}
+
+/** Split a LocalePair[] into parallel zh and en string arrays, skipping absent entries. */
+function splitLocalePairs(pairs: LocalePair[]): { zh: string[]; en: string[] } {
+  return {
+    zh: pairs.map((p) => p.zh).filter((s): s is string => Boolean(s)),
+    en: pairs.map((p) => p.en).filter((s): s is string => Boolean(s)),
+  };
 }
 
 /** Subset of `.codebuddy-plugin/plugin.json` that we map into a SubagentDefinition. */
@@ -139,30 +151,12 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
     ? { 'en-US': plugin.displayDescription.en }
     : undefined;
 
-  const displayNames =
-    plugin.displayName?.zh || plugin.displayName?.en
-      ? {
-          ...(plugin.displayName?.zh ? { 'zh-CN': plugin.displayName.zh } : {}),
-          ...(plugin.displayName?.en ? { 'en-US': plugin.displayName.en } : {}),
-        }
-      : undefined;
-
+  const displayNames = toLocaleMap(plugin.displayName);
   const profession = pickZhFirst(plugin.profession);
-  const professionI18n =
-    plugin.profession?.zh || plugin.profession?.en
-      ? {
-          ...(plugin.profession?.zh ? { 'zh-CN': plugin.profession.zh } : {}),
-          ...(plugin.profession?.en ? { 'en-US': plugin.profession.en } : {}),
-        }
-      : undefined;
+  const professionI18n = toLocaleMap(plugin.profession);
 
-  const tags = plugin.tags
-    ?.map((t) => pickZhFirst(t))
-    .filter((s): s is string => Boolean(s));
-  const tagsEn = plugin.tags
-    ?.map((t) => t.en)
-    .filter((s): s is string => Boolean(s));
-  const tagsI18n = tagsEn && tagsEn.length > 0 ? { 'en-US': tagsEn } : undefined;
+  const { zh: tags, en: tagsEn } = splitLocalePairs(plugin.tags ?? []);
+  const tagsI18n = tagsEn.length > 0 ? { 'en-US': tagsEn } : undefined;
 
   // Sample prompts: prefer quickPrompts, fall back to defaultInitPrompt.
   const promptPairs =
@@ -171,14 +165,8 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
       : plugin.defaultInitPrompt
         ? [plugin.defaultInitPrompt]
         : [];
-  const samplePrompts = promptPairs
-    .map((q) => pickZhFirst(q))
-    .filter((s): s is string => Boolean(s));
-  const samplePromptsEn = promptPairs
-    .map((q) => q.en)
-    .filter((s): s is string => Boolean(s));
-  const samplePromptsI18n =
-    samplePromptsEn.length > 0 ? { 'en-US': samplePromptsEn } : undefined;
+  const { zh: samplePrompts, en: samplePromptsEn } = splitLocalePairs(promptPairs);
+  const samplePromptsI18n = samplePromptsEn.length > 0 ? { 'en-US': samplePromptsEn } : undefined;
 
   // Skill directory names (basename of each "./skills/x") — captured for Phase B
   // skill wiring; the registry doesn't resolve them yet.

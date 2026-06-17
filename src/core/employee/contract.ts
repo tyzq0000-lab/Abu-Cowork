@@ -168,7 +168,7 @@ export interface EmployeeModelConfig {
   };
 }
 
-interface LocalePair {
+export interface LocalePair {
   zh?: string;
   en?: string;
 }
@@ -494,8 +494,8 @@ export function isValidEmployeeModelConfig(value: unknown): value is EmployeeMod
 export function parseEmployeePlugin(raw: string): EmployeePluginManifest | null {
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    const manifest = { ...(parsed as Record<string, unknown>) } as EmployeePluginManifest;
+    if (!isRecord(parsed)) return null;
+    const manifest = { ...parsed } as EmployeePluginManifest;
     if (manifest.runtime !== undefined && !isRuntimeProfile(manifest.runtime)) {
       delete manifest.runtime;
     }

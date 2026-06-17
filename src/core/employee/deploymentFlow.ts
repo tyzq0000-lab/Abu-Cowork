@@ -3,10 +3,8 @@ import { useChatStore } from '@/stores/chatStore';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
 import { useEmployeeDeploymentStore } from '@/stores/employeeDeploymentStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import type { EmployeeDependency } from './contract';
+import type { EmployeeDependency, LocalePair } from './contract';
 import { hasEmbeddedPython } from '@/utils/pythonRuntime';
-
-type LocalePair = { zh?: string; en?: string };
 
 export interface EmployeeDependencyHealth {
   name: string;
