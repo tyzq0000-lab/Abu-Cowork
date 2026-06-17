@@ -66,6 +66,7 @@ function parseSkillFile(raw: string, filePath: string): Skill | null {
       allowedTools: normalizeToolList(meta['allowed-tools']),
       blockedTools: normalizeToolList(meta['blocked-tools']),
       requiredTools: normalizeToolList(meta['required-tools']),
+      shadows: normalizeToolList(meta.shadows),
       model: meta.model as string | undefined,
       maxTurns: typeof meta['max-turns'] === 'number' ? meta['max-turns'] : undefined,
       context: (meta.context as 'inline' | 'fork') ?? 'inline',
@@ -262,6 +263,11 @@ export class SkillLoader {
             const raw = await readTextFile(skillPath);
             const skill = parseSkillFile(raw, skillPath);
             if (skill) {
+              if (skill.name !== entry.name) {
+                console.warn(
+                  `[SkillLoader] name mismatch: directory "${entry.name}" but frontmatter name: "${skill.name}" (${skillPath})`,
+                );
+              }
               // Earlier directories take priority — don't overwrite
               if (!this.skills.has(skill.name)) {
                 skill.source = source;

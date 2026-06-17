@@ -62,7 +62,7 @@ export const useSkillTool: ToolDefinition = {
     },
     required: ['skill_name'],
   },
-  execute: async (input) => {
+  execute: async (input, toolContext) => {
     const skillName = (input.skill_name as string).replace(/^\/+/, '');
     const context = input.context as string | undefined;
 
@@ -81,7 +81,7 @@ export const useSkillTool: ToolDefinition = {
     // Dedup: if already active in this conversation, short-circuit to prevent
     // wasted tool calls. Skill instructions are already in the system prompt.
     const state = useChatStore.getState();
-    const activeId = state.activeConversationId;
+    const activeId = toolContext?.conversationId ?? state.activeConversationId;
     if (activeId) {
       const existing = state.conversations[activeId]?.activeSkills;
       if (existing?.includes(skillName)) {

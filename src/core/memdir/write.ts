@@ -238,6 +238,15 @@ export async function writeMemory(options: WriteMemoryOptions): Promise<string> 
     }
 
     const filename = overrideFilename || toMemoryFilename(type, name);
+
+    // User-authored memories take priority: skip if an agent write would
+    // overwrite a file the user created or edited manually.
+    const collision = existing.find(m => m.filename === filename);
+    if (collision?.source === 'user_manual' && source !== 'user_manual') {
+      invalidateScanCache(workspacePath);
+      return filename;
+    }
+
     const filePath = joinPath(dir, filename);
     await ensureParentDir(filePath);
 

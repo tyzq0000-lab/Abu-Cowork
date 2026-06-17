@@ -28,6 +28,7 @@ import { estimateToolSchemaTokens, estimateTokens, estimateMessageTokens, calibr
 import { identifyRounds, RECENT_ROUNDS_TO_KEEP } from '../context/contextUtils';
 import { withRetry } from './retry';
 import { runSubagentLoop, extractParentConversationSummary, buildBoundAgentSystemPrompt } from './subagentLoop';
+import { getEmployeeToolShadows } from './employeeSkills';
 import type { SubagentProgressEvent } from './subagentLoop';
 import { createSubagentController } from './subagentAbort';
 import { drainQueuedInputs, clearInputQueue } from './userInputQueue';
@@ -367,6 +368,13 @@ function resolveTools(
       const blocked = new Set(def.disallowedTools);
       tools = tools.filter(t => !blocked.has(t.name));
       deferredTools = deferredTools.filter(t => !blocked.has(t.name));
+    }
+    if (def.source === 'employee') {
+      const shadows = new Set(getEmployeeToolShadows(def));
+      if (shadows.size > 0) {
+        tools = tools.filter(t => !shadows.has(t.name));
+        deferredTools = deferredTools.filter(t => !shadows.has(t.name));
+      }
     }
   }
   if (hasBuiltinWebSearch) {
@@ -764,6 +772,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         agent: delegateAgent,
         task: taskText,
         parentConversationSummary: parentConversationSummary || undefined,
+        parentConversationId: conversationId,
         signal: subagentSignal,
         commandConfirmCallback: confirmCb,
         filePermissionCallback: filePermCb,
@@ -876,19 +885,25 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // Computed ONCE per agent-loop run (per user message) — the user query
   // doesn't change across iterations of the inner while loop, so the
   // selection is stable. Cost: scan is cached, then ≤5 fs reads.
+  //
+  // Skipped for bound employee agents (route.type === 'agent'): those already
+  // receive a static memdir snapshot via buildBoundAgentSystemPrompt, so
+  // injecting again here would duplicate memory in every turn.
   let relevantMemoriesSection = '';
-  try {
-    const { findRelevantMemories, formatRelevantMemoriesSection, extractQueryText } =
-      await import('../memdir/relevance');
-    const queryText = extractQueryText(route.cleanInput);
-    if (queryText) {
-      const ws = toolContext.workspacePath;
-      const relevant = await findRelevantMemories(queryText, ws ?? null);
-      relevantMemoriesSection = formatRelevantMemoriesSection(relevant);
+  if (route.type !== 'agent') {
+    try {
+      const { findRelevantMemories, formatRelevantMemoriesSection, extractQueryText } =
+        await import('../memdir/relevance');
+      const queryText = extractQueryText(route.cleanInput);
+      if (queryText) {
+        const ws = toolContext.workspacePath;
+        const relevant = await findRelevantMemories(queryText, ws ?? null);
+        relevantMemoriesSection = formatRelevantMemoriesSection(relevant);
+      }
+    } catch (err) {
+      // Non-critical: log and continue without Phase 2 injection
+      logger.warn('Phase 2 relevant-memory injection failed', { err });
     }
-  } catch (err) {
-    // Non-critical: log and continue without Phase 2 injection
-    logger.warn('Phase 2 relevant-memory injection failed', { err });
   }
 
   while (continueLoop) {

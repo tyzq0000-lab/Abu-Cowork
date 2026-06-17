@@ -13,6 +13,7 @@ import { ClaudeAdapter } from '../llm/claude';
 import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
 import { getAllTools, executeAnyTool, toolResultToString, type ConfirmationInfo, type FilePermissionCallback } from '../tools/registry';
 import { TOOL_NAMES } from '../tools/toolNames';
+import { useChatStore } from '../../stores/chatStore';
 import { useSettingsStore, getActiveProvider, resolveAgentExecution } from '../../stores/settingsStore';
 import { resolveCapabilities, computeReasoningParams, isReasoningStarvation, type ModelCapabilities } from '../llm/modelCapabilities';
 import { useDiscoveredCapsStore } from '../../stores/discoveredCapabilitiesStore';
@@ -127,6 +128,8 @@ export interface SubagentLoopOptions {
   commandConfirmCallback?: (info: ConfirmationInfo) => Promise<boolean>;
   filePermissionCallback?: FilePermissionCallback;
   onProgress?: (event: SubagentProgressEvent) => void;
+  /** Parent conversation ID — used to show the compressing spinner when compression runs */
+  parentConversationId?: string;
   /** IM context — provides correct workspace path in headless mode */
   imContext?: IMContext;
 }
@@ -153,7 +156,7 @@ export async function buildBoundAgentSystemPrompt(
   });
 
   let systemPrompt = agent.systemPrompt;
-  const employeeSkillsSection = buildEmployeeSkillsSection(agent);
+  const employeeSkillsSection = buildEmployeeSkillsSection(agent, workspacePath);
   if (employeeSkillsSection) {
     systemPrompt += `\n\n${employeeSkillsSection}`;
   }
@@ -200,7 +203,7 @@ export async function buildBoundAgentSystemPrompt(
 }
 
 export async function runSubagentLoop(options: SubagentLoopOptions): Promise<SubagentResult> {
-  const { agent, task, context, parentConversationSummary, commandConfirmCallback, filePermissionCallback, onProgress } = options;
+  const { agent, task, context, parentConversationSummary, parentConversationId, commandConfirmCallback, filePermissionCallback, onProgress } = options;
   const startTime = Date.now();
   let totalToolCalls = 0;
   let totalInputTokens = 0;
@@ -268,6 +271,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     // 200 matches Claude Code's fork subagent default (forkSubagent.ts:65).
     const globalMaxTurns = useSettingsStore.getState().agentMaxTurns;
     const maxTurns = agent.maxTurns ?? globalMaxTurns ?? 200;
+    const SUBAGENT_MAX_OUTPUT_TOKENS = 50_000;
     let resultBuffer = '';
 
     // Abort sustained no-progress (all tool calls unparseable, or truncated with
@@ -298,6 +302,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
       let shouldContinue = false;
       let lastStopReason = '';
       let sawThinking = false;
+      let turnOutputCounted = false;
 
       // Resolve budget + reasoning controls for the subagent's model. Overlay any
       // runtime-discovered limits/reasoning status, then reserve a content floor so
@@ -324,9 +329,11 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
       const maxOutputTokens = reasoningParams.maxTokens;
 
       // Step 1: Semantic compression for long subagent runs
-      // TODO: PR2 follow-up — wire isCompressing for subagent compressions
       let messagesForContext = messages;
       if (turn >= 3) { // Only attempt compression after a few turns
+        if (parentConversationId) {
+          useChatStore.getState().setIsCompressing(parentConversationId, true);
+        }
         try {
           const compressionResult = await compressContextIfNeeded(
             messages,
@@ -340,6 +347,10 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
           }
         } catch {
           // Continue with uncompressed messages
+        } finally {
+          if (parentConversationId) {
+            useChatStore.getState().setIsCompressing(parentConversationId, false);
+          }
         }
       }
 
@@ -384,13 +395,14 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
           case 'usage':
             totalInputTokens += event.usage.inputTokens ?? 0;
             totalOutputTokens += event.usage.outputTokens ?? 0;
+            if (event.usage.outputTokens) turnOutputCounted = true;
             break;
           case 'done':
             lastStopReason = event.stopReason ?? '';
             if (event.stopReason === 'tool_use' && collectedToolCalls.length > 0) {
               shouldContinue = true;
             }
-            if (event.usage) {
+            if (event.usage && !turnOutputCounted) {
               totalOutputTokens += event.usage.outputTokens ?? 0;
             }
             break;
@@ -428,6 +440,12 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
         }
       } else {
         consecutiveNoProgress = 0;
+      }
+
+      if (totalOutputTokens > SUBAGENT_MAX_OUTPUT_TOKENS) {
+        const note = '[子代理已停止：本次任务累计输出已超过 token 预算上限，请缩小任务范围后重试。]';
+        resultBuffer = resultBuffer ? resultBuffer + '\n\n' + note : note;
+        break;
       }
 
       if (!shouldContinue) {

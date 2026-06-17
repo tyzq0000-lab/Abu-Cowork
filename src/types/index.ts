@@ -460,6 +460,7 @@ export interface SkillMetadata {
   allowedTools?: string[];    // Whitelist filter — only these tools are available to the LLM
   blockedTools?: string[];    // Blacklist filter — these tools are hidden from the LLM
   requiredTools?: string[];   // Must be available or skill execution is blocked
+  shadows?: string[];         // Built-in tool names suppressed when this skill is active on an employee agent
   model?: string;
   maxTurns?: number;          // Optional cap on agent loop turns. Falls back to global settings; if global also unset, runs unlimited.
   context?: 'inline' | 'fork';
