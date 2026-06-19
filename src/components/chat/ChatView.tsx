@@ -83,7 +83,14 @@ export default function ChatView() {
   // the first impression is the agent's persona; cleared once the first
   // message lands. Works for both builtin experts and user-defined agents.
   const pendingAgentName = useChatStore((s) => s.pendingAgentName);
-  const pendingAgent = pendingAgentName ? agentRegistry.getAgent(pendingAgentName) ?? null : null;
+  // Welcome persona resolves from the active conversation's bound agent first, then the
+  // pending agent — so switching to an existing (empty) employee conversation shows that
+  // employee's persona on the welcome page, not the default 扶摇. Without this, picking an
+  // employee whose conversation is empty showed the default mascot until a second click
+  // (the "点员工右侧仍显示默认助手" regression: header used activeConv.agentName and was
+  // correct, but the welcome body only read the now-null pendingAgentName).
+  const welcomeAgentKey = activeConv?.agentName ?? pendingAgentName;
+  const pendingAgent = welcomeAgentKey ? agentRegistry.getAgent(welcomeAgentKey) ?? null : null;
   // Resolve i18n display fields with graceful fallback to the canonical name/
   // description on the agent. Locale-specific fields are populated by builtin
   // agents (see registry.ts) — user-defined agents only have the base fields.
