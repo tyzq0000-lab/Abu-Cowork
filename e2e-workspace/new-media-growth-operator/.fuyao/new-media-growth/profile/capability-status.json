@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "status": "core-ready-enhancements-pending",
+  "coreReady": true,
+  "targetPlatforms": [
+    "xhs",
+    "wechat-official"
+  ],
+  "requestedTasks": [
+    "research",
+    "draft-content"
+  ],
+  "platformStates": {
+    "xhs": "available-to-configure",
+    "wechat-official": "available-to-configure"
+  },
+  "enhancementStates": {
+    "data-collection": "available-to-configure"
+  },
+  "setupItems": [
+    {
+      "id": "platform:xhs",
+      "state": "available-to-configure",
+      "purpose": "访问或操作小红书的企业账号与公开内容",
+      "authorizationType": "account-login-or-oauth",
+      "riskTypes": [
+        "account-access",
+        "external-action"
+      ],
+      "deviceImpact": "可能打开浏览器或连接已配置的官方接口",
+      "requiredUserFields": [
+        "账号登录或 OAuth 授权"
+      ],
+      "fallback": "使用公开检索、用户文件和人工发布包继续工作"
+    },
+    {
+      "id": "platform:wechat-official",
+      "state": "available-to-configure",
+      "purpose": "访问或操作微信公众号的企业账号与公开内容",
+      "authorizationType": "account-login-or-oauth",
+      "riskTypes": [
+        "account-access",
+        "external-action"
+      ],
+      "deviceImpact": "可能打开浏览器或连接已配置的官方接口",
+      "requiredUserFields": [
+        "账号登录或 OAuth 授权"
+      ],
+      "fallback": "使用公开检索、用户文件和人工发布包继续工作"
+    },
+    {
+      "id": "data-collection",
+      "state": "available-to-configure",
+      "purpose": "补充目标平台公开数据与对标信息",
+      "authorizationType": "connector-or-browser",
+      "riskTypes": [
+        "network-access",
+        "platform-limits"
+      ],
+      "deviceImpact": "可能连接已配置的数据源或浏览器",
+      "requiredUserFields": [
+        "仅在平台要求时完成登录"
+      ],
+      "fallback": "使用公开搜索、官方导出和用户文件"
+    }
+  ],
+  "fallbacks": {
+    "research": "public-research-and-file-import: public web evidence plus user-provided exports"
+  },
+  "checkedAt": "2026-06-16T01:49:54.357197+00:00"
+}

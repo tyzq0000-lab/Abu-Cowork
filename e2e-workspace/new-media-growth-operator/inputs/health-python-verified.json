@@ -1,0 +1,13 @@
+{
+  "core": {
+    "workspace": "ready",
+    "python": "ready"
+  },
+  "platforms": {
+    "xhs": "available-to-configure",
+    "wechat-official": "available-to-configure"
+  },
+  "enhancements": {
+    "data-collection": "available-to-configure"
+  }
+}

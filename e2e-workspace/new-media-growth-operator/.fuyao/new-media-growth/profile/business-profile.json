@@ -1,0 +1,140 @@
+{
+  "schemaVersion": 1,
+  "status": "needs-confirmation",
+  "mode": "cold-start",
+  "clues": [
+    {
+      "type": "business-description",
+      "value": "有谱平台为企业提供数字员工聘用，并通过一键部署将通用员工包安装到扶摇桌面端。",
+      "hasOwnedAccountHistory": false
+    }
+  ],
+  "brand": {
+    "value": "有谱平台",
+    "kind": "fact",
+    "source": "user-provided-integration-brief",
+    "confidence": 1.0
+  },
+  "niche": {
+    "value": "企业数字员工聘用与桌面部署",
+    "kind": "fact",
+    "source": "user-provided-integration-brief",
+    "confidence": 0.95
+  },
+  "audiences": [
+    "希望引入数字员工提升业务效率的中国企业管理者"
+  ],
+  "platforms": [
+    "小红书"
+  ],
+  "goals": [
+    "用可验证的完整部署与首轮工作演示建立投资人信任"
+  ],
+  "constraints": [
+    "未获得逐次明确批准前不得执行真实发布"
+  ],
+  "evidence": [
+    {
+      "field": "brand",
+      "value": "有谱平台",
+      "kind": "fact",
+      "source": "user-provided-integration-brief",
+      "confidence": 1.0,
+      "collectedAt": "2026-06-15T17:45:04.863504+00:00"
+    },
+    {
+      "field": "niche",
+      "value": "企业数字员工聘用与桌面部署",
+      "kind": "fact",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.95,
+      "collectedAt": "2026-06-15T17:45:04.863504+00:00"
+    },
+    {
+      "field": "audience",
+      "value": "希望引入数字员工提升业务效率的中国企业管理者",
+      "kind": "inference",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.75,
+      "collectedAt": "2026-06-15T17:45:04.863504+00:00"
+    },
+    {
+      "field": "platform",
+      "value": "小红书",
+      "kind": "hypothesis",
+      "source": "cold-start-hypothesis",
+      "confidence": 0.55,
+      "collectedAt": "2026-06-15T17:45:04.863504+00:00"
+    },
+    {
+      "field": "goal",
+      "value": "用可验证的完整部署与首轮工作演示建立投资人信任",
+      "kind": "fact",
+      "source": "user-provided-integration-brief",
+      "confidence": 1.0,
+      "collectedAt": "2026-06-15T17:45:04.863504+00:00"
+    },
+    {
+      "field": "constraint",
+      "value": "未获得逐次明确批准前不得执行真实发布",
+      "kind": "fact",
+      "source": "user-provided-integration-brief",
+      "confidence": 1.0,
+      "collectedAt": "2026-06-15T17:45:04.863504+00:00"
+    },
+    {
+      "field": "business-model",
+      "value": "有谱是数字员工 marketplace，企业按需聘用（订阅/一次性采购），通过一键部署安装到扶摇桌面端",
+      "kind": "inference",
+      "source": "clue-logic",
+      "confidence": 0.85,
+      "collectedAt": "2026-06-15T17:46:00.000000+00:00"
+    },
+    {
+      "field": "value-chain",
+      "value": "有谱平台（发现+采购）→ 扶摇桌面端（本地运行）→ 员工包（技能模板）→ 企业业务（效率提升）",
+      "kind": "inference",
+      "source": "clue-logic",
+      "confidence": 0.85,
+      "collectedAt": "2026-06-15T17:46:00.000000+00:00"
+    },
+    {
+      "field": "audience-tiers",
+      "value": "Tier1: CTO/技术负责人（评估技术可行性）；Tier2: CEO/高管（评估ROI与效率）；Tier3: 企业数字化部门（落地执行）",
+      "kind": "inference",
+      "source": "cold-start-reasoning",
+      "confidence": 0.7,
+      "collectedAt": "2026-06-15T17:46:00.000000+00:00"
+    },
+    {
+      "field": "pain-points",
+      "value": "AI工具碎片化/选型困难/部署复杂/安全顾虑/ROI不确定/员工接受度",
+      "kind": "inference",
+      "source": "cold-start-reasoning",
+      "confidence": 0.65,
+      "collectedAt": "2026-06-15T17:46:00.000000+00:00"
+    },
+    {
+      "field": "competition-context",
+      "value": "国内企业AI SaaS市场存在钉钉AI助手、飞书智能伙伴、各类AI Agent平台等竞品；有谱的差异化在于「人员化」的聘用体验+一键部署到桌面端",
+      "kind": "hypothesis",
+      "source": "cold-start-reasoning",
+      "confidence": 0.5,
+      "collectedAt": "2026-06-15T17:46:00.000000+00:00"
+    }
+  ],
+  "openQuestions": [
+    "有谱是否有自营账号（公众号/小红书/抖音）？",
+    "有谱的目标客户规模是中小型企业还是中大型企业？",
+    "有谱的定价模型是订阅制还是按使用量计费？",
+    "有谱目前是内测/预售/已公开发布？",
+    "与扶摇桌面端的关系是独家合作还是生态伙伴？",
+    "数字员工包的品类有哪些（如运营、客服、数据分析等）？",
+    "是否需要考虑抖音/B站/知乎等其他平台的冷启动？"
+  ],
+  "confirmation": {
+    "status": "required",
+    "confirmedAt": null,
+    "confirmedBy": null
+  }
+}

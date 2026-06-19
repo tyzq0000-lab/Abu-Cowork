@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "status": "needs-confirmation",
+  "targetPlatforms": [],
+  "goals": [],
+  "constraints": [
+    "未获得逐次明确批准前不得执行真实发布"
+  ],
+  "prohibitedActions": [
+    "自动发布到真实账号",
+    "定时任务触发外部操作",
+    "静默删除或修改已发布内容",
+    "未授权读取第三方平台账号数据"
+  ],
+  "approvalPolicy": "explicit-approval-every-time"
+}

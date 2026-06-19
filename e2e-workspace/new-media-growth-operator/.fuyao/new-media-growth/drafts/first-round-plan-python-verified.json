@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "mode": "cold-start",
+  "profileStatus": "needs-confirmation",
+  "platformRecommendations": [
+    {
+      "platform": "小红书",
+      "reason": "适合用搜索和场景化内容验证希望引入数字员工提升业务效率的中国企业管理者对企业数字员工聘用与桌面部署的兴趣。",
+      "status": "recommendation",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.65
+    },
+    {
+      "platform": "微信公众号",
+      "reason": "适合沉淀有谱平台的深度解释、案例与可复用品牌资产。",
+      "status": "recommendation",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.95
+    }
+  ],
+  "benchmarkPlan": [
+    {
+      "category": "同赛道品牌",
+      "selectionRule": "与有谱平台处于同一企业数字员工聘用与桌面部署赛道并持续更新",
+      "sampleTarget": 5,
+      "source": "user-provided-integration-brief",
+      "confidence": 0.95
+    },
+    {
+      "category": "受众替代方案",
+      "selectionRule": "同样服务希望引入数字员工提升业务效率的中国企业管理者但采用不同产品或内容路径",
+      "sampleTarget": 5,
+      "source": "user-provided-integration-brief",
+      "confidence": 0.95
+    },
+    {
+      "category": "内容表达标杆",
+      "selectionRule": "近30天有稳定互动且内容结构可复验",
+      "sampleTarget": 5,
+      "source": "user-provided-integration-brief",
+      "confidence": 0.95
+    }
+  ],
+  "contentTopics": [
+    {
+      "id": "topic-1",
+      "pillar": "入门障碍",
+      "title": "希望引入数字员工提升业务效率的中国企业管理者开始接触企业数字员工聘用与桌面部署时最常见的三个误区",
+      "experimentVariable": "none",
+      "status": "candidate",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.72
+    },
+    {
+      "id": "topic-2",
+      "pillar": "场景清单",
+      "title": "第一次体验企业数字员工聘用与桌面部署前需要准备什么",
+      "experimentVariable": "none",
+      "status": "candidate",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.68
+    },
+    {
+      "id": "topic-3",
+      "pillar": "选择标准",
+      "title": "如何判断一个企业数字员工聘用与桌面部署方案是否适合自己",
+      "experimentVariable": "none",
+      "status": "candidate",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.64
+    },
+    {
+      "id": "topic-4",
+      "pillar": "品牌方法",
+      "title": "有谱平台如何降低用户第一次尝试的门槛",
+      "experimentVariable": "none",
+      "status": "candidate",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.6
+    },
+    {
+      "id": "topic-5",
+      "pillar": "单变量实验",
+      "title": "同一主题分别测试问题式与清单式开头",
+      "experimentVariable": "opening-format",
+      "status": "candidate",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.56
+    }
+  ],
+  "drafts": [
+    {
+      "platform": "小红书",
+      "format": "图文",
+      "title": "希望引入数字员工提升业务效率的中国企业管理者开始接触企业数字员工聘用与桌面部署时最常见的三个误区",
+      "body": "很多希望引入数字员工提升业务效率的中国企业管理者不是不想开始，而是不知道第一步该做什么。这份清单从成本、时间和风险三个维度拆解企业数字员工聘用与桌面部署入门，最后给出一个今天就能执行的小行动。",
+      "status": "draft",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.68
+    },
+    {
+      "platform": "微信公众号",
+      "format": "文章提纲",
+      "title": "如何判断一个企业数字员工聘用与桌面部署方案是否适合自己",
+      "body": "一、先明确自己的使用场景；二、比较真实成本；三、检查风险和售后；四、用有谱平台的案例说明判断过程。",
+      "status": "draft",
+      "source": "user-provided-integration-brief",
+      "confidence": 0.95
+    }
+  ],
+  "publishing": {
+    "status": "awaiting-approval",
+    "externalWritePerformed": false,
+    "requiredApproval": "platform-account-content-version-assets-time"
+  }
+}

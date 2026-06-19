@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "status": "needs-confirmation",
+  "minimumInputCount": 1,
+  "completedStages": [
+    "workspace-initialized",
+    "evidence-collected",
+    "cold-start-plan-generated"
+  ],
+  "pendingUserActions": [
+    "确认业务画像（品牌、赛道、受众、目标、约束）",
+    "确认目标运营平台",
+    "确认约束条件和禁止事项"
+  ]
+}

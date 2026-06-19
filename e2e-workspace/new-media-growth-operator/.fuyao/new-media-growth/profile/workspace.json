@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "employee": "new-media-growth-operator",
+  "credentialPolicy": "reference-only",
+  "publishingPolicy": "explicit-approval-every-time",
+  "externalOperationPolicy": "approval-or-scoped-authorization",
+  "capabilityPolicy": "core-ready-enhancements-unlockable"
+}

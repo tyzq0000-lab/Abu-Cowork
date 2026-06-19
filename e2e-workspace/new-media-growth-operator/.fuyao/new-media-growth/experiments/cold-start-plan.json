@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-15T17:50:00.000000+00:00",
+  "generator": "manual-fallback-of-cold-start-plan-py",
+  "mode": "cold-start",
+  "status": "pending-confirmation",
+  "brand": {
+    "value": "有谱平台",
+    "source": "user-provided-integration-brief",
+    "confidence": 1.0
+  },
+  "niche": {
+    "value": "企业数字员工聘用与桌面部署",
+    "source": "user-provided-integration-brief",
+    "confidence": 0.95
+  },
+  "targets": {
+    "30日": [
+      "完成业务画像确认与首轮对标账号识别",
+      "在小红书发布 3-5 篇概念验证类内容，建立搜索词覆盖",
+      "累积首个 30 条评论/反馈信号用于校准受众",
+      "目标：100-500 次自然曝光（冷启动阶段）"
+    ],
+    "60日": [
+      "定义 2-3 条内容支柱，产出 8-12 篇内容",
+      "找到 1-2 个高互动选题方向",
+      "开始运营微信公众号沉淀深度案例",
+      "目标：评论区出现自然转化线索（如「哪里可以试用？」）"
+    ],
+    "90日": [
+      "建立可复现的选题-预测-复盘循环",
+      "校准受众 persona 与转化路径",
+      "确认 1-2 个高价值平台进入稳定运营期",
+      "目标：完成至少 1 次完整的「假设→发布→回收→复盘」闭环"
+    ]
+  },
+  "platformRecommendations": [
+    {
+      "platform": "小红书",
+      "reason": "搜索心智强，适合验证「企业数字员工」概念热度+捕获早期反馈",
+      "status": "recommendation",
+      "contentFormat": "图文/幻灯片",
+      "source": "cold-start-reasoning",
+      "confidence": 0.65
+    },
+    {
+      "platform": "微信公众号",
+      "reason": "深度案例与白皮书的最优载体，适合建立投资人可查阅的品牌资产",
+      "status": "recommendation",
+      "contentFormat": "长文章/白皮书/案例",
+      "source": "cold-start-reasoning",
+      "confidence": 0.6
+    },
+    {
+      "platform": "抖音",
+      "reason": "适合数字员工实操演示的短视频传播，但冷启动门槛较高",
+      "status": "secondary",
+      "contentFormat": "1-3分钟演示视频",
+      "source": "cold-start-reasoning",
+      "confidence": 0.45
+    }
+  ],
+  "benchmarkPlan": {
+    "selectionRule": "主动搜索以下关键词在小红书和公众号的 Top 20 内容，识别表现最好的账号",
+    "keywordsHint": [
+      "企业AI助手",
+      "数字员工",
+      "AI Agent 企业应用",
+      "AI自动化办公",
+      "企业效率工具",
+      "扶摇桌面端"
+    ],
+    "sampleTargetPerPlatform": 5,
+    "observationDimensions": [
+      "内容支柱构成",
+      "更新频率",
+      "高互动选题模式",
+      "评论区常见问题与异议",
+      "标题/封面模式"
+    ],
+    "status": "awaiting-signal"
+  },
+  "firstPillars": [
+    {
+      "id": "pillar-1",
+      "name": "概念科普与痛点共鸣",
+      "description": "解释「什么是数字员工」「为什么企业需要数字员工」「部署有多简单」",
+      "targetAudience": "CTO/技术决策者",
+      "contentTypes": ["小红书图文对比帖", "微信长文"],
+      "purpose": "搜索词覆盖+概念教育",
+      "experiments": [
+        "标题A vs 标题B：问题导向 vs 价值导向",
+        "对比式幻灯片 vs 纯文字解读"
+      ]
+    },
+    {
+      "id": "pillar-2",
+      "name": "场景化演示与案例",
+      "description": "展示某类数字员工包能解决的具体业务场景（运营、客服、数据分析）",
+      "targetAudience": "业务负责人/数字化部门",
+      "contentTypes": ["小红书幻灯片流程演示", "抖音短视频"],
+      "purpose": "可信度建立+场景验证",
+      "experiments": [
+        "实拍桌面操作 vs 纯动画/截图演示",
+        "单一场景深挖 vs 多场景概览"
+      ]
+    },
+    {
+      "id": "pillar-3",
+      "name": "行业对比与差异化",
+      "description": "与传统SaaS/自建AI方案对比，突出「人员化聘用+一键部署」的独特价值",
+      "targetAudience": "CEO/投资人",
+      "contentTypes": ["微信深度分析", "小红书观点帖"],
+      "purpose": "建立品类第一认知",
+      "experiments": [
+        "成本对比视角 vs 效率对比视角",
+        "数据驱动 vs 故事驱动"
+      ]
+    }
+  ],
+  "firstCandidates": [
+    {
+      "id": "idea-001",
+      "pillar": "pillar-1",
+      "title": "招一个AI员工只要3分钟？企业数字员工到底是什么",
+      "platform": "小红书",
+      "format": "图文幻灯片（8-10页）",
+      "hypothesis": "用「3分钟」制造认知反差，吸引企业管理者点击",
+      "status": "draft-ready"
+    },
+    {
+      "id": "idea-002",
+      "pillar": "pillar-1",
+      "title": "别再让员工手动填报表了——数字员工能帮你省下80%的时间",
+      "platform": "小红书",
+      "format": "图文幻灯片（6-8页）",
+      "hypothesis": "痛点+数字=高互动，适合验证真实需求强度",
+      "status": "draft-ready"
+    },
+    {
+      "id": "idea-003",
+      "pillar": "pillar-3",
+      "title": "SaaS订阅VS数字员工聘用：企业AI化的两种路径，谁更划算？",
+      "platform": "小红书/微信",
+      "format": "对比式长图",
+      "hypothesis": "品类对比是B端决策者主动搜索的核心场景",
+      "status": "draft-ready"
+    },
+    {
+      "id": "idea-004",
+      "pillar": "pillar-2",
+      "title": "从安装到干活只花了10分钟：我的第一个数字员工体验日记",
+      "platform": "小红书",
+      "format": "第一人称图文笔记",
+      "hypothesis": "体验日记类内容在小红书运营圈有稳定流量，能降低信任门槛",
+      "status": "needs-assets"
+    },
+    {
+      "id": "idea-005",
+      "pillar": "pillar-1",
+      "title": "不是ChatGPT买不起，而是数字员工更有性价比",
+      "platform": "小红书",
+      "format": "段子式观点帖",
+      "hypothesis": "网络热词改编降低冷启动认知门槛，适合测试泛流量反应",
+      "status": "idea-only"
+    }
+  ],
+  "singleVariableExperiments": [
+    {
+      "id": "exp-001",
+      "variable": "标题策略",
+      "variants": ["问题式（「怎么……」）", "数字式（「3分钟/80%……」）", "对比式（「VS……」）"],
+      "measure": "点击率+互动率",
+      "status": "planned"
+    },
+    {
+      "id": "exp-002",
+      "variable": "内容格式",
+      "variants": ["纯图文笔记", "幻灯片图解", "视频录屏"],
+      "measure": "完读率+收藏率",
+      "status": "planned"
+    },
+    {
+      "id": "exp-003",
+      "variable": "发布时段",
+      "variants": ["工作日午间12:00", "工作日早间8:00", "周二/周四晚间20:00"],
+      "measure": "24小时自然曝光量",
+      "status": "planned"
+    }
+  ],
+  "openQuestions": [
+    "有谱是否有自己的小红书/公众号/抖音账号？",
+    "有谱的目标客户以什么规模为主（中小/中大型/两者）？",
+    "有谱的定价模式是订阅制还是按次/按包付费？",
+    "数字员工包的示例品类有哪些？（如：内容运营、数据标注、客户跟进等）",
+    "产品当前处于什么阶段（内测/公测/正式发布）？"
+  ],
+  "externalWriteOccurred": false,
+  "notes": "本次为纯建档案+方案输出，未涉及任何真实账号操作或发布。未读取、写入或修改任何外部平台数据。未触发任何API调用。"
+}

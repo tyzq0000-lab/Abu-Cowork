@@ -22,6 +22,7 @@ import PermissionDialog from '@/components/common/PermissionDialog';
 import CommandConfirmDialog from '@/components/common/CommandConfirmDialog';
 import { ChevronDown, Settings } from 'lucide-react';
 import fuyaoAvatar from '@/assets/fuyao-avatar.png';
+import EmployeeAvatar from '@/components/common/EmployeeAvatar';
 import IMInfoBar from './IMInfoBar';
 import SourceInfoBar from './SourceInfoBar';
 import ComputerUseStatusBar from './ComputerUseStatusBar';
@@ -307,9 +308,9 @@ export default function ChatView() {
             <div className="text-center mb-8">
               {pendingAgentDisplay ? (
                 <>
-                  {/* Agent avatar (emoji in tinted circle) */}
-                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--abu-bg-active)] flex items-center justify-center text-5xl select-none">
-                    {pendingAgentDisplay.avatar}
+                  {/* Agent avatar: image-path avatars render as <img>, emoji as text (EmployeeAvatar handles both) */}
+                  <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--abu-bg-active)] flex items-center justify-center text-5xl select-none overflow-hidden">
+                    <EmployeeAvatar avatar={pendingAgentDisplay.avatar} name={pendingAgentDisplay.name} />
                   </div>
 
                   <h1 className="text-[28px] font-semibold text-[var(--abu-text-primary)] leading-tight mb-2">

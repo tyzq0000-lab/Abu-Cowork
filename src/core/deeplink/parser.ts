@@ -74,7 +74,10 @@ export function isDownloadUrlAllowed(raw: string): boolean {
     return ALLOWED_DOWNLOAD_HOSTS.includes(u.hostname);
   }
   if (u.protocol === 'http:') {
-    return LOCAL_DEV_HOSTS.has(u.hostname);
+    // http allowed for localhost dev, and for explicitly-configured self-hosted
+    // platform hosts (VITE_FUYAO_PACKAGE_HOSTS) — e.g. an on-prem uprow server on
+    // plain http. Opt-in by build env only; never a wildcard.
+    return LOCAL_DEV_HOSTS.has(u.hostname) || configuredDownloadHosts.includes(u.hostname);
   }
   return false;
 }

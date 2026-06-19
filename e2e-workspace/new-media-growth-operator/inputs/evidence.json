@@ -1,0 +1,44 @@
+[
+  {
+    "field": "brand",
+    "value": "有谱平台",
+    "kind": "fact",
+    "source": "user-provided-integration-brief",
+    "confidence": 1
+  },
+  {
+    "field": "niche",
+    "value": "企业数字员工聘用与桌面部署",
+    "kind": "fact",
+    "source": "user-provided-integration-brief",
+    "confidence": 0.95
+  },
+  {
+    "field": "audience",
+    "value": "希望引入数字员工提升业务效率的中国企业管理者",
+    "kind": "inference",
+    "source": "user-provided-integration-brief",
+    "confidence": 0.75
+  },
+  {
+    "field": "platform",
+    "value": "小红书",
+    "kind": "hypothesis",
+    "source": "cold-start-hypothesis",
+    "confidence": 0.55
+  },
+  {
+    "field": "goal",
+    "value": "用可验证的完整部署与首轮工作演示建立投资人信任",
+    "kind": "fact",
+    "source": "user-provided-integration-brief",
+    "confidence": 1
+  },
+  {
+    "field": "constraint",
+    "value": "未获得逐次明确批准前不得执行真实发布",
+    "kind": "fact",
+    "source": "user-provided-integration-brief",
+    "confidence": 1
+  }
+]

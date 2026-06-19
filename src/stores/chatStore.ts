@@ -334,8 +334,12 @@ interface ChatActions {
 
 export type ChatStore = ChatState & ChatActions;
 
-// Monotonic counter to discard stale switchConversation results on rapid clicks
-let switchSeq = 0;
+// Latest switch target — used to discard a stale switchConversation result only
+// when the user has since switched to a *different* conversation. A plain monotonic
+// counter wrongly discarded a switch when a redundant switch to the SAME id bumped it
+// during the async disk load, leaving the right panel stuck on the previous
+// conversation until a second click (the "点员工显示错会话" regression).
+let switchTarget: string | null = null;
 
 export const useChatStore = create<ChatStore>()(
   persist(
@@ -418,7 +422,7 @@ export const useChatStore = create<ChatStore>()(
       },
 
       switchConversation: async (id) => {
-        const seq = ++switchSeq;
+        switchTarget = id;
 
         // Load from disk first if not in memory — ensures data is ready
         // before activeConversationId changes, so React renders only once
@@ -427,8 +431,10 @@ export const useChatStore = create<ChatStore>()(
           await get().loadConversation(id);
         }
 
-        // Discard if user already clicked another conversation while loading
-        if (seq !== switchSeq) return;
+        // Discard only if the user has since switched to a DIFFERENT conversation.
+        // A redundant switch to the SAME id must still land — guarding on a bare
+        // counter discarded it and left the panel stuck on the old conversation.
+        if (switchTarget !== id) return;
 
         set((state) => {
           state.activeConversationId = id;
