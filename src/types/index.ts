@@ -544,6 +544,11 @@ export interface SubagentMetadata {
    *  `.codebuddy-plugin` package under ~/.uprow/employees/. Absent for the
    *  built-in personas and hand-written AGENT.md agents. */
   source?: 'builtin' | 'user' | 'project' | 'employee';
+  /** Execution engine for this agent's tasks (project06 M1). Set by the loader:
+   *  plugin.json packages → `runtime.engine ?? 'native'` (regression-safe);
+   *  ChaWork-format packages (employee.yaml) → 'codex'. The engine router reads
+   *  this to dispatch native loop vs codex sidecar. Absent → treat as 'native'. */
+  engine?: 'codex' | 'native' | 'auto';
 }
 
 export interface SubagentDefinition extends SubagentMetadata {

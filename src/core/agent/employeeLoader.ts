@@ -112,7 +112,10 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
   try {
     rawPlugin = await readTextFile(pluginPath);
   } catch {
-    return null; // not a CodeBuddy package
+    // No plugin.json → try the ChaWork format (employee.yaml + prompt.md + skills).
+    // Both formats reduce to the same substrate (project06 P0-0); dual-manifest
+    // detection is automatic, not a lossy conversion.
+    return loadChaWorkEmployee(pkgDir);
   }
 
   const plugin = parsePluginJson(rawPlugin);
@@ -190,6 +193,9 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
     skills: skills && skills.length > 0 ? skills : undefined,
     memory: plugin.runtime?.memory?.scope ?? 'session',
     source: 'employee',
+    // Engine routing (project06 M1): existing packages omit runtime.engine →
+    // 'native', so the built-in loop keeps running them (regression-safe).
+    engine: plugin.runtime?.engine ?? 'native',
     // Maker-pinned model: conversations with this employee run on its
     // dedicated provider (registered at install time from modelConfig).
     ...(isValidEmployeeModelConfig(plugin.modelConfig)
@@ -198,6 +204,82 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
     systemPrompt,
     filePath: pluginPath,
   };
+}
+
+/** ChaWork-format identity manifest (`employee.yaml`). Engine-agnostic — no
+ *  profession/vertical fields (project06 P0-0 finding). */
+interface ChaWorkEmployeeYaml {
+  id?: string;
+  name?: string;
+  description?: string;
+}
+
+/**
+ * Build a SubagentDefinition from ChaWork-format package parts. PURE (no fs) so
+ * it is unit-testable. ChaWork carries identity in employee.yaml, persona in
+ * prompt.md, and capabilities in skills/-slash-SKILL.md — the same open substrate
+ * our plugin.json packages reduce to. Routed to the codex engine by default.
+ * Returns null on unparseable yaml or a manifest with no id/name.
+ */
+export function buildChaWorkSubagent(
+  rawYaml: string,
+  promptMd: string,
+  skillNames: string[],
+): SubagentDefinition | null {
+  let manifest: ChaWorkEmployeeYaml | null;
+  try {
+    manifest = parseYaml(rawYaml) as ChaWorkEmployeeYaml | null;
+  } catch {
+    return null;
+  }
+  if (!manifest || typeof manifest !== 'object') return null;
+  // Canonical @mention key prefers the stable slug (id), like plugin.json's agentName.
+  const name = manifest.id || manifest.name;
+  if (!name) return null;
+  return {
+    name,
+    description: manifest.description ?? '',
+    ...(manifest.name && manifest.name !== name
+      ? { displayNames: { 'zh-CN': manifest.name } }
+      : {}),
+    skills: skillNames.length > 0 ? skillNames : undefined,
+    memory: 'session',
+    source: 'employee',
+    engine: 'codex',
+    systemPrompt: promptMd.trim(),
+    filePath: '', // set by the fs wrapper below
+  };
+}
+
+/**
+ * Load a ChaWork-format package (employee.yaml + prompt.md + skills/) from disk.
+ * Called as the fallback when a directory has no `.codebuddy-plugin/plugin.json`.
+ * Returns null when it is not a ChaWork package either.
+ */
+export async function loadChaWorkEmployee(pkgDir: string): Promise<SubagentDefinition | null> {
+  const yamlPath = joinPath(pkgDir, 'employee.yaml');
+  let rawYaml: string;
+  try {
+    rawYaml = await readTextFile(yamlPath);
+  } catch {
+    return null;
+  }
+  let promptMd = '';
+  try {
+    promptMd = await readTextFile(joinPath(pkgDir, 'prompt.md'));
+  } catch {
+    // persona optional — keep empty
+  }
+  let skillNames: string[] = [];
+  try {
+    const entries = await readDir(joinPath(pkgDir, 'skills'));
+    skillNames = entries.filter((e) => e.isDirectory).map((e) => e.name);
+  } catch {
+    // no skills dir
+  }
+  const def = buildChaWorkSubagent(rawYaml, promptMd, skillNames);
+  if (def) def.filePath = yamlPath;
+  return def;
 }
 
 /**

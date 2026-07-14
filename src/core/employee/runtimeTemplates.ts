@@ -64,6 +64,10 @@ export function installRuntimeTemplates(
       continue;
     }
 
+    // Manual workflows are run by the user on demand — they are not scheduled
+    // tasks or triggers, so there is nothing to install as background automation.
+    if (template.kind === 'manual') continue;
+
     const store = useTriggerStore.getState();
     const duplicate = Object.values(store.triggers).find(
       (trigger) =>

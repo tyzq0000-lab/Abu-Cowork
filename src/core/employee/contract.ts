@@ -106,10 +106,32 @@ export interface EmployeeTriggerTemplate extends EmployeeWorkflowBase {
   permissions?: TriggerPermissions;
 }
 
-export type EmployeeWorkflowTemplate = EmployeeScheduleTemplate | EmployeeTriggerTemplate;
+/**
+ * A workflow the user runs on demand (no schedule, no external trigger) —
+ * the most basic automation shape. `permissions` is an optional allowlist of
+ * capability tokens the manual run may use.
+ */
+export interface EmployeeManualTemplate extends EmployeeWorkflowBase {
+  kind: 'manual';
+  permissions?: string[];
+}
+
+export type EmployeeWorkflowTemplate =
+  | EmployeeScheduleTemplate
+  | EmployeeTriggerTemplate
+  | EmployeeManualTemplate;
 
 export interface EmployeeRuntimeProfile {
   version: 1;
+  /**
+   * Which execution engine runs this employee's tasks (project06 M1).
+   * - 'native'  — Fuyao's built-in TS agent loop (existing behaviour).
+   * - 'codex'   — embedded Codex engine (sidecar) for file/script/workspace tasks.
+   * - 'auto'    — router decides per task.
+   * Omitted → the router treats the package as 'native', so existing packages
+   * are regression-safe (they never opt into codex implicitly).
+   */
+  engine?: 'codex' | 'native' | 'auto';
   targetMaturity?: 'L2' | 'L3';
   workspace?: EmployeeWorkspaceRequirement;
   onboarding?: EmployeeOnboarding;
@@ -246,6 +268,9 @@ function isWorkflowTemplate(value: unknown): boolean {
     || (value.recommended !== undefined && typeof value.recommended !== 'boolean')
   ) {
     return false;
+  }
+  if (value.kind === 'manual') {
+    return value.permissions === undefined || isStringArray(value.permissions);
   }
   if (value.kind === 'schedule') {
     if (!isRecord(value.schedule)) return false;
@@ -425,6 +450,14 @@ function isSourceCapability(value: unknown): boolean {
 function isRuntimeProfile(value: unknown): value is EmployeeRuntimeProfile {
   if (!isRecord(value) || value.version !== 1) return false;
   if (
+    value.engine !== undefined
+    && value.engine !== 'codex'
+    && value.engine !== 'native'
+    && value.engine !== 'auto'
+  ) {
+    return false;
+  }
+  if (
     value.targetMaturity !== undefined
     && value.targetMaturity !== 'L2'
     && value.targetMaturity !== 'L3'
@@ -469,6 +502,144 @@ function isRuntimeProfile(value: unknown): value is EmployeeRuntimeProfile {
     && (!Array.isArray(value.sources) || !value.sources.every(isSourceCapability))
   ) return false;
   return true;
+}
+
+export interface ContractIssue {
+  code: string;
+  message: string;
+  /** Dotted path to the offending field, e.g. `runtime.budgets`. */
+  path?: string;
+}
+
+/**
+ * Result of the single mandatory contract gate. `ok === true` means the
+ * package is conformant enough to be *listed on the platform / minted* —
+ * i.e. it has no blocking errors. Warnings are advisory (maturity gaps a
+ * maker should close but that don't block listing).
+ */
+export interface ContractValidation {
+  ok: boolean;
+  errors: ContractIssue[];
+  warnings: ContractIssue[];
+  audit: EmployeeAuditReport;
+}
+
+/**
+ * The complete set of top-level keys the runtime contract defines. Any other
+ * key in a shipped `runtime` block is contract drift — a field the platform
+ * never consumes (verified: `capabilityPriority`/`entrySkill`/`budgets` have
+ * zero readers in Fuyao src) yet that four packages each spelled differently.
+ * A single enforced allowlist is what "single mandatory schema" means.
+ */
+const KNOWN_RUNTIME_KEYS: ReadonlySet<string> = new Set([
+  'version', 'engine', 'targetMaturity', 'workspace', 'onboarding', 'memory',
+  'workflows', 'review', 'evolution', 'escalation', 'acceptance',
+  'dependencies', 'authorizations', 'reliability', 'sources',
+]);
+
+// ponytail: substring blocklist, not an SPDX validator. It catches the
+// concrete "license undecided" red flags an enterprise due-diligence pass
+// treats as blocking; upgrade to an SPDX allowlist if makers start gaming it.
+const UNRESOLVED_LICENSE_MARKERS = [
+  'no license', 'not declared', 'absent', 'requires organization review',
+  'placeholder', 'tbd', '未声明', '未确认', '占位', '待确认',
+];
+
+/**
+ * Audit gap codes that block *listing*. Deliberately only the integrity
+ * blockers (identity / agent / skill / runtime present). Maturity gaps
+ * (missing review metrics, ungoverned evolution, thin escalation, no
+ * acceptance cases, incomplete ledger) are surfaced as warnings that drive
+ * the red/yellow/green wizard grade but never hard-block a listing — that
+ * spectrum is what keeps the maker onboarding bar low while still flagging
+ * what enterprise due-diligence actually rejects (drift, undecided license).
+ */
+const LISTING_BLOCKING_GAP_CODES: ReadonlySet<string> = new Set([
+  'INVALID_MANIFEST', 'MISSING_AGENT', 'MISSING_AGENT_FILE',
+  'MISSING_SKILLS', 'MISSING_SKILL_FILE', 'MISSING_RUNTIME_CONTRACT',
+]);
+
+/**
+ * Single mandatory contract gate. Parses the raw plugin.json and returns a
+ * pass/fail verdict the platform uses to decide whether a package may be
+ * listed, and the minting wizard uses to render red/yellow/green.
+ *
+ * It layers three enforcements on top of the existing structural guard and
+ * maturity audit, which were both permissive:
+ *  1. no unknown top-level `runtime` keys (kills contract drift);
+ *  2. every declared open-source `source` carries a *resolved* license;
+ *  3. any blocking maturity gap (missing agent/skill/runtime) blocks listing.
+ */
+export function validatePackageContract(input: {
+  pluginJson: string;
+  files: string[];
+  /**
+   * Block packages whose open-source `sources` carry an undecided license.
+   * Off by default: the founder deferred license-attestation gating on
+   * 2026-07-13 (platform/market too early for that legal-risk step). Flip to
+   * `true` to re-enable the UNRESOLVED_LICENSE gate — the detection logic is
+   * kept live and tested so it's a one-flag switch when that day comes.
+   */
+  enforceLicense?: boolean;
+}): ContractValidation {
+  const errors: ContractIssue[] = [];
+  const warnings: ContractIssue[] = [];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(input.pluginJson);
+  } catch {
+    const audit: EmployeeAuditReport = {
+      level: 'L0', targetLevel: 'L3', score: 0,
+      gaps: [], capabilityLedger: [],
+    };
+    errors.push({ code: 'INVALID_JSON', message: 'plugin.json 不是合法 JSON' });
+    return { ok: false, errors, warnings, audit };
+  }
+
+  const manifest = isRecord(parsed) ? (parsed as EmployeePluginManifest) : null;
+  const audit = auditEmployeePackage({ manifest, files: input.files });
+
+  if (!manifest || !(manifest.agentName || manifest.name)) {
+    errors.push({ code: 'INVALID_MANIFEST', message: '缺少可识别的 plugin.json 或员工标识' });
+    return { ok: false, errors, warnings, audit };
+  }
+
+  const rawRuntime = (parsed as { runtime?: unknown }).runtime;
+  // MISSING_RUNTIME_CONTRACT is emitted by auditEmployeePackage below (and
+  // routed to errors via LISTING_BLOCKING_GAP_CODES) — don't double-count it.
+  if (rawRuntime !== undefined && (!isRuntimeProfile(rawRuntime) || !isRecord(rawRuntime))) {
+    errors.push({ code: 'MALFORMED_RUNTIME', message: 'runtime 结构不符合强制 schema' });
+  } else if (rawRuntime !== undefined && isRecord(rawRuntime)) {
+    for (const key of Object.keys(rawRuntime)) {
+      if (!KNOWN_RUNTIME_KEYS.has(key)) {
+        errors.push({
+          code: 'UNKNOWN_RUNTIME_KEY',
+          message: `runtime 含未定义字段（契约漂移）：${key}`,
+          path: `runtime.${key}`,
+        });
+      }
+    }
+    if (input.enforceLicense && Array.isArray(rawRuntime.sources)) {
+      for (const source of rawRuntime.sources as EmployeeSourceCapability[]) {
+        const lic = (source.license ?? '').toLowerCase();
+        if (!lic.trim() || UNRESOLVED_LICENSE_MARKERS.some((m) => lic.includes(m))) {
+          errors.push({
+            code: 'UNRESOLVED_LICENSE',
+            message: `开源来源许可证未决，需 maker 确认权利：${source.name}`,
+            path: `runtime.sources.${source.name}`,
+          });
+        }
+      }
+    }
+  }
+
+  for (const gap of audit.gaps) {
+    const target = LISTING_BLOCKING_GAP_CODES.has(gap.code) ? errors : warnings;
+    target.push({ code: gap.code, message: gap.message });
+  }
+
+  return { ok: errors.length === 0, errors, warnings, audit };
 }
 
 /** Provider id for an employee's dedicated (modelConfig-injected) provider. */
