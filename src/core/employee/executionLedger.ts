@@ -123,18 +123,24 @@ export function isReportableEmployee(agentName: string | undefined): boolean {
 
 /**
  * Best-effort POST to the platform ledger. No-op (returns 'skipped') when no
- * endpoint is configured — this is the opt-in gate. Never throws.
+ * endpoint is configured — this is the opt-in gate. Sends `Authorization:
+ * Bearer <token>` when a token is set, matching the platform's fail-closed
+ * ingest gate. Never throws.
  */
 export async function reportToPlatformLedger(
   entry: EmployeeExecutionLedgerEntry,
   endpoint: string | undefined,
-  fetchImpl: typeof fetch = fetch,
+  opts: { token?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<LedgerReportResult> {
   if (!endpoint || !endpoint.trim()) return 'skipped';
+  const fetchImpl = opts.fetchImpl ?? fetch;
   try {
     const res = await fetchImpl(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(opts.token?.trim() ? { Authorization: `Bearer ${opts.token}` } : {}),
+      },
       body: JSON.stringify(entry),
     });
     return res.ok ? 'sent' : 'failed';
@@ -180,7 +186,9 @@ export function startExecutionLedger(): () => void {
   if (started) return () => {};
   started = true;
   const report = (entry: EmployeeExecutionLedgerEntry) =>
-    reportToPlatformLedger(entry, import.meta.env.VITE_PLATFORM_LEDGER_ENDPOINT as string | undefined);
+    reportToPlatformLedger(entry, import.meta.env.VITE_PLATFORM_LEDGER_ENDPOINT as string | undefined, {
+      token: import.meta.env.VITE_PLATFORM_LEDGER_TOKEN as string | undefined,
+    });
   const unregister = initExecutionLedger({
     record: (entry) => {
       useLedgerStore.getState().append(entry);

@@ -87,18 +87,25 @@ describe('reportToPlatformLedger', () => {
 
   it('is opt-in: no endpoint => skipped, fetch never called', async () => {
     const f = vi.fn();
-    expect(await reportToPlatformLedger(entry, undefined, f as unknown as typeof fetch)).toBe('skipped');
-    expect(await reportToPlatformLedger(entry, '   ', f as unknown as typeof fetch)).toBe('skipped');
+    expect(await reportToPlatformLedger(entry, undefined, { fetchImpl: f as unknown as typeof fetch })).toBe('skipped');
+    expect(await reportToPlatformLedger(entry, '   ', { fetchImpl: f as unknown as typeof fetch })).toBe('skipped');
     expect(f).not.toHaveBeenCalled();
   });
 
   it('sent on ok, failed on non-ok, failed on throw', async () => {
     const ok = vi.fn().mockResolvedValue({ ok: true });
-    expect(await reportToPlatformLedger(entry, 'https://p/ledger', ok as unknown as typeof fetch)).toBe('sent');
+    expect(await reportToPlatformLedger(entry, 'https://p/ledger', { fetchImpl: ok as unknown as typeof fetch })).toBe('sent');
     const bad = vi.fn().mockResolvedValue({ ok: false });
-    expect(await reportToPlatformLedger(entry, 'https://p/ledger', bad as unknown as typeof fetch)).toBe('failed');
+    expect(await reportToPlatformLedger(entry, 'https://p/ledger', { fetchImpl: bad as unknown as typeof fetch })).toBe('failed');
     const boom = vi.fn().mockRejectedValue(new Error('offline'));
-    expect(await reportToPlatformLedger(entry, 'https://p/ledger', boom as unknown as typeof fetch)).toBe('failed');
+    expect(await reportToPlatformLedger(entry, 'https://p/ledger', { fetchImpl: boom as unknown as typeof fetch })).toBe('failed');
+  });
+
+  it('sends Authorization: Bearer when a token is configured', async () => {
+    const f = vi.fn().mockResolvedValue({ ok: true });
+    await reportToPlatformLedger(entry, 'https://p/ledger', { token: 'secret', fetchImpl: f as unknown as typeof fetch });
+    const headers = (f.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer secret');
   });
 });
 
