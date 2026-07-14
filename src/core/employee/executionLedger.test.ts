@@ -4,10 +4,12 @@ import {
   reportToPlatformLedger,
   isReportableEmployee,
   initExecutionLedger,
+  resolveEmployeeId,
   LEDGER_SCHEMA_VERSION,
   type EmployeeExecutionLedgerEntry,
 } from './executionLedger';
 import { emitHook, clearAllHooks, type AgentEndEvent } from '../agent/lifecycleHooks';
+import type { EmployeeDeploymentRecord } from '@/stores/employeeDeploymentStore';
 import type { TaskExecution, ExecutionStep, StepType } from '@/types/execution';
 
 function step(type: StepType, over: Partial<ExecutionStep> = {}): ExecutionStep {
@@ -71,6 +73,39 @@ describe('buildLedgerEntry', () => {
     expect(e.tokenUsage).toEqual({ inputTokens: 0, outputTokens: 0 });
     expect(e.steps.total).toBe(0);
   });
+
+  it('carries the platform employee id when provided, omits the key otherwise', () => {
+    expect(buildLedgerEntry(endEvent(), undefined, 'emp_123').employeeId).toBe('emp_123');
+    expect('employeeId' in buildLedgerEntry(endEvent(), undefined)).toBe(false);
+  });
+});
+
+describe('resolveEmployeeId (agentName → platform id via deployment records)', () => {
+  const dep = (over: Partial<EmployeeDeploymentRecord>): EmployeeDeploymentRecord => ({
+    packageId: 'pkg', agentName: 'growth-operator', workspacePath: null, configuredAt: 1, ...over,
+  });
+
+  it('resolves the id recorded at deep-link deployment', () => {
+    const deployments = {
+      pkgA: dep({ packageId: 'pkgA', employeeId: 'emp_123' }),
+      pkgB: dep({ packageId: 'pkgB', agentName: 'other-agent', employeeId: 'emp_999' }),
+    };
+    expect(resolveEmployeeId('growth-operator', deployments)).toBe('emp_123');
+  });
+
+  it('prefers the most recently configured record with an id', () => {
+    const deployments = {
+      old: dep({ packageId: 'old', employeeId: 'emp_old', configuredAt: 1 }),
+      neu: dep({ packageId: 'neu', employeeId: 'emp_new', configuredAt: 2 }),
+      noid: dep({ packageId: 'noid', configuredAt: 3 }), // manual install: no id, never wins
+    };
+    expect(resolveEmployeeId('growth-operator', deployments)).toBe('emp_new');
+  });
+
+  it('undefined for unknown agents or id-less deployments', () => {
+    expect(resolveEmployeeId('growth-operator', {})).toBeUndefined();
+    expect(resolveEmployeeId('growth-operator', { p: dep({}) })).toBeUndefined();
+  });
 });
 
 describe('isReportableEmployee', () => {
@@ -123,6 +158,17 @@ describe('initExecutionLedger (agentEnd hook wiring)', () => {
     const entry = record.mock.calls[0][0] as EmployeeExecutionLedgerEntry;
     expect(entry.employeeName).toBe('growth-operator');
     expect(entry.tokenUsage.inputTokens).toBe(10);
+  });
+
+  it('stamps the resolved platform employee id onto the entry', async () => {
+    const record = vi.fn();
+    initExecutionLedger({
+      record,
+      getExecution: () => execution(),
+      resolveEmployeeId: (name) => (name === 'growth-operator' ? 'emp_123' : undefined),
+    });
+    await emitHook(endEvent());
+    expect((record.mock.calls[0][0] as EmployeeExecutionLedgerEntry).employeeId).toBe('emp_123');
   });
 
   it('does not record the built-in assistant', async () => {

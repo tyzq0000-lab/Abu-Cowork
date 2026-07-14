@@ -20,6 +20,7 @@
 import { registerHook, type AgentEndEvent } from '../agent/lifecycleHooks';
 import { useTaskExecutionStore } from '@/stores/taskExecutionStore';
 import { useLedgerStore } from '@/stores/ledgerStore';
+import { useEmployeeDeploymentStore, type EmployeeDeploymentRecord } from '@/stores/employeeDeploymentStore';
 import { getBaseName } from '@/utils/pathUtils';
 import type { TaskExecution, ExecutionStep, StepType } from '@/types/execution';
 
@@ -33,6 +34,14 @@ export const DEFAULT_ASSISTANT_NAME = 'abu';
 export interface EmployeeExecutionLedgerEntry {
   schemaVersion: number;
   employeeName: string;
+  /**
+   * Platform employee record id (employees.id) — the cross-end join key that
+   * lets the platform attribute this run to a hire (hires.employee_id) instead
+   * of fuzzy-matching by name. Present only for employees deployed via the
+   * platform deep link (fuyao://install?employeeId=...); manual installs have
+   * no platform identity and are simply not enterprise-attributable.
+   */
+  employeeId?: string;
   loopId: string;
   conversationId: string;
   /** Loop exit reason (end_turn / max_turns / error / aborted / ...). */
@@ -64,13 +73,33 @@ function extractPath(input: Record<string, unknown>): string | undefined {
 }
 
 /**
+ * Resolve a run's platform employee id from the deployment records the deep
+ * link install persisted (agentName ↔ employeeId). Pure — deployments passed
+ * in. When several packages deployed the same agent name, the most recently
+ * configured record with an id wins.
+ */
+export function resolveEmployeeId(
+  agentName: string,
+  deployments: Record<string, EmployeeDeploymentRecord>,
+): string | undefined {
+  let best: EmployeeDeploymentRecord | undefined;
+  for (const record of Object.values(deployments)) {
+    if (record.agentName !== agentName || !record.employeeId) continue;
+    if (!best || record.configuredAt > best.configuredAt) best = record;
+  }
+  return best?.employeeId;
+}
+
+/**
  * Build a desensitized ledger entry from a completed run. Pure — no I/O.
  * `execution` may be undefined if the run record was already evicted; the entry
- * still captures identity, outcome and timing from the event.
+ * still captures identity, outcome and timing from the event. `employeeId` is
+ * the platform join key (optional — absent for non-platform installs).
  */
 export function buildLedgerEntry(
   event: AgentEndEvent,
   execution: TaskExecution | undefined,
+  employeeId?: string,
 ): EmployeeExecutionLedgerEntry {
   const steps: ExecutionStep[] = execution?.steps ?? [];
 
@@ -98,6 +127,7 @@ export function buildLedgerEntry(
   return {
     schemaVersion: LEDGER_SCHEMA_VERSION,
     employeeName: event.agentName,
+    ...(employeeId ? { employeeId } : {}),
     loopId: event.loopId,
     conversationId: event.conversationId ?? '',
     outcome: event.reason,
@@ -159,14 +189,18 @@ export function initExecutionLedger(opts: {
   record: (entry: EmployeeExecutionLedgerEntry) => void | Promise<void>;
   getExecution?: (loopId: string) => TaskExecution | undefined;
   isReportable?: (agentName: string | undefined) => boolean;
+  resolveEmployeeId?: (agentName: string) => string | undefined;
 }): () => void {
   const getExecution =
     opts.getExecution ?? ((loopId: string) => useTaskExecutionStore.getState().getExecutionByLoopId(loopId));
   const reportable = opts.isReportable ?? isReportableEmployee;
+  const resolveId =
+    opts.resolveEmployeeId
+    ?? ((agentName: string) => resolveEmployeeId(agentName, useEmployeeDeploymentStore.getState().deployments));
 
   return registerHook<AgentEndEvent>('agentEnd', async (event) => {
     if (!reportable(event.agentName)) return;
-    const entry = buildLedgerEntry(event, getExecution(event.loopId));
+    const entry = buildLedgerEntry(event, getExecution(event.loopId), resolveId(event.agentName));
     await opts.record(entry);
   });
 }
