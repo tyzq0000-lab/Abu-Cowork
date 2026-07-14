@@ -632,6 +632,16 @@ export function getAllEnabledModels(state: SettingsState): Array<{
     .flatMap(p => p.models.map(m => ({ provider: p, model: m })));
 }
 
+/**
+ * Providers the AI-services settings UI may show. Employee-injected providers
+ * are excluded: the company user must never see the maker's model name or
+ * endpoint (see ProviderSource in types/provider.ts). Same `source !==
+ * 'employee'` gate as getAllEnabledModels and active-provider routing.
+ */
+export function selectUserProviders(providers: ProviderInstance[]): ProviderInstance[] {
+  return providers.filter(p => p.source !== 'employee');
+}
+
 // ============================================================
 // Employee dedicated providers (modelConfig injection)
 // ============================================================

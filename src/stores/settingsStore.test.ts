@@ -4,6 +4,7 @@ import {
   hasUsableEmployeeProvider,
   reconcileActiveProvider,
   resolveAgentExecution,
+  selectUserProviders,
   useSettingsStore,
 } from './settingsStore';
 import type { ProviderInstance, ActiveModel } from '@/types/provider';
@@ -461,6 +462,18 @@ describe('employee dedicated providers (modelConfig injection)', () => {
     // Hidden from the model selector and never the global active provider.
     expect(getAllEnabledModels(state).some((e) => e.provider.id === id)).toBe(false);
     expect(state.activeModel.providerId).toBe('global');
+  });
+
+  it('selectUserProviders hides the employee provider from the AI-services UI', () => {
+    // Regression: employee providers are enabled:true, so a naive
+    // `userAdded || enabled || apiKey` filter would render their card and
+    // leak the maker's model name / endpoint. AIServicesSection must derive
+    // its list from selectUserProviders, which drops source === 'employee'.
+    const id = useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', MODEL_CONFIG);
+    const { providers } = useSettingsStore.getState();
+    const visible = selectUserProviders(providers);
+    expect(visible.some((p) => p.id === id)).toBe(false);
+    expect(visible.some((p) => p.id === 'global')).toBe(true);
   });
 
   it('upsertEmployeeProvider is idempotent per employee (replaces, no duplicates)', () => {

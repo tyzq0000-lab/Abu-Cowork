@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSettingsStore } from '@/stores/settingsStore';
+import { useSettingsStore, selectUserProviders } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
 import { Plus, CircleCheck, CircleAlert, ChevronDown, Globe, ImageIcon, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,8 +18,14 @@ export default function AIServicesSection() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // Employee-injected providers are hidden from this UI (see ProviderSource
+  // contract): the company user must never see the maker's model name or
+  // endpoint. Filter once, up front, so every derived view — cards, enabled
+  // count, capability attribution — stays consistent.
+  const userProviders = selectUserProviders(providers);
+
   // Check if any enabled provider has builtin capabilities
-  const enabledProviders = providers.filter(p => p.enabled);
+  const enabledProviders = userProviders.filter(p => p.enabled);
   const hasBuiltinSearch = enabledProviders.some(p => !!p.capabilities?.webSearch);
   const hasBuiltinImageGen = enabledProviders.some(p => !!p.capabilities?.imageGen);
   const searchProviderName = enabledProviders.find(p => !!p.capabilities?.webSearch)?.name;
@@ -33,7 +39,7 @@ export default function AIServicesSection() {
   // Toggling off or clearing the key MUST NOT remove the card — the user
   // reads disappearance as accidental deletion. Only the trash-can action
   // (handleDeleteConfirm) hides a builtin provider, by clearing userAdded.
-  const visibleProviders = providers
+  const visibleProviders = userProviders
     .filter(p => p.userAdded || p.enabled || p.apiKey.trim().length > 0)
     .sort((a, b) => {
       if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
