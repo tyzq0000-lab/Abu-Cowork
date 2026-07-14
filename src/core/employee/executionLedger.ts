@@ -19,6 +19,7 @@
  */
 import { registerHook, type AgentEndEvent } from '../agent/lifecycleHooks';
 import { useTaskExecutionStore } from '@/stores/taskExecutionStore';
+import { useLedgerStore } from '@/stores/ledgerStore';
 import { getBaseName } from '@/utils/pathUtils';
 import type { TaskExecution, ExecutionStep, StepType } from '@/types/execution';
 
@@ -143,13 +144,14 @@ export async function reportToPlatformLedger(
 }
 
 /**
- * Register the ledger on the `agentEnd` hook. Returns an unregister function.
+ * Register the ledger on the `agentEnd` hook. On each completed employee run it
+ * builds a desensitized entry and hands it to `record` (the durable ledger
+ * store owns persistence + reporting + retry). Returns an unregister function.
  * Dependencies are injectable for testing; defaults wire the real store.
  */
 export function initExecutionLedger(opts: {
-  getEndpoint: () => string | undefined;
+  record: (entry: EmployeeExecutionLedgerEntry) => void | Promise<void>;
   getExecution?: (loopId: string) => TaskExecution | undefined;
-  fetchImpl?: typeof fetch;
   isReportable?: (agentName: string | undefined) => boolean;
 }): () => void {
   const getExecution =
@@ -159,26 +161,38 @@ export function initExecutionLedger(opts: {
   return registerHook<AgentEndEvent>('agentEnd', async (event) => {
     if (!reportable(event.agentName)) return;
     const entry = buildLedgerEntry(event, getExecution(event.loopId));
-    await reportToPlatformLedger(entry, opts.getEndpoint(), opts.fetchImpl);
+    await opts.record(entry);
   });
 }
 
 let started = false;
+/** Retry pending ledger records every 5 minutes (transient failure / late config). */
+export const RETRY_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * Default startup wiring. Opt-in via VITE_PLATFORM_LEDGER_ENDPOINT (unset =
- * no-op, mirroring the Langfuse observability pattern). Idempotent.
+ * reports are skipped but records still accrue locally, mirroring the Langfuse
+ * observability pattern). Idempotent.
  * ponytail: env-based endpoint for now; move to platform key-custody config
  * (Q1) when the relay is built.
  */
 export function startExecutionLedger(): () => void {
   if (started) return () => {};
   started = true;
+  const report = (entry: EmployeeExecutionLedgerEntry) =>
+    reportToPlatformLedger(entry, import.meta.env.VITE_PLATFORM_LEDGER_ENDPOINT as string | undefined);
   const unregister = initExecutionLedger({
-    getEndpoint: () => import.meta.env.VITE_PLATFORM_LEDGER_ENDPOINT as string | undefined,
+    record: (entry) => {
+      useLedgerStore.getState().append(entry);
+      void useLedgerStore.getState().flush(report);
+    },
   });
+  // Flush anything persisted from a previous session, then retry periodically.
+  void useLedgerStore.getState().flush(report);
+  const interval = setInterval(() => void useLedgerStore.getState().flush(report), RETRY_INTERVAL_MS);
   return () => {
     started = false;
+    clearInterval(interval);
     unregister();
   };
 }

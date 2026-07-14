@@ -105,39 +105,23 @@ describe('reportToPlatformLedger', () => {
 describe('initExecutionLedger (agentEnd hook wiring)', () => {
   beforeEach(() => clearAllHooks());
 
-  it('POSTs an employee run to the configured endpoint', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+  it('hands an employee run to the record sink', async () => {
+    const record = vi.fn();
     initExecutionLedger({
-      getEndpoint: () => 'https://p/ledger',
+      record,
       getExecution: () => execution({ usage: { inputTokens: 10, outputTokens: 5 } }),
-      fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     await emitHook(endEvent());
-    expect(fetchImpl).toHaveBeenCalledOnce();
-    const body = JSON.parse((fetchImpl.mock.calls[0][1] as RequestInit).body as string);
-    expect(body.employeeName).toBe('growth-operator');
-    expect(body.tokenUsage.inputTokens).toBe(10);
+    expect(record).toHaveBeenCalledOnce();
+    const entry = record.mock.calls[0][0] as EmployeeExecutionLedgerEntry;
+    expect(entry.employeeName).toBe('growth-operator');
+    expect(entry.tokenUsage.inputTokens).toBe(10);
   });
 
-  it('does not report the built-in assistant', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
-    initExecutionLedger({
-      getEndpoint: () => 'https://p/ledger',
-      getExecution: () => execution(),
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
+  it('does not record the built-in assistant', async () => {
+    const record = vi.fn();
+    initExecutionLedger({ record, getExecution: () => execution() });
     await emitHook(endEvent({ agentName: 'abu' }));
-    expect(fetchImpl).not.toHaveBeenCalled();
-  });
-
-  it('no endpoint configured => no network call', async () => {
-    const fetchImpl = vi.fn();
-    initExecutionLedger({
-      getEndpoint: () => undefined,
-      getExecution: () => execution(),
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-    });
-    await emitHook(endEvent());
-    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(record).not.toHaveBeenCalled();
   });
 });
