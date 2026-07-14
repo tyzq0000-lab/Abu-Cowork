@@ -13,6 +13,7 @@ import RightPanel from '@/components/panel/RightPanel';
 import ToastContainer from '@/components/common/ToastContainer';
 import { registerBuiltinTools } from '@/core/tools/builtins';
 import { installLargeWriteGuard } from '@/core/agent/hooks/largeWriteGuard';
+import { startExecutionLedger } from '@/core/employee/executionLedger';
 import { initPlatform } from '@/utils/platform';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
@@ -211,6 +212,7 @@ function App() {
   useEffect(() => {
     registerBuiltinTools();
     installLargeWriteGuard();
+    startExecutionLedger();
     refreshDiscovery();
 
     // Surface the one-shot ~/.abu -> ~/.uprow migration failure (rare):
