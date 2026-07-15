@@ -1,6 +1,6 @@
 [package]
 name = "fuyao"
-version = "0.23.1"
+version = "0.23.2"
 description = "扶摇 (Fuyao) - AI Desktop Assistant · uprow"
 authors = ["you"]
 edition = "2021"
@@ -39,6 +39,16 @@ base64 = "0.22"
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 rusqlite = { version = "0.31", features = ["bundled"] }
+# HTML preview HTTP server (loopback-only file server for sandboxed iframe).
+# WKWebView blocks asset:// sub-resources from sandboxed iframes, so HTML
+# previews go through axum on 127.0.0.1:rand_port. See preview_server.rs.
+axum = { version = "0.7", default-features = false, features = ["http1", "tokio"] }
+tower = "0.5"
+mime_guess = "2"
+uuid = { version = "1", features = ["v4"] }
+urlencoding = "2"
+subtle = "2.5"
+tokio-util = { version = "0.7", features = ["io"] }
 
 # Desktop-only: forward a second launch's argv (e.g. clicking a fuyao:// link
 # while the app is running) to the primary instance; the deep-link feature

@@ -24,6 +24,7 @@ mod notice;
 mod notice_db;
 mod sleep_prevention;
 mod clipboard_files;
+mod preview_server;
 
 /// Maximum number of output lines to collect from a shell command.
 /// Prevents OOM when commands produce unbounded output.
@@ -1352,6 +1353,15 @@ pub fn run() {
                 }
             }
 
+            // Start the HTML preview HTTP server (loopback). Bind is fast (<10ms);
+            // failure here means previews degrade but app continues.
+            match tauri::async_runtime::block_on(preview_server::start()) {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("[preview_server] start failed: {}. HTML preview will be unavailable.", e);
+                }
+            }
+
             // Build tray menu — bilingual labels for cross-locale compatibility
             let show_item = MenuItem::with_id(app, "show", "Show Fuyao / 显示窗口", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quit / 退出", true, None::<&str>)?;
@@ -1467,7 +1477,10 @@ pub fn run() {
             atomic_write::restore_from_backup,
             atomic_write::cleanup_old_backups,
             sleep_prevention::set_prevent_sleep,
-            clipboard_files::read_clipboard_file_paths
+            clipboard_files::read_clipboard_file_paths,
+            preview_server::get_preview_server_info,
+            preview_server::register_preview_root,
+            preview_server::unregister_preview_root,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
