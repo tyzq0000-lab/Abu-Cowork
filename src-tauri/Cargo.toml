@@ -1,6 +1,6 @@
 [package]
 name = "fuyao"
-version = "0.23.2"
+version = "0.24.0"
 description = "扶摇 (Fuyao) - AI Desktop Assistant · uprow"
 authors = ["you"]
 edition = "2021"

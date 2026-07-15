@@ -2,6 +2,31 @@
 
 本文档记录阿布的每次版本更新。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
+## v0.24.0 · 2026-07-16 — 平台托管运行时 + 执行账本全链路
+
+### ✨ Features
+
+- 🏢 **平台托管运行时闭环**：企业在 uprow 平台一键部署数字员工到扶摇，设备绑定 + 企业隔离，支持暂停/恢复/单设备撤销 (platform-managed runtime)
+- ✅ **Review Queue 人在环审批**：对外与敏感动作先审后行，三态审批视图 (human-in-the-loop approvals)
+- 📒 **执行回传账本全链路**：任务完成即产脱敏账目 → 本地耐久留存 + 离线重试 → 平台账本，携带 employee_id 支撑企业隔离视图 (execution ledger)
+- 🚪 **员工包单一强制契约门** `validatePackageContract` + `manual` 工作流类型 (package contract gate)
+- 🔐 CI 发布注入平台/员工包域名白名单 (release host allowlists)
+
+### 🐛 Fixes
+
+- HTML 预览改走 loopback HTTP 服务，子资源加载不再失败 (preview via loopback server)
+- 企业端不再可见 maker 注入的模型 provider（模型名/endpoint 隐藏）
+- 欢迎页人设按当前会话绑定 agent 解析；员工头像渲染与切会话竞态修复
+
+### ⚠️ 升级说明
+
+- **更新器签名密钥已轮换**：0.23.x 无法自动升级到本版，需手动下载安装一次，此后恢复自动更新 (updater key rotated — one manual install required)
+- 产品名与产物文件名标准化为 ASCII "Fuyao"
+
+### English Summary
+
+Platform-managed runtime loop (one-click deploy from uprow, device binding, per-enterprise isolation, pause/resume/revoke), human-in-the-loop Review Queue, full execution-ledger pipeline with employee_id attribution, mandatory package contract gate, and preview loopback fix. Updater signing key rotated — one manual install required when coming from 0.23.x.
+
 ## v0.13.5 · 2026-04-24
 
 ### 修复

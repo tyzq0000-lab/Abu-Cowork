@@ -112,12 +112,14 @@ jobs:
             else
               ARCH_SUFFIX="x64"
             fi
-            cp "$BUNDLE"/macos/Abu.app.tar.gz "$BUNDLE"/macos/Abu_${ARCH_SUFFIX}.app.tar.gz
-            cp "$BUNDLE"/macos/Abu.app.tar.gz.sig "$BUNDLE"/macos/Abu_${ARCH_SUFFIX}.app.tar.gz.sig
+            # productName-agnostic: glob the built .app.tar.gz instead of hardcoding
+            APP_TGZ=$(ls "$BUNDLE"/macos/*.app.tar.gz | head -1)
+            cp "$APP_TGZ" "$BUNDLE"/macos/Fuyao_${ARCH_SUFFIX}.app.tar.gz
+            cp "$APP_TGZ.sig" "$BUNDLE"/macos/Fuyao_${ARCH_SUFFIX}.app.tar.gz.sig
 
             gh release upload "$TAG" "$BUNDLE"/dmg/*.dmg --clobber || true
-            gh release upload "$TAG" "$BUNDLE"/macos/Abu_${ARCH_SUFFIX}.app.tar.gz --clobber
-            gh release upload "$TAG" "$BUNDLE"/macos/Abu_${ARCH_SUFFIX}.app.tar.gz.sig --clobber
+            gh release upload "$TAG" "$BUNDLE"/macos/Fuyao_${ARCH_SUFFIX}.app.tar.gz --clobber
+            gh release upload "$TAG" "$BUNDLE"/macos/Fuyao_${ARCH_SUFFIX}.app.tar.gz.sig --clobber
           else
             # Tauri 2 signs the NSIS .exe installer directly (not a separate .nsis.zip).
             # The .exe is both the installer and the updater bundle.
