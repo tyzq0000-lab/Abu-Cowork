@@ -55,6 +55,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           RAW_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           VITE_CONSOLE_URL: ${{ secrets.VITE_CONSOLE_URL }}
+          VITE_FUYAO_PACKAGE_HOSTS: ${{ secrets.VITE_FUYAO_PACKAGE_HOSTS }}
+          VITE_UPROW_PLATFORM_HOSTS: ${{ secrets.VITE_UPROW_PLATFORM_HOSTS }}
         shell: bash
         run: |
           # Write signing key to file. GitHub Secrets injection or shell expansion
