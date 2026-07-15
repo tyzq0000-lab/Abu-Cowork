@@ -12,6 +12,7 @@ import { checkProviderHealth, type HealthCheckResult } from '@/core/llm/healthCh
 import { getI18n } from '@/i18n';
 import { mapAIServiceError } from '../errorMap';
 import type { CheckResult } from '../types';
+import type { ProviderInstance } from '@/types/provider';
 
 /**
  * Per-provider timeout. `checkProviderHealth` for non-ollama providers calls
@@ -29,6 +30,13 @@ function withTimeout(p: Promise<HealthCheckResult>, ms: number): Promise<HealthC
       setTimeout(() => resolve({ success: false, latencyMs: ms, error: `timeout (${ms}ms)` }), ms),
     ),
   ]);
+}
+
+export function checkProviderHealthWithTimeout(
+  provider: ProviderInstance,
+  timeoutMs = PROVIDER_TIMEOUT_MS,
+): Promise<HealthCheckResult> {
+  return withTimeout(checkProviderHealth(provider), timeoutMs);
 }
 
 export async function runAIServicesChecks(): Promise<CheckResult[]> {
@@ -70,7 +78,7 @@ export async function runAIServicesChecks(): Promise<CheckResult[]> {
         };
       }
 
-      const result = await withTimeout(checkProviderHealth(p), PROVIDER_TIMEOUT_MS);
+      const result = await checkProviderHealthWithTimeout(p);
       if (result.success) {
         return {
           id,

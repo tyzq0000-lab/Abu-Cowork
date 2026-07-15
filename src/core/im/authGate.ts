@@ -79,7 +79,7 @@ export function getCallbacksForLevel(level: IMCapabilityLevel): {
       };
     case 'full':
       return {
-        commandConfirmCallback: async () => true,
+        commandConfirmCallback: async (info) => info.kind !== 'external-action',
         filePermissionCallback: async () => true,
       };
   }

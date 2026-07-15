@@ -125,6 +125,11 @@ export function classifyError(statusCode: number, rawBody: string): LLMError {
 
   // Rate limiting
   if (statusCode === 429) {
+    if (rawBody.includes('uprow_daily_quota_exceeded')) {
+      return new LLMError(message, 'rate_limit', {
+        retryable: false, statusCode, rawBody: stored,
+      });
+    }
     const retryAfter = extractRetryAfter(message);
     return new LLMError(message, 'rate_limit', {
       retryable: true, retryAfterMs: retryAfter, statusCode, rawBody: stored,

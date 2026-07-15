@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
 import {
   parsePluginJson,
+  parseEmployeeDreamConfig,
   isImageAvatarPath,
   loadEmployeePackage,
   scanEmployees,
@@ -73,6 +74,44 @@ describe('employeeLoader', () => {
     });
   });
 
+  describe('parseEmployeeDreamConfig', () => {
+    it('accepts the portable daily/manual Dream subset', () => {
+      expect(parseEmployeeDreamConfig(`enabled: true\nschedule: daily\nsession_scan:\n  scope: employee\n  max_sessions: 8`))
+        .toEqual({ enabled: true, schedule: 'daily', sessionScan: { maxSessions: 8 } });
+    });
+
+    it('rejects invalid schedules and unbounded session scans', () => {
+      expect(parseEmployeeDreamConfig('enabled: true\nschedule: hourly')).toBeNull();
+      expect(parseEmployeeDreamConfig('enabled: true\nschedule: daily\nsession_scan:\n  max_sessions: 100'))
+        .toBeNull();
+      expect(parseEmployeeDreamConfig('enabled: true\nschedule: daily\nsession_scan:\n  scope: workspace'))
+        .toBeNull();
+    });
+
+    it('normalizes ChaWork Dream settings without widening employee memory scope', () => {
+      expect(parseEmployeeDreamConfig(`enabled: true
+schedule:
+  type: daily
+  time: "03:30"
+session_scan:
+  scope: selected
+  workspace_subset:
+    - /tmp/research
+  latest_sessions: 3`)).toEqual({
+        enabled: true,
+        schedule: 'daily',
+        sessionScan: { maxSessions: 3 },
+      });
+    });
+
+    it('rejects malformed ChaWork Dream settings', () => {
+      expect(parseEmployeeDreamConfig('enabled: true\nschedule:\n  type: weekly')).toBeNull();
+      expect(parseEmployeeDreamConfig('enabled: true\nschedule:\n  type: daily\n  time: "25:00"')).toBeNull();
+      expect(parseEmployeeDreamConfig('enabled: true\nschedule:\n  type: daily\nsession_scan:\n  latest_sessions: 100'))
+        .toBeNull();
+    });
+  });
+
   describe('isImageAvatarPath', () => {
     it('detects image extensions', () => {
       expect(isImageAvatarPath('avatars/expert.png')).toBe(true);
@@ -133,6 +172,12 @@ describe('employeeLoader', () => {
             scope: 'project',
             autoCapture: ['feedback', 'failure'],
           },
+          evolution: {
+            memoryWrites: 'approval',
+            capabilityChanges: 'approval',
+            workflowChanges: 'approval',
+            triggerChanges: 'approval',
+          },
           workflows: [
             {
               id: 'weekly-review',
@@ -151,6 +196,41 @@ describe('employeeLoader', () => {
       const def = await loadEmployeePackage(PKG);
 
       expect(def!.memory).toBe('project');
+      expect(def!.memoryAutoCapture).toEqual(['feedback', 'failure']);
+      expect(def!.memoryWrites).toBe('approval');
+    });
+
+    it('loads package-owned Dream configuration', async () => {
+      mockPackageFiles({
+        [`${PKG}/dream.yaml`]: 'enabled: true\nschedule: daily\nsession_scan:\n  max_sessions: 6',
+      });
+
+      const def = await loadEmployeePackage(PKG);
+
+      expect(def!.dream).toEqual({ enabled: true, schedule: 'daily', sessionScan: { maxSessions: 6 } });
+    });
+
+    it('maps the package runtime tool policy onto the employee definition', async () => {
+      const withToolPolicy = JSON.stringify({
+        ...JSON.parse(PLUGIN_JSON),
+        runtime: {
+          version: 1,
+          toolPolicy: {
+            default: 'disabled',
+            overrides: { read_file: 'enabled' },
+          },
+        },
+      });
+      mockPackageFiles({
+        [`${PKG}/.codebuddy-plugin/plugin.json`]: withToolPolicy,
+      });
+
+      const def = await loadEmployeePackage(PKG);
+
+      expect(def!.toolPolicy).toEqual({
+        default: 'disabled',
+        overrides: { read_file: 'enabled' },
+      });
     });
 
     it('maps modelConfig into a dedicated providerId + pinned model', async () => {

@@ -50,14 +50,14 @@ export const skillViewTool: ToolDefinition = {
     },
     required: ['name'],
   },
-  execute: async (input) => {
+  execute: async (input, toolContext) => {
     const name = input.name as string;
     const filePath = input.file_path as string | undefined;
 
-    const skill = skillLoader.getSkill(name);
+    const skill = skillLoader.getSkill(name, toolContext?.employeeName);
     if (!skill) {
       const available = skillLoader
-        .getAvailableSkills()
+        .getAvailableSkills({ employeeName: toolContext?.employeeName })
         .map((s) => s.name)
         .slice(0, 10);
       const hint = available.length > 0
@@ -74,9 +74,9 @@ export const skillViewTool: ToolDefinition = {
         return `Error: file_path must not contain "..". Use a path relative to the skill directory.`;
       }
 
-      const content = await skillLoader.loadSupportingFile(name, filePath);
+      const content = await skillLoader.loadSupportingFile(name, filePath, toolContext?.employeeName);
       if (content === null) {
-        const files = await skillLoader.listSupportingFiles(name);
+        const files = await skillLoader.listSupportingFiles(name, toolContext?.employeeName);
         if (files.length === 0) {
           return `Error: file "${filePath}" not found in skill "${name}" (skill has no supporting files).`;
         }
@@ -89,7 +89,7 @@ export const skillViewTool: ToolDefinition = {
     }
 
     // ── Mode A: full SKILL.md view ─────────────────────────────────────
-    const supportingFiles = await skillLoader.listSupportingFiles(name);
+    const supportingFiles = await skillLoader.listSupportingFiles(name, toolContext?.employeeName);
     return JSON.stringify(
       {
         name: skill.name,

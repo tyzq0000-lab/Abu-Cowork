@@ -12,6 +12,7 @@ export type CheckCategory =
   | 'permissions'
   | 'mcp'
   | 'skills'
+  | 'employees'
   | 'network'
   | 'app';
 
@@ -32,8 +33,9 @@ export interface SuggestedAction {
    * `open-settings` — deep-link into a system-settings tab.
    * `open-toolbox` — open the customize/toolbox modal (skills/MCP).
    * `retry` — re-run this single item.
+   * `open-conversation` — leave settings and open the employee conversation.
    */
-  type: 'open-settings' | 'open-toolbox' | 'retry';
+  type: 'open-settings' | 'open-toolbox' | 'retry' | 'open-conversation';
   /** Tab identifier or modal target. Format depends on `type`. */
   target?: string;
   /** Button label (already i18n-resolved). */

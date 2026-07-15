@@ -627,19 +627,20 @@ ${isWindows()
   // Apply context budget: max(16K chars, contextWindow × 2%)
   try {
     const disabledSkills = new Set(settingsState.disabledSkills ?? []);
-    const allSkills = skillLoader.getAvailableSkills().filter(
+    const employeeName = route.definition?.source === 'employee' ? route.definition.name : undefined;
+    const allSkills = skillLoader.getAvailableSkills({ employeeName }).filter(
       (s) => s.userInvocable !== false && !s.disableAutoInvoke
     );
-    // Employee-package skills (source === 'employee') belong to a specific
-    // WorkBuddy employee. They only enter the index when that employee is the
-    // active agent — gated by the agent's declared skill list
-    // (SubagentDefinition.skills). All other sources are always global. This
-    // stops one installed employee's skills from bloating another
-    // conversation's context (Phase B scope decision).
-    const ownedEmployeeSkills = new Set(route.definition?.skills ?? []);
-    const scopedSkills = allSkills.filter(
-      (s) => s.source !== 'employee' || ownedEmployeeSkills.has(s.name)
-    );
+    // Owner-aware discovery already returns only this employee's declared
+    // package skills. Non-employee routes hide package skills entirely.
+    const declaredSkillNames = new Set((route.definition?.skills ?? []).flatMap((name) => {
+      const standardName = employeeName ? skillLoader.getSkill(name, employeeName)?.name : undefined;
+      return standardName ? [name, standardName] : [name];
+    }));
+    const scopedSkills = allSkills.filter((skill) => (
+      skill.source !== 'employee'
+      || (Boolean(employeeName) && declaredSkillNames.has(skill.name))
+    ));
     const skills = scopedSkills.filter((s) => !disabledSkills.has(s.name));
     const disabled = scopedSkills.filter((s) => disabledSkills.has(s.name));
 

@@ -7,6 +7,7 @@
  * Keys follow a colon-namespaced convention:
  *   - `provider:<providerId>` for {@link ProviderInstance.apiKey}
  *   - `aux:webSearch`, `aux:imageGen` for {@link AuxiliaryServices.*.apiKey}
+ *   - `deployment:<deploymentId>` for platform-issued per-device bearer tokens
  *
  * All functions are best-effort: errors are returned to callers but never
  * thrown as unhandled rejections. Callers typically fire-and-forget writes
@@ -19,6 +20,7 @@ export const SECRET_KEYS = {
   provider: (id: string) => `provider:${id}`,
   auxWebSearch: 'aux:webSearch',
   auxImageGen: 'aux:imageGen',
+  deployment: (id: string) => `deployment:${id}`,
 } as const;
 
 export async function getSecret(key: string): Promise<string | null> {

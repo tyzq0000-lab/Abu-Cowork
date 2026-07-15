@@ -29,6 +29,11 @@ import {
 } from '@/core/employee/contract';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { validateArchive, unpackSkill } from '@/core/skill/packager';
+import {
+  PackageIntegrityError,
+  verifyEmployeePackageEntries,
+  type PackageIntegrityExpectation,
+} from '@/core/employee/packageIntegrity';
 import type { DeepLinkInstallRequest } from './parser';
 
 // Same budget as the skill packager (.askill).
@@ -49,6 +54,8 @@ export type DeepLinkInstallErrorCode =
   | 'PATH_TRAVERSAL'
   | 'FILE_TOO_LARGE'
   | 'NO_SKILL_MD'
+  | 'PACKAGE_SIGNATURE_REQUIRED'
+  | 'PACKAGE_INTEGRITY_INVALID'
   | 'WRITE_FAILED';
 
 export class DeepLinkInstallError extends Error {
@@ -70,6 +77,7 @@ export interface InstalledPackage {
   fileCount: number;
   runtimeProfile?: EmployeeRuntimeProfile;
   audit?: EmployeeAuditReport;
+  integrity?: PackageIntegrityExpectation;
 }
 
 // ── Employee package: pure planning ───────────────────────────────────────
@@ -85,6 +93,7 @@ export interface EmployeeUnpackPlan {
   modelConfig?: EmployeeModelConfig;
   runtimeProfile?: EmployeeRuntimeProfile;
   audit: EmployeeAuditReport;
+  integrity?: PackageIntegrityExpectation;
 }
 
 /** True when a name is safe to use as a single directory component. */
@@ -107,7 +116,10 @@ function isSafeDirName(name: string): boolean {
  *
  * @throws DeepLinkInstallError on any validation failure
  */
-export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): EmployeeUnpackPlan {
+export function planEmployeeUnpack(
+  rawEntries: Record<string, Uint8Array>,
+  options?: { integrity?: PackageIntegrityExpectation },
+): EmployeeUnpackPlan {
   // Windows-built archives (PowerShell Compress-Archive and friends) use "\"
   // as the entry separator — normalize to "/" before any matching.
   const entries: Record<string, Uint8Array> = {};
@@ -150,7 +162,7 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
     const rel = prefix ? path.slice(prefix.length) : path;
     if (!rel || rel.endsWith('/')) continue; // directory entries
 
-    if (rel.split('/').some((seg) => JUNK_SEGMENTS.has(seg))) continue;
+    if (!options?.integrity && rel.split('/').some((seg) => JUNK_SEGMENTS.has(seg))) continue;
 
     files.push({ path: rel, data });
   }
@@ -182,7 +194,13 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
   // Never persist maker API keys to disk: rewrite the on-disk plugin.json
   // with blanked keys. The live key is handed to the encrypted secret store
   // by the install step (upsertEmployeeProvider).
-  if (modelConfig && (modelConfig.provider.apiKey || modelConfig.imageGen?.apiKey)) {
+  if (options?.integrity && modelConfig && (modelConfig.provider.apiKey || modelConfig.imageGen?.apiKey)) {
+    throw new DeepLinkInstallError(
+      'PACKAGE_INTEGRITY_INVALID',
+      'Signed employee packages must not contain model API keys.',
+    );
+  }
+  if (!options?.integrity && modelConfig && (modelConfig.provider.apiKey || modelConfig.imageGen?.apiKey)) {
     const sanitized = {
       ...manifest,
       modelConfig: {
@@ -207,6 +225,7 @@ export function planEmployeeUnpack(rawEntries: Record<string, Uint8Array>): Empl
     modelConfig,
     runtimeProfile: manifest?.runtime,
     audit,
+    integrity: options?.integrity,
   };
 }
 
@@ -238,7 +257,10 @@ async function downloadArchive(url: string): Promise<Uint8Array> {
 }
 
 /** Unpack an employee archive into ~/.uprow/employees/<name>/ (overwrites). */
-async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPackage> {
+async function installEmployeeArchive(
+  bytes: Uint8Array,
+  integrityRequired: boolean,
+): Promise<InstalledPackage> {
   let entries: Record<string, Uint8Array>;
   try {
     entries = unzipSync(bytes);
@@ -246,7 +268,20 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
     throw new DeepLinkInstallError('INVALID_ZIP', 'File is not a valid zip archive');
   }
 
-  const plan = planEmployeeUnpack(entries);
+  let integrity: PackageIntegrityExpectation | null;
+  try {
+    integrity = await verifyEmployeePackageEntries(entries, { required: integrityRequired });
+  } catch (error) {
+    if (error instanceof PackageIntegrityError) {
+      const code: DeepLinkInstallErrorCode = error.code === 'SIGNATURE_REQUIRED'
+        ? 'PACKAGE_SIGNATURE_REQUIRED'
+        : 'PACKAGE_INTEGRITY_INVALID';
+      throw new DeepLinkInstallError(code, error.message);
+    }
+    throw error;
+  }
+
+  const plan = planEmployeeUnpack(entries, { integrity: integrity ?? undefined });
 
   const home = await homeDir();
   const employeesDir = joinPath(home, DATA_DIR_NAME, 'employees');
@@ -303,6 +338,7 @@ async function installEmployeeArchive(bytes: Uint8Array): Promise<InstalledPacka
     fileCount: plan.files.length,
     runtimeProfile: plan.runtimeProfile,
     audit: plan.audit,
+    integrity: plan.integrity,
   };
 }
 
@@ -332,6 +368,6 @@ async function installSkillArchive(bytes: Uint8Array): Promise<InstalledPackage>
 export async function installFromDeepLink(req: DeepLinkInstallRequest): Promise<InstalledPackage> {
   const bytes = await downloadArchive(req.url);
   return req.pkgType === 'employee'
-    ? installEmployeeArchive(bytes)
+    ? installEmployeeArchive(bytes, req.integrityRequired === true)
     : installSkillArchive(bytes);
 }

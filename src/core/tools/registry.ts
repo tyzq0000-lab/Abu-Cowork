@@ -10,6 +10,8 @@ import { getPermissionStrategy } from '../permissions/permissionMode';
 import { analyzeCommandBoundary, type CmdBoundary } from '../permissions/commandBoundary';
 import { reviewAction } from '../safety/reviewer';
 import { getLoopContext } from '../agent/permissionBridge';
+import { classifyExternalAction } from '../approval/externalActionGate';
+import { isToolEnabled } from '../employee/toolPolicy';
 import { homeDir } from '@tauri-apps/api/path';
 import { TOOL_NAMES } from './toolNames';
 
@@ -231,8 +233,33 @@ export async function executeAnyTool(
   contextUsagePercent?: number
 ): Promise<ToolResult> {
   const t = getI18n();
+  if (!isToolEnabled(toolContext?.toolPolicy, name)) {
+    return `Error: ${t.toolErrors.disabledByEmployeePolicy.replace('{tool}', name)}`;
+  }
   const permissionMode = useSettingsStore.getState().permissionMode;
   const strategy = getPermissionStrategy(permissionMode);
+  const externalAction = classifyExternalAction(name, input);
+  let externalActionApproved = false;
+
+  const requireExternalActionApproval = async (): Promise<string | null> => {
+    if (!externalAction || externalActionApproved) return null;
+    if (!onRequireConfirmation) {
+      return `Error: ${t.commandConfirm.externalApprovalUnavailable}`;
+    }
+
+    const confirmed = await onRequireConfirmation({
+      command: externalAction.detail,
+      level: 'danger',
+      reason: t.commandConfirm.externalActionReason,
+      kind: 'external-action',
+      externalActionKind: externalAction.kind,
+      toolName: externalAction.toolName,
+      reviewPayload: externalAction.reviewPayload,
+    });
+    if (!confirmed) return t.commandConfirm.userCancelled;
+    externalActionApproved = true;
+    return null;
+  };
 
   // Safety check for run_command tool
   if (name === TOOL_NAMES.RUN_COMMAND) {
@@ -244,6 +271,9 @@ export async function executeAnyTool(
       if (analysis.level === 'block') {
         return `Error: ${t.commandConfirm.blocked}: ${analysis.reason}`;
       }
+
+      const externalApprovalError = await requireExternalActionApproval();
+      if (externalApprovalError) return externalApprovalError;
 
       // Best-effort boundary check: only matters for safe, non-read-only commands
       // (risky commands already gate on content; autonomous never gates). Detects
@@ -279,7 +309,7 @@ export async function executeAnyTool(
         // Surface the reviewer's reasoning so an escalated confirm explains itself.
         reviewReason = verdict.reason;
       }
-      if (outcome === 'confirm' && onRequireConfirmation) {
+      if (outcome === 'confirm' && onRequireConfirmation && !externalActionApproved) {
         const confirmed = await onRequireConfirmation({
           command,
           level: analysis.level,
@@ -359,6 +389,9 @@ export async function executeAnyTool(
 
   // First check builtin tools
   if (toolRegistry.has(name)) {
+    const externalApprovalError = await requireExternalActionApproval();
+    if (externalApprovalError) return externalApprovalError;
+
     const result = await toolRegistry.execute(name, input, toolContext);
     // Only truncate string results; rich content (images) passes through
     if (typeof result === 'string') {
@@ -375,6 +408,9 @@ export async function executeAnyTool(
   if (name.includes('__')) {
     const [serverName, toolName] = name.split('__', 2);
     if (mcpManager.isConnected(serverName)) {
+      const externalApprovalError = await requireExternalActionApproval();
+      if (externalApprovalError) return externalApprovalError;
+
       const result = await mcpManager.callTool(serverName, toolName, input);
       // Only truncate string results; rich content (images) passes through
       if (typeof result === 'string') {

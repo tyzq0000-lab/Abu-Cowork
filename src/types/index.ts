@@ -303,6 +303,31 @@ export type ToolResult = string | ToolResultContent[];
 
 // --- Tools ---
 
+export type ToolPolicyState = 'enabled' | 'disabled';
+
+/** Package-owned least-privilege policy for a digital employee's tools. */
+export interface ToolPolicy {
+  /** Tools not matched by an override remain enabled for compatibility. */
+  default?: ToolPolicyState;
+  /** Exact names or `*` wildcard patterns mapped to their effective state. */
+  overrides: Record<string, ToolPolicyState>;
+}
+
+export type AgentMemoryCapture =
+  | 'preference'
+  | 'feedback'
+  | 'failure'
+  | 'project'
+  | 'reference';
+
+export interface EmployeeDreamConfig {
+  enabled: boolean;
+  schedule: 'daily' | 'manual';
+  sessionScan: {
+    maxSessions: number;
+  };
+}
+
 export interface ToolParameter {
   type: string;
   description: string;
@@ -317,10 +342,18 @@ export interface ToolExecutionContext {
   workspacePath?: string | null;
   /** Restricts persistent memory access for a delegated agent. */
   memoryScope?: 'session' | 'project' | 'user';
+  /** Resolved employee-private memdir key. Never use the workspace as a fallback when set. */
+  memoryPath?: string;
   /** Loop ID for multi-agent context lookup */
   loopId?: string;
   /** Conversation ID — tools should prefer this over activeConversationId */
   conversationId?: string;
+  /** Employee package policy, carried to the final execution backstop. */
+  toolPolicy?: ToolPolicy;
+  /** Active employee identity for exact package-owned skill resolution. */
+  employeeName?: string;
+  /** Delegated loops receive activated skill instructions through the tool result. */
+  inlineSkillContent?: boolean;
 }
 
 export interface ToolDefinition {
@@ -506,8 +539,15 @@ export interface SubagentMetadata {
   maxTurns?: number;          // Optional cap on subagent loop turns. Falls back to global settings; ultimate fallback is 200 for safety.
   tools?: string[];
   disallowedTools?: string[];
+  toolPolicy?: ToolPolicy;
   skills?: string[];
   memory?: 'session' | 'project' | 'user';
+  /** Package-declared categories eligible for automatic capture. */
+  memoryAutoCapture?: AgentMemoryCapture[];
+  /** Whether captured memory is written directly or enters Review Queue. */
+  memoryWrites?: 'auto' | 'approval';
+  /** Optional package-owned reflection schedule from dream.yaml. */
+  dream?: EmployeeDreamConfig;
   background?: boolean;
 
   // ── Display-only fields (rendered by toolbox AgentsSection / chat welcome banner)
@@ -544,10 +584,8 @@ export interface SubagentMetadata {
    *  `.codebuddy-plugin` package under ~/.uprow/employees/. Absent for the
    *  built-in personas and hand-written AGENT.md agents. */
   source?: 'builtin' | 'user' | 'project' | 'employee';
-  /** Execution engine for this agent's tasks (project06 M1). Set by the loader:
-   *  plugin.json packages → `runtime.engine ?? 'native'` (regression-safe);
-   *  ChaWork-format packages (employee.yaml) → 'codex'. The engine router reads
-   *  this to dispatch native loop vs codex sidecar. Absent → treat as 'native'. */
+  /** Declared execution engine. Both supported package formats normalize onto
+   *  the native runtime unless a canonical package explicitly declares one. */
   engine?: 'codex' | 'native' | 'auto';
 }
 

@@ -9,6 +9,13 @@ import { usePermissionStore } from '../../stores/permissionStore';
 import type { PermissionDuration } from '../../stores/permissionStore';
 import { authorizeWorkspace } from '../tools/pathSafety';
 import type { EventRouter } from './eventRouter';
+import {
+  createReviewProposal,
+  decideReviewProposal,
+  getReviewProposal,
+  resolveMemoryReviewProposal,
+  type ReviewDecisionReason,
+} from '../approval/reviewQueue';
 
 // ── Loop Context (per-loop Map) ──
 
@@ -72,21 +79,19 @@ export function setCurrentLoopContext(ctx: LoopContext | null): void {
 
 // ── Command Confirmation System ──
 
-// Global state for pending command confirmation
-let pendingConfirmation: {
+interface CommandConfirmationRequest {
   info: ConfirmationInfo;
   conversationId: string;
   agentName?: string;
+  reviewProposalId?: string;
   resolve: (confirmed: boolean) => void;
-} | null = null;
+}
+
+// Global state for pending command confirmation
+let pendingConfirmation: CommandConfirmationRequest | null = null;
 
 // Queue for command confirmations — prevents overwriting when multiple dangerous commands fire in sequence
-const confirmationQueue: Array<{
-  info: ConfirmationInfo;
-  conversationId: string;
-  agentName?: string;
-  resolve: (confirmed: boolean) => void;
-}> = [];
+const confirmationQueue: CommandConfirmationRequest[] = [];
 
 // Subscribers for command confirmation state changes
 const confirmationListeners = new Set<() => void>();
@@ -114,14 +119,50 @@ export function getPendingCommandConfirmation() {
 /**
  * Resolve the pending command confirmation and process next in queue
  */
-export function resolveCommandConfirmation(confirmed: boolean) {
-  if (pendingConfirmation) {
-    pendingConfirmation.resolve(confirmed);
-    pendingConfirmation = null;
-
-    // Process next queued confirmation
-    processNextConfirmation();
+async function settleConfirmation(
+  request: CommandConfirmationRequest,
+  confirmed: boolean,
+  reason: ReviewDecisionReason,
+): Promise<boolean> {
+  let finalDecision = confirmed;
+  if (request.reviewProposalId) {
+    try {
+      const persisted = await decideReviewProposal(request.reviewProposalId, confirmed, reason);
+      if (!persisted) finalDecision = false;
+    } catch (error) {
+      console.error('[ReviewQueue] Failed to persist decision; denying external action:', error);
+      finalDecision = false;
+    }
   }
+  request.resolve(finalDecision);
+  return finalDecision;
+}
+
+export async function resolveCommandConfirmation(confirmed: boolean): Promise<boolean> {
+  if (!pendingConfirmation) return false;
+
+  const request = pendingConfirmation;
+  pendingConfirmation = null;
+  notifyConfirmationListeners();
+  const finalDecision = await settleConfirmation(request, confirmed, 'user');
+  processNextConfirmation();
+  return finalDecision;
+}
+
+/** Resolve any live Review Queue item, including one waiting behind another. */
+export async function resolveReviewProposal(proposalId: string, confirmed: boolean): Promise<boolean> {
+  if (getReviewProposal(proposalId)?.kind === 'memory') {
+    return resolveMemoryReviewProposal(proposalId, confirmed);
+  }
+  if (pendingConfirmation?.reviewProposalId === proposalId) {
+    return resolveCommandConfirmation(confirmed);
+  }
+
+  const queuedIndex = confirmationQueue.findIndex((request) => request.reviewProposalId === proposalId);
+  if (queuedIndex < 0) return false;
+  const [request] = confirmationQueue.splice(queuedIndex, 1);
+  if (!request) return false;
+  return settleConfirmation(request, confirmed, 'user');
 }
 
 function processNextConfirmation() {
@@ -138,11 +179,12 @@ function processNextConfirmation() {
 export function drainConfirmationQueue() {
   while (confirmationQueue.length > 0) {
     const req = confirmationQueue.shift()!;
-    req.resolve(false);
+    void settleConfirmation(req, false, 'aborted');
   }
   if (pendingConfirmation) {
-    pendingConfirmation.resolve(false);
+    const request = pendingConfirmation;
     pendingConfirmation = null;
+    void settleConfirmation(request, false, 'aborted');
     notifyConfirmationListeners();
   }
 }
@@ -159,12 +201,30 @@ export async function requestCommandConfirmation(info: ConfirmationInfo, loopId?
   const ctx = loopId ? getLoopContext(loopId) : getCurrentLoopContext();
   const convId = ctx?.conversationId ?? '';
   const agentName = ctx?.agentName;
+  let reviewProposalId: string | undefined;
+  if (info.kind === 'external-action') {
+    try {
+      const proposal = await createReviewProposal({ info, conversationId: convId, agentName });
+      reviewProposalId = proposal.id;
+    } catch (error) {
+      console.error('[ReviewQueue] Failed to create durable proposal; denying external action:', error);
+      return false;
+    }
+  }
+
   return new Promise((resolve) => {
+    const request: CommandConfirmationRequest = {
+      info,
+      conversationId: convId,
+      agentName,
+      ...(reviewProposalId ? { reviewProposalId } : {}),
+      resolve,
+    };
     if (pendingConfirmation) {
       // Queue instead of overwriting
-      confirmationQueue.push({ info, conversationId: convId, agentName, resolve });
+      confirmationQueue.push(request);
     } else {
-      pendingConfirmation = { info, conversationId: convId, agentName, resolve };
+      pendingConfirmation = request;
       notifyConfirmationListeners();
     }
   });

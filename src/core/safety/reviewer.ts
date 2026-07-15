@@ -167,6 +167,7 @@ export async function reviewAction(ctx: ReviewContext, signal?: AbortSignal): Pr
   if (signal) signal.addEventListener('abort', () => controller.abort(), { once: true });
   try {
     const { text } = await llmCall({
+      conversationId: ctx.conversationId,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: buildUserMessage(ctx, recentUserIntent(ctx.conversationId)) }],
       maxTokens: 200,

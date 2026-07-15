@@ -8,6 +8,7 @@ import type { ToolDefinition } from '../../types';
 import { useChatStore, flushTokenBuffer } from '../../stores/chatStore';
 import { useSettingsStore, getEffectiveModel, getActiveApiKey, getActiveProvider, resolveAgentExecution, providerRequiresApiKey, hasUsableEmployeeProvider } from '../../stores/settingsStore';
 import type { ProviderInstance } from '../../types/provider';
+import { resolvePlatformRelayExecution } from '../employee/platformRelay';
 import { useDiscoveredCapsStore } from '../../stores/discoveredCapabilitiesStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import { useTaskExecutionStore } from '../../stores/taskExecutionStore';
@@ -28,7 +29,10 @@ import { estimateToolSchemaTokens, estimateTokens, estimateMessageTokens, calibr
 import { identifyRounds, RECENT_ROUNDS_TO_KEEP } from '../context/contextUtils';
 import { withRetry } from './retry';
 import { runSubagentLoop, extractParentConversationSummary, buildBoundAgentSystemPrompt } from './subagentLoop';
+import { resolveAgentMemoryPaths } from './employeeMemory';
 import { getEmployeeToolShadows } from './employeeSkills';
+import { assertEmployeePackageIntegrity } from '@/core/employee/packageIntegrity';
+import { filterToolsByPolicy } from '@/core/employee/toolPolicy';
 import type { SubagentProgressEvent } from './subagentLoop';
 import { createSubagentController } from './subagentAbort';
 import { drainQueuedInputs, clearInputQueue } from './userInputQueue';
@@ -375,6 +379,8 @@ function resolveTools(
         tools = tools.filter(t => !shadows.has(t.name));
         deferredTools = deferredTools.filter(t => !shadows.has(t.name));
       }
+      tools = filterToolsByPolicy(tools, def.toolPolicy);
+      deferredTools = filterToolsByPolicy(deferredTools, def.toolPolicy);
     }
   }
   if (hasBuiltinWebSearch) {
@@ -412,6 +418,7 @@ async function loadActiveSkillContent(
   activeSkills: string[] | undefined,
   activeSkillArgs?: Record<string, string>,
   conversationId?: string,
+  employeeName?: string,
 ): Promise<string> {
   if (!activeSkills || activeSkills.length === 0) return '';
   const workspacePath = conversationId
@@ -419,14 +426,14 @@ async function loadActiveSkillContent(
     : undefined;
   const skillContents: string[] = [];
   for (const name of activeSkills) {
-    const s = skillLoader.getSkill(name);
+    const s = skillLoader.getSkill(name, employeeName);
     if (!s) continue;
     const args = activeSkillArgs?.[name] ?? '';
     const processed = substituteVariables(s.content, args, s.skillDir, conversationId ?? '', workspacePath ?? undefined);
     let block = `### ${s.name}\n${processed}`;
 
     // SK-5: List supporting files for progressive disclosure
-    const supportingFiles = await skillLoader.listSupportingFiles(name);
+    const supportingFiles = await skillLoader.listSupportingFiles(name, employeeName);
     if (supportingFiles.length > 0) {
       block += '\n\n**Available reference files** (use `read_skill_file` tool to load when needed):\n';
       block += supportingFiles.map(f => {
@@ -567,12 +574,28 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     },
   });
 
+  let platformExecution: Awaited<ReturnType<typeof resolvePlatformRelayExecution>>;
+  try {
+    platformExecution = await resolvePlatformRelayExecution(conversationId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const userContent = await buildUserMessageContent(conversationId, userMessage, options?.images);
+    chatStore.addMessage(conversationId, {
+      id: generateId(), role: 'user', content: userContent, timestamp: Date.now(), loopId,
+    });
+    chatStore.addMessage(conversationId, {
+      id: generateId(), role: 'assistant', content: `平台员工暂不可执行：${message}`, timestamp: Date.now(), loopId,
+    });
+    return { reason: 'error', error: message };
+  }
+
   // Hard-block only when the global active provider needs a key AND none is set
   // AND there is no usable employee provider to fall back to. At this point the
   // orchestrator hasn't run, so we can't know the exact route target — the loose
   // employee-provider check avoids blocking employee conversations that have
   // their own key; precise fallback is handled by resolveAgentExecution.
   if (
+    !platformExecution &&
     providerRequiresApiKey(settings) &&
     !getActiveApiKey(settings) &&
     !hasUsableEmployeeProvider(settings)
@@ -619,6 +642,43 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   const boundAgentName = useChatStore.getState().conversations[conversationId]?.agentName
     ?? useChatStore.getState().conversationIndex[conversationId]?.agentName;
   const route = routeInput(userMessage, boundAgentName);
+  const _wsForPrompt = options?.imContext?.workspacePath
+    ?? useChatStore.getState().conversations[conversationId]?.workspacePath
+    ?? useWorkspaceStore.getState().currentPath;
+  let employeeMemoryPath: string | null | undefined;
+
+  if (route.type === 'agent' && route.definition) {
+    try {
+      await assertEmployeePackageIntegrity(route.definition, conversationId);
+      if (route.definition.source === 'employee') {
+        employeeMemoryPath = resolveAgentMemoryPaths(
+          route.definition,
+          _wsForPrompt,
+          conversationId,
+        )[0];
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const userContent = await buildUserMessageContent(conversationId, route.cleanInput, options?.images);
+      chatStore.addMessage(conversationId, {
+        id: generateId(),
+        role: 'user',
+        content: userContent,
+        timestamp: Date.now(),
+        loopId,
+      });
+      chatStore.addMessage(conversationId, {
+        id: generateId(),
+        role: 'assistant',
+        content: `员工运行时校验失败：${message}`,
+        timestamp: Date.now(),
+        loopId,
+      });
+      chatStore.setConversationStatus(conversationId, 'idle');
+      taskExecutionStore.cancelExecution(execution.id);
+      return { reason: 'error', error: message };
+    }
+  }
 
   // Refresh skill content from disk to ensure latest version
   if (route.type === 'skill' && route.skill?.filePath) {
@@ -634,12 +694,16 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // prompt from the SAME shared builder as @mention (subagentLoop.buildBoundAgentSystemPrompt),
   // so the employee's own systemPrompt is the SOLE identity — identical persona/memory to @,
   // with no 扶摇 capability/soul leak. All other routes keep the full main-loop prompt.
-  const _wsForPrompt = options?.imContext?.workspacePath
-    ?? useChatStore.getState().conversations[conversationId]?.workspacePath
-    ?? useWorkspaceStore.getState().currentPath;
   const systemPromptSections: Awaited<ReturnType<typeof buildSystemPromptSections>> =
     (route.type === 'agent' && route.definition)
-      ? [{ name: 'identity', text: await buildBoundAgentSystemPrompt(route.definition, { workspacePath: _wsForPrompt }), cacheable: true }]
+      ? [{
+          name: 'identity',
+          text: await buildBoundAgentSystemPrompt(route.definition, {
+            workspacePath: _wsForPrompt,
+            conversationId,
+          }),
+          cacheable: true,
+        }]
       : await buildSystemPromptSections(route, getCapabilityPrompt(), conversationId, options?.imContext, 0);
 
   // Build tool execution context — provides resolved workspace for tools like update_memory.
@@ -651,6 +715,14 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     workspacePath: options?.imContext?.workspacePath ?? _convForContext?.workspacePath ?? useWorkspaceStore.getState().currentPath,
     loopId,
     conversationId,
+    memoryScope: route.type === 'agent' ? route.definition?.memory ?? 'session' : undefined,
+    ...(typeof employeeMemoryPath === 'string' ? { memoryPath: employeeMemoryPath } : {}),
+    toolPolicy: route.type === 'agent' && route.definition?.source === 'employee'
+      ? route.definition.toolPolicy
+      : undefined,
+    employeeName: route.type === 'agent' && route.definition?.source === 'employee'
+      ? route.definition.name
+      : undefined,
   };
 
   // Determine effective model — agent can override (with provider compatibility
@@ -659,7 +731,10 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // global active provider.
   let effectiveModelId = getEffectiveModel(settings);
   let dedicatedProvider: ProviderInstance | undefined;
-  if (route.type === 'agent' && route.definition) {
+  if (platformExecution) {
+    effectiveModelId = platformExecution.modelId;
+    dedicatedProvider = platformExecution.provider;
+  } else if (route.type === 'agent' && route.definition) {
     const execution = resolveAgentExecution(route.definition, settings);
     if (execution) {
       effectiveModelId = execution.modelId;
@@ -754,7 +829,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       };
     }
 
-    const confirmCb = options?.commandConfirmCallback ?? requestCommandConfirmation;
+    const confirmCb = options?.commandConfirmCallback
+      ?? ((info: ConfirmationInfo) => requestCommandConfirmation(info, loopId));
     const filePermCb = options?.filePermissionCallback ?? requestFilePermission;
 
     // Extract parent conversation context for the subagent
@@ -1009,7 +1085,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       // Build prefetch context for conditional tool loading
       const conv = useChatStore.getState().conversations[conversationId];
       const activeSkillObjects = (conv?.activeSkills ?? [])
-        .map(name => skillLoader.getSkill(name))
+        .map(name => skillLoader.getSkill(name, toolContext.employeeName))
         .filter((s): s is NonNullable<typeof s> => s !== undefined);
       const prefetchCtx = {
         userInput: userMessage,
@@ -1025,6 +1101,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         conv?.activeSkills,
         conv?.activeSkillArgs,
         conversationId,
+        toolContext.employeeName,
       );
 
       // Get current messages for this conversation
@@ -1578,7 +1655,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
 
       // If there are tool calls, execute them via toolExecutor
       if (collectedToolCalls.length > 0) {
-        const confirmCb = options?.commandConfirmCallback ?? requestCommandConfirmation;
+        const confirmCb = options?.commandConfirmCallback
+          ?? ((info: ConfirmationInfo) => requestCommandConfirmation(info, loopId));
         const filePermCb = options?.filePermissionCallback ?? requestFilePermission;
 
         const batchResult = await executeToolBatch({
@@ -1777,9 +1855,26 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         // IM conversations have their own extraction in channelRouter.ts.
         if (interactiveDesktop) {
           const wsPath = convRecord?.workspacePath ?? useWorkspaceStore.getState().currentPath;
-          import('../memdir/extractor').then(({ extractMemoriesFromConversation }) =>
-            extractMemoriesFromConversation(conversationId, wsPath)
-          ).catch(() => {});
+          if (route.type === 'agent' && route.definition?.source === 'employee') {
+            const employee = route.definition;
+            void (async () => {
+              if (typeof employeeMemoryPath === 'string' && employee.memoryAutoCapture?.length) {
+                const { extractMemoriesFromConversation } = await import('../memdir/extractor');
+                await extractMemoriesFromConversation(conversationId, wsPath, {
+                  memoryPath: employeeMemoryPath,
+                  allowedCaptures: employee.memoryAutoCapture,
+                  writeMode: employee.memoryWrites ?? 'approval',
+                  agentName: employee.name,
+                });
+              }
+              const { runEmployeeDream } = await import('../employee/dream');
+              await runEmployeeDream({ agent: employee, conversationId, workspacePath: wsPath });
+            })().catch(() => {});
+          } else {
+            import('../memdir/extractor').then(({ extractMemoriesFromConversation }) =>
+              extractMemoriesFromConversation(conversationId, wsPath)
+            ).catch(() => {});
+          }
         }
 
         // Post-loop proposal signal — if this loop was "sink-worthy",

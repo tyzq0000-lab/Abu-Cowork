@@ -30,7 +30,10 @@ describe('skillViewTool', () => {
       'templates/body.txt',
     ]);
 
-    const result = await skillViewTool.execute({ name: 'my-skill' }, {});
+    const result = await skillViewTool.execute(
+      { name: 'my-skill' },
+      { employeeName: 'nature-researcher' },
+    );
     const parsed = JSON.parse(result as string);
 
     expect(parsed).toMatchObject({
@@ -41,6 +44,8 @@ describe('skillViewTool', () => {
       content: expect.stringContaining('Body content'),
       supporting_files: ['references/api.md', 'templates/body.txt'],
     });
+    expect(skillLoader.getSkill).toHaveBeenCalledWith('my-skill', 'nature-researcher');
+    expect(skillLoader.listSupportingFiles).toHaveBeenCalledWith('my-skill', 'nature-researcher');
   });
 
   it('returns error string with sample of available skills when not found', async () => {

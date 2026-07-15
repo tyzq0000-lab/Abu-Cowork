@@ -13,8 +13,11 @@ import type { LLMAdapter } from './adapter';
 import { ClaudeAdapter } from './claude';
 import { OpenAICompatibleAdapter } from './openai-compatible';
 import { useSettingsStore, getActiveApiKey, getActiveProvider, getEffectiveModel } from '../../stores/settingsStore';
+import { resolvePlatformRelayExecution } from '../employee/platformRelay';
 
 export interface LLMCallOptions {
+  /** Owning conversation; platform-bound calls must use that deployment's relay. */
+  conversationId?: string;
   /** System prompt */
   system?: string;
   /** Conversation messages */
@@ -47,7 +50,11 @@ export interface LLMCallResult {
  */
 export async function llmCall(options: LLMCallOptions): Promise<LLMCallResult> {
   const settings = useSettingsStore.getState();
-  const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
+  const platformExecution = options.conversationId
+    ? await resolvePlatformRelayExecution(options.conversationId)
+    : null;
+  const executionProvider = platformExecution?.provider ?? getActiveProvider(settings);
+  const adapter: LLMAdapter = executionProvider?.apiFormat === 'openai-compatible'
     ? new OpenAICompatibleAdapter()
     : new ClaudeAdapter();
 
@@ -76,9 +83,9 @@ export async function llmCall(options: LLMCallOptions): Promise<LLMCallResult> {
   };
 
   await adapter.chat(messages, {
-    model: getEffectiveModel(settings),
-    apiKey: getActiveApiKey(settings),
-    baseUrl: getActiveProvider(settings)?.baseUrl || undefined,
+    model: platformExecution?.modelId ?? getEffectiveModel(settings),
+    apiKey: platformExecution?.provider.apiKey ?? getActiveApiKey(settings),
+    baseUrl: executionProvider?.baseUrl || undefined,
     systemPrompt: options.system,
     tools: options.tools,
     maxTokens: options.maxTokens ?? 4096,

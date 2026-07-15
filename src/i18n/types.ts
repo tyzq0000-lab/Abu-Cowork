@@ -619,6 +619,7 @@ export interface TranslationDict {
     categoryPermissions: string;
     categoryMcp: string;
     categorySkills: string;
+    categoryEmployees: string;
     categoryNetwork: string;
     categoryApp: string;
     categorySummaryAllPassed: string; // {n}
@@ -637,6 +638,7 @@ export interface TranslationDict {
     actionOpenAIServices: string;
     actionOpenAbout: string;
     actionOpenToolbox: string;
+    actionOpenEmployee: string;
     copiedError: string;
     // AI services check
     aiServicesNoProvider: string;
@@ -656,6 +658,31 @@ export interface TranslationDict {
     skillsCount: string; // {total}, {builtin}, {user}
     skillsZero: string;
     skillsLoadFailed: string;
+    // Digital employees
+    employeeNone: string;
+    employeeNoneHint: string;
+    employeePackage: string;
+    employeePackageReady: string;
+    employeePackageSigned: string;
+    employeePackageMissing: string;
+    employeeSignatureMissing: string;
+    employeeRuntimeInvalid: string;
+    employeeWorkspace: string;
+    employeeWorkspaceOptional: string;
+    employeeWorkspaceMissing: string;
+    employeeWorkspaceDenied: string;
+    employeeDependencies: string;
+    employeeDependenciesNone: string;
+    employeeDependenciesSummary: string;
+    employeeDependenciesNeedAttention: string;
+    employeeDependencyReady: string;
+    employeeDependencyNeedsAuthorization: string;
+    employeeDependencyNeedsConfiguration: string;
+    employeeDependencyUnavailable: string;
+    employeeModel: string;
+    employeeModelUsesGlobal: string;
+    employeeModelBindingMissing: string;
+    employeeModelUnavailable: string;
     // Network
     networkReachability: string;
     // App
@@ -1596,6 +1623,52 @@ export interface TranslationDict {
     dismiss: string;
   };
 
+  employeeGrowth: {
+    importKnowledge: string;
+    runDream: string;
+    dreamCompletedTitle: string;
+    dreamCompleted: string;
+    dreamNoHistoryTitle: string;
+    dreamNoHistory: string;
+    dreamUnavailableTitle: string;
+    dreamUnavailable: string;
+    knowledgeCompletedTitle: string;
+    knowledgeCompleted: string;
+    knowledgeFailedTitle: string;
+  };
+
+  reviewQueue: {
+    title: string;
+    draft: string;
+    accepted: string;
+    rejected: string;
+    accept: string;
+    reject: string;
+    unknownEmployee: string;
+    storageError: string;
+    empty: {
+      draft: string;
+      accepted: string;
+      rejected: string;
+    };
+    kind: {
+      publish: string;
+      send: string;
+      payment: string;
+      memory: string;
+    };
+    risk: {
+      medium: string;
+      high: string;
+      critical: string;
+    };
+    reason: {
+      user: string;
+      aborted: string;
+      interrupted: string;
+    };
+  };
+
   // Command Confirmation Dialog
   commandConfirm: {
     title: string;
@@ -1604,6 +1677,10 @@ export interface TranslationDict {
     description: string;
     descriptionDanger: string;
     descriptionBlock: string;
+    externalActionTitle: string;
+    externalActionDescription: string;
+    externalActionReason: string;
+    externalApprovalUnavailable: string;
     cancel: string;
     confirm: string;
     blocked: string;
@@ -1616,6 +1693,7 @@ export interface TranslationDict {
     userDeniedAccess: string;
     pathAccessDenied: string;
     needsAuthorization: string;
+    disabledByEmployeePolicy: string;
   };
 
   // Projects

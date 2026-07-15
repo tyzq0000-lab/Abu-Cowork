@@ -1,9 +1,9 @@
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef, useSyncExternalStore } from 'react';
 import { useChatStore } from '@/stores/chatStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useNoticeBadgeStore } from '@/stores/noticeBadgeStore';
 import { useI18n } from '@/i18n';
-import { Workflow, Wrench, Settings, Upload, HelpCircle } from 'lucide-react';
+import { ClipboardCheck, Workflow, Wrench, Settings, Upload, HelpCircle } from 'lucide-react';
 import GuideModal from '@/components/common/GuideModal';
 import ProfileEditModal from '@/components/common/ProfileEditModal';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ import DefaultUserAvatar from '@/components/common/DefaultUserAvatar';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { isMacOS } from '@/utils/platform';
+import { getReviewQueueSnapshot, subscribeToReviewQueue } from '@/core/approval/reviewQueue';
 
 export default function Sidebar() {
   const conversationIndex = useChatStore((s) => s.conversationIndex);
@@ -32,6 +33,12 @@ export default function Sidebar() {
   const updateInfo = useSettingsStore((s) => s.updateInfo);
   const clearBadge = useNoticeBadgeStore((s) => s.clear);
   const { t } = useI18n();
+  const reviewQueue = useSyncExternalStore(
+    subscribeToReviewQueue,
+    getReviewQueueSnapshot,
+    getReviewQueueSnapshot,
+  );
+  const pendingReviewCount = reviewQueue.proposals.filter((proposal) => proposal.status === 'draft').length;
 
   // Guide modal state — auto-open on first launch only
   const setGuideShown = useSettingsStore((s) => s.setGuideShown);
@@ -165,6 +172,24 @@ export default function Sidebar() {
             title={t.sidebar.importSession}
           >
             <Upload className="h-3.5 w-3.5" />
+          </button>
+          {/* Review Queue */}
+          <button
+            onClick={() => setViewMode('review')}
+            className={cn(
+              'btn-ghost relative p-1.5 rounded-md',
+              viewMode === 'review'
+                ? 'text-[var(--abu-clay)] bg-[var(--abu-bg-active)]'
+                : 'text-[var(--abu-text-tertiary)] hover:text-[var(--abu-text-primary)] hover:bg-[var(--abu-bg-hover)]'
+            )}
+            title={t.reviewQueue.title}
+          >
+            <ClipboardCheck className="h-3.5 w-3.5" />
+            {pendingReviewCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-none text-white">
+                {pendingReviewCount > 99 ? '99+' : pendingReviewCount}
+              </span>
+            )}
           </button>
           {/* Toolbox (entry relocated from top nav → next to settings) */}
           <button

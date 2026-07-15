@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Bot, FolderLock, Plug, Sparkles, Globe, AppWindow, Activity, Copy, Check } from 'lucide-react';
+import { Bot, FolderLock, Plug, Sparkles, BriefcaseBusiness, Globe, AppWindow, Activity, Copy, Check } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { getDeviceId } from '@/utils/deviceId';
 import { useDiagnosticStore } from '@/stores/diagnosticStore';
@@ -16,6 +16,7 @@ const CATEGORY_ICON = {
   'permissions': FolderLock,
   'mcp': Plug,
   'skills': Sparkles,
+  'employees': BriefcaseBusiness,
   'network': Globe,
   'app': AppWindow,
 } as const;
@@ -53,6 +54,7 @@ export default function DiagnosticSection() {
       'permissions': [],
       'mcp': [],
       'skills': [],
+      'employees': [],
       'network': [],
       'app': [],
     };
@@ -67,6 +69,7 @@ export default function DiagnosticSection() {
     'permissions': t.diagnostic.categoryPermissions,
     'mcp': t.diagnostic.categoryMcp,
     'skills': t.diagnostic.categorySkills,
+    'employees': t.diagnostic.categoryEmployees,
     'network': t.diagnostic.categoryNetwork,
     'app': t.diagnostic.categoryApp,
   };

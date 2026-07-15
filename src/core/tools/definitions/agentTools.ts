@@ -72,9 +72,11 @@ export const useSkillTool: ToolDefinition = {
       toggleSkillEnabled(skillName);
     }
 
-    const skill = skillLoader.getSkill(skillName);
+    const skill = skillLoader.getSkill(skillName, toolContext?.employeeName);
     if (!skill) {
-      const available = skillLoader.getAvailableSkills().map(s => s.name).join(', ');
+      const available = skillLoader.getAvailableSkills({ employeeName: toolContext?.employeeName })
+        .map(s => s.name)
+        .join(', ');
       return `Error: Skill "${skillName}" not found. Available skills: ${available}`;
     }
 
@@ -121,7 +123,7 @@ export const useSkillTool: ToolDefinition = {
     // Also load chain skills if defined
     if (skill.chain) {
       for (const chainedName of skill.chain) {
-        const chainedSkill = skillLoader.getSkill(chainedName);
+        const chainedSkill = skillLoader.getSkill(chainedName, toolContext?.employeeName);
         if (chainedSkill && activeId) {
           useChatStore.setState((draft: { conversations: Record<string, Conversation> }) => {
             const conv = draft.conversations[activeId];
@@ -141,6 +143,9 @@ export const useSkillTool: ToolDefinition = {
       result += `\n用户上下文: ${context}`;
     }
     result += '\n技能指令已注入本轮系统提示，任务结束后自动释放。';
+    if (toolContext?.inlineSkillContent) {
+      result += `\n\n## ${skill.name}\n${skill.content}`;
+    }
     return result;
   },
   isConcurrencySafe: false,
@@ -343,6 +348,7 @@ export const delegateToAgentTool: ToolDefinition = {
             task,
             context,
             parentConversationSummary,
+            parentConversationId: convId,
             signal: subagentSignal,
             commandConfirmCallback: loopCtx?.commandConfirmCallback,
             filePermissionCallback: loopCtx?.filePermissionCallback,
@@ -384,6 +390,7 @@ export const delegateToAgentTool: ToolDefinition = {
         task,
         context,
         parentConversationSummary,
+        parentConversationId: loopCtx?.conversationId,
         signal: subagentSignal,
         commandConfirmCallback: loopCtx?.commandConfirmCallback,
         filePermissionCallback: loopCtx?.filePermissionCallback,
@@ -418,7 +425,7 @@ export const readSkillFileTool: ToolDefinition = {
     },
     required: ['skill_name', 'path'],
   },
-  execute: async (input) => {
+  execute: async (input, toolContext) => {
     const skillName = input.skill_name as string;
     const relativePath = input.path as string;
 
@@ -427,10 +434,14 @@ export const readSkillFileTool: ToolDefinition = {
       return 'Error: Path must not contain ".." (path traversal not allowed).';
     }
 
-    const content = await skillLoader.loadSupportingFile(skillName, relativePath);
+    const content = await skillLoader.loadSupportingFile(
+      skillName,
+      relativePath,
+      toolContext?.employeeName,
+    );
     if (content === null) {
       // Try listing available files to help
-      const files = await skillLoader.listSupportingFiles(skillName);
+      const files = await skillLoader.listSupportingFiles(skillName, toolContext?.employeeName);
       if (files.length > 0) {
         return `Error: File "${relativePath}" not found in skill "${skillName}".\nAvailable files:\n${files.map(f => `- ${f}`).join('\n')}`;
       }

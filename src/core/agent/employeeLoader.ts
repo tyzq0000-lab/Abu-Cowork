@@ -1,6 +1,6 @@
 import { parse as parseYaml } from 'yaml';
 import { readTextFile, readDir, exists } from '@tauri-apps/plugin-fs';
-import type { SubagentDefinition } from '../../types';
+import type { EmployeeDreamConfig, SubagentDefinition } from '../../types';
 import { joinPath, normalizeSeparators } from '../../utils/pathUtils';
 import {
   employeeProviderId,
@@ -79,6 +79,65 @@ export function parsePluginJson(raw: string): CodebuddyPluginJson | null {
   return parseEmployeePlugin(raw) as CodebuddyPluginJson | null;
 }
 
+export function parseEmployeeDreamConfig(raw: string): EmployeeDreamConfig | null {
+  try {
+    const value = parseYaml(raw) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const config = value as Record<string, unknown>;
+    if (typeof config.enabled !== 'boolean') return null;
+
+    let schedule: EmployeeDreamConfig['schedule'];
+    let chaWorkFormat = false;
+    if (config.schedule === 'daily' || config.schedule === 'manual') {
+      schedule = config.schedule;
+    } else if (config.schedule && typeof config.schedule === 'object' && !Array.isArray(config.schedule)) {
+      chaWorkFormat = true;
+      const scheduleConfig = config.schedule as Record<string, unknown>;
+      if (scheduleConfig.type !== 'daily' && scheduleConfig.type !== 'manual') return null;
+      if (
+        scheduleConfig.time !== undefined
+        && (typeof scheduleConfig.time !== 'string' || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(scheduleConfig.time))
+      ) return null;
+      schedule = scheduleConfig.type;
+    } else {
+      return null;
+    }
+
+    const rawScan = config.session_scan;
+    if (rawScan !== undefined && (!rawScan || typeof rawScan !== 'object' || Array.isArray(rawScan))) {
+      return null;
+    }
+    const scan = rawScan as Record<string, unknown> | undefined;
+    if (chaWorkFormat) {
+      if (scan?.scope !== undefined && scan.scope !== 'all' && scan.scope !== 'selected') return null;
+      if (
+        scan?.workspace_subset !== undefined
+        && (!Array.isArray(scan.workspace_subset) || !scan.workspace_subset.every((item) => typeof item === 'string'))
+      ) return null;
+    } else if (scan?.scope !== undefined && scan.scope !== 'employee') {
+      return null;
+    }
+    const maxSessions = Number((chaWorkFormat ? scan?.latest_sessions : scan?.max_sessions) ?? 5);
+    if (!Number.isInteger(maxSessions) || maxSessions < 1 || maxSessions > 20) return null;
+    return {
+      enabled: config.enabled,
+      schedule,
+      sessionScan: { maxSessions },
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function loadEmployeeDreamConfig(pkgDir: string): Promise<EmployeeDreamConfig | undefined> {
+  try {
+    const parsed = parseEmployeeDreamConfig(await readTextFile(joinPath(pkgDir, 'dream.yaml')));
+    return parsed ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** zh-first localized pick (Abu's default locale is zh-CN). */
 function pickZhFirst(pair: LocalePair | undefined): string | undefined {
   if (!pair) return undefined;
@@ -88,6 +147,16 @@ function pickZhFirst(pair: LocalePair | undefined): string | undefined {
 /** Strip leading "./" or "/" so relative package paths join cleanly. */
 function stripLeadingDot(p: string): string {
   return p.replace(/^\.?\//, '');
+}
+
+function isSafePathSegment(value: string): boolean {
+  return value.length > 0
+    && value === value.trim()
+    && value !== '.'
+    && value !== '..'
+    && !value.includes('/')
+    && !value.includes('\\')
+    && !value.includes('\0');
 }
 
 /** Split a markdown file into YAML frontmatter + body. Body is the system prompt. */
@@ -176,6 +245,7 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
   const skills = plugin.skills
     ?.map((s) => stripLeadingDot(s).split('/').filter(Boolean).pop())
     .filter((s): s is string => Boolean(s));
+  const dream = await loadEmployeeDreamConfig(pkgDir);
 
   return {
     name,
@@ -192,7 +262,11 @@ export async function loadEmployeePackage(pkgDir: string): Promise<SubagentDefin
     category: plugin.categoryId,
     skills: skills && skills.length > 0 ? skills : undefined,
     memory: plugin.runtime?.memory?.scope ?? 'session',
+    memoryAutoCapture: plugin.runtime?.memory?.autoCapture,
+    memoryWrites: plugin.runtime?.evolution?.memoryWrites,
+    dream,
     source: 'employee',
+    toolPolicy: plugin.runtime?.toolPolicy,
     // Engine routing (project06 M1): existing packages omit runtime.engine →
     // 'native', so the built-in loop keeps running them (regression-safe).
     engine: plugin.runtime?.engine ?? 'native',
@@ -212,13 +286,39 @@ interface ChaWorkEmployeeYaml {
   id?: string;
   name?: string;
   description?: string;
+  kind?: string;
+  status?: string;
+}
+
+/** Parse the installed ChaWork skills registry. Invalid registries fail closed. */
+export function parseChaWorkSkillRegistry(raw: string): string[] | null {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    const skills = (value as Record<string, unknown>).skills;
+    if (!Array.isArray(skills)) return null;
+
+    const enabled = new Set<string>();
+    for (const item of skills) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const entry = item as Record<string, unknown>;
+      if (typeof entry.id !== 'string' || !isSafePathSegment(entry.id) || typeof entry.enabled !== 'boolean') {
+        return null;
+      }
+      if (entry.enabled) enabled.add(entry.id);
+    }
+    return [...enabled];
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Build a SubagentDefinition from ChaWork-format package parts. PURE (no fs) so
  * it is unit-testable. ChaWork carries identity in employee.yaml, persona in
  * prompt.md, and capabilities in skills/-slash-SKILL.md — the same open substrate
- * our plugin.json packages reduce to. Routed to the codex engine by default.
+ * our plugin.json packages reduce to. It runs on the existing native substrate;
+ * origin format never selects an execution engine.
  * Returns null on unparseable yaml or a manifest with no id/name.
  */
 export function buildChaWorkSubagent(
@@ -232,20 +332,29 @@ export function buildChaWorkSubagent(
   } catch {
     return null;
   }
-  if (!manifest || typeof manifest !== 'object') return null;
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return null;
+  if (manifest.status !== undefined && typeof manifest.status !== 'string') return null;
+  if (manifest.status === 'archived') return null;
   // Canonical @mention key prefers the stable slug (id), like plugin.json's agentName.
-  const name = manifest.id || manifest.name;
-  if (!name) return null;
+  const name = typeof manifest.id === 'string'
+    ? manifest.id
+    : typeof manifest.name === 'string'
+      ? manifest.name
+      : '';
+  if (!isSafePathSegment(name) || name === 'abu' || name === '__dream__') return null;
+  const displayName = typeof manifest.name === 'string' ? manifest.name : undefined;
+  const description = typeof manifest.description === 'string' ? manifest.description : '';
+  const skills = [...new Set(skillNames.filter(isSafePathSegment))];
   return {
     name,
-    description: manifest.description ?? '',
-    ...(manifest.name && manifest.name !== name
-      ? { displayNames: { 'zh-CN': manifest.name } }
+    description,
+    ...(displayName && displayName !== name
+      ? { displayNames: { 'zh-CN': displayName } }
       : {}),
-    skills: skillNames.length > 0 ? skillNames : undefined,
-    memory: 'session',
+    skills: skills.length > 0 ? skills : undefined,
+    memory: 'project',
     source: 'employee',
-    engine: 'codex',
+    engine: 'native',
     systemPrompt: promptMd.trim(),
     filePath: '', // set by the fs wrapper below
   };
@@ -273,12 +382,28 @@ export async function loadChaWorkEmployee(pkgDir: string): Promise<SubagentDefin
   let skillNames: string[] = [];
   try {
     const entries = await readDir(joinPath(pkgDir, 'skills'));
-    skillNames = entries.filter((e) => e.isDirectory).map((e) => e.name);
+    skillNames = entries
+      .filter((entry) => entry.isDirectory && isSafePathSegment(entry.name))
+      .map((entry) => entry.name);
   } catch {
     // no skills dir
   }
+  try {
+    const enabled = parseChaWorkSkillRegistry(await readTextFile(joinPath(pkgDir, 'skills.json')));
+    const available = new Set(skillNames);
+    skillNames = (enabled ?? []).filter((name) => available.has(name));
+  } catch {
+    // Legacy portable packages without skills.json keep all on-disk skills.
+  }
   const def = buildChaWorkSubagent(rawYaml, promptMd, skillNames);
-  if (def) def.filePath = yamlPath;
+  if (def) {
+    def.filePath = yamlPath;
+    def.dream = await loadEmployeeDreamConfig(pkgDir);
+    if (def.dream?.enabled) {
+      def.memoryAutoCapture = ['preference', 'feedback', 'failure', 'project', 'reference'];
+      def.memoryWrites = 'approval';
+    }
+  }
   return def;
 }
 

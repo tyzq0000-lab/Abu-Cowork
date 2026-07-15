@@ -3,7 +3,7 @@ import { skillLoader } from '../skill/loader';
 
 export function getEmployeeToolShadows(agent: SubagentDefinition): string[] {
   if (agent.source !== 'employee' || !agent.skills?.length) return [];
-  const names = agent.skills.flatMap((name) => skillLoader.getSkill(name)?.shadows ?? []);
+  const names = agent.skills.flatMap((name) => skillLoader.getSkill(name, agent.name)?.shadows ?? []);
   return [...new Set(names)];
 }
 
@@ -14,7 +14,7 @@ export function buildEmployeeSkillsSection(
   if (agent.source !== 'employee' || !agent.skills?.length) return '';
 
   const skills = agent.skills
-    .map((name) => skillLoader.getSkill(name))
+    .map((name) => skillLoader.getSkill(name, agent.name))
     .filter((skill): skill is NonNullable<typeof skill> => Boolean(skill));
 
   if (skills.length === 0) return '';

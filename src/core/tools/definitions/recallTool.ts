@@ -241,7 +241,9 @@ export const readMemoryTool: ToolDefinition = {
 
     // Build search order: requested workspace > current workspace > global.
     const searchPaths: Array<string | null> = [];
-    if (context?.memoryScope === 'user') {
+    if (context?.memoryPath) {
+      searchPaths.push(context.memoryPath);
+    } else if (context?.memoryScope === 'user') {
       searchPaths.push(null);
     } else if (context?.memoryScope === 'project') {
       if (!currentWs) return 'Error: 当前 Agent 使用项目记忆，但任务没有配置工作区。';

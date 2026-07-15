@@ -74,7 +74,7 @@ export const testSkillTriggerTool: ToolDefinition = {
     },
     required: ['skill_name', 'skill_description', 'queries'],
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const skillName = input.skill_name as string;
     const skillDescription = input.skill_description as string;
     const rawQueries = input.queries as Array<{ query: string; should_trigger: string | boolean }>;
@@ -117,6 +117,7 @@ ${skillsList}
     for (const q of queries) {
       try {
         const response = await llmCall({
+          conversationId: context?.conversationId,
           system: systemPrompt,
           messages: [{ role: 'user', content: q.query }],
           tools: [useSkillToolDef],
@@ -179,7 +180,7 @@ export const improveSkillDescriptionTool: ToolDefinition = {
     },
     required: ['skill_name', 'current_description', 'eval_results'],
   },
-  execute: async (input) => {
+  execute: async (input, context) => {
     const skillName = input.skill_name as string;
     const currentDescription = input.current_description as string;
     const skillContent = (input.skill_content as string) || '';
@@ -232,6 +233,7 @@ ${skillContent ? `技能内容（供参考）：\n${skillContent.slice(0, 2000)}
 
     try {
       const response = await llmCall({
+        conversationId: context?.conversationId,
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 1024,
       });

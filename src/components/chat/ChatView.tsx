@@ -8,7 +8,8 @@ import { useSettingsStore, getActiveApiKey, providerRequiresApiKey } from '@/sto
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import type { PermissionDuration } from '@/stores/permissionStore';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { useI18n } from '@/i18n';
+import { format, useI18n } from '@/i18n';
+import { useToastStore } from '@/stores/toastStore';
 import MessageGroup from './MessageGroup';
 import ChatHeader from './ChatHeader';
 import ConversationHistoryDrawer from './ConversationHistoryDrawer';
@@ -77,6 +78,7 @@ export default function ChatView() {
   const messages = activeConv?.messages ?? [];
   void messageCount; // used only to trigger re-render
   const { t, locale } = useI18n();
+  const addToast = useToastStore((s) => s.addToast);
 
   // Pending agent: set when user enters chat from any agent surface
   // (toolbox detail "Start Chat" button, etc.). Drives the welcome banner so
@@ -107,6 +109,104 @@ export default function ChatView() {
   // agent. Drives the chat header + history drawer. null → default 扶摇.
   const currentContactKey = activeConv?.agentName ?? pendingAgentName ?? null;
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [employeeActionBusy, setEmployeeActionBusy] = useState<'dream' | 'knowledge' | null>(null);
+  const currentEmployee = currentContactKey ? agentRegistry.getAgent(currentContactKey) : undefined;
+  const canImportKnowledge = !!activeConv
+    && currentEmployee?.source === 'employee'
+    && (currentEmployee.memory ?? 'session') !== 'session';
+  const canRunDream = canImportKnowledge && currentEmployee?.dream?.enabled === true;
+
+  const handleImportKnowledge = async () => {
+    if (!activeConv || !currentEmployee || employeeActionBusy) return;
+    const selected = await openDialog({
+      multiple: true,
+      directory: false,
+      filters: [{
+        name: 'Documents',
+        extensions: ['txt', 'md', 'csv', 'json', 'yaml', 'yml', 'html', 'xml', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'pptx'],
+      }],
+    });
+    if (!selected) return;
+
+    setEmployeeActionBusy('knowledge');
+    try {
+      const { importEmployeeKnowledge } = await import('@/core/employee/knowledge');
+      const result = await importEmployeeKnowledge({
+        agent: currentEmployee,
+        conversationId: activeConv.id,
+        workspacePath: activeConv.workspacePath ?? useWorkspaceStore.getState().currentPath,
+        filePaths: Array.isArray(selected) ? selected : [selected],
+      });
+      if (result.imported.length === 0 && result.errors.length > 0) {
+        addToast({
+          type: 'error',
+          title: t.employeeGrowth.knowledgeFailedTitle,
+          message: result.errors[0]?.error,
+        });
+      } else {
+        addToast({
+          type: result.errors.length > 0 ? 'warning' : 'success',
+          title: t.employeeGrowth.knowledgeCompletedTitle,
+          message: result.errors[0]?.error ?? format(t.employeeGrowth.knowledgeCompleted, {
+            imported: result.imported.length,
+            duplicates: result.duplicateCount,
+          }),
+        });
+      }
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: t.employeeGrowth.knowledgeFailedTitle,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setEmployeeActionBusy(null);
+    }
+  };
+
+  const handleRunDream = async () => {
+    if (!activeConv || !currentEmployee || employeeActionBusy) return;
+    setEmployeeActionBusy('dream');
+    try {
+      const { runEmployeeDream } = await import('@/core/employee/dream');
+      const result = await runEmployeeDream({
+        agent: currentEmployee,
+        conversationId: activeConv.id,
+        workspacePath: activeConv.workspacePath ?? useWorkspaceStore.getState().currentPath,
+        force: true,
+      });
+      if (result.status === 'completed') {
+        addToast({
+          type: 'success',
+          title: t.employeeGrowth.dreamCompletedTitle,
+          message: format(t.employeeGrowth.dreamCompleted, {
+            written: result.extraction?.written ?? 0,
+            proposed: result.extraction?.proposed ?? 0,
+          }),
+        });
+      } else if (result.status === 'no-history') {
+        addToast({
+          type: 'info',
+          title: t.employeeGrowth.dreamNoHistoryTitle,
+          message: t.employeeGrowth.dreamNoHistory,
+        });
+      } else {
+        addToast({
+          type: 'warning',
+          title: t.employeeGrowth.dreamUnavailableTitle,
+          message: t.employeeGrowth.dreamUnavailable,
+        });
+      }
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: t.employeeGrowth.dreamUnavailableTitle,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setEmployeeActionBusy(null);
+    }
+  };
 
   // Subscribe to command confirmation state using useSyncExternalStore
   const commandConfirmRequest = useSyncExternalStore(
@@ -303,7 +403,13 @@ export default function ChatView() {
   if (!activeConv || activeConv.messages.length === 0) {
     return (
       <div className="flex flex-col h-full bg-[var(--abu-bg-base)]">
-        <ChatHeader contactKey={currentContactKey} onOpenHistory={() => setHistoryOpen(true)} />
+        <ChatHeader
+          contactKey={currentContactKey}
+          onOpenHistory={() => setHistoryOpen(true)}
+          onRunDream={canRunDream ? () => void handleRunDream() : undefined}
+          onImportKnowledge={canImportKnowledge ? () => void handleImportKnowledge() : undefined}
+          actionBusy={employeeActionBusy}
+        />
         <ConversationHistoryDrawer
           contactKey={currentContactKey}
           open={historyOpen}
@@ -403,7 +509,13 @@ export default function ChatView() {
   return (
     <div className="flex flex-col h-full min-h-0 min-w-0 bg-[var(--abu-bg-base)]">
       {/* IM 化 chat header + conversation-history drawer */}
-      <ChatHeader contactKey={currentContactKey} onOpenHistory={() => setHistoryOpen(true)} />
+      <ChatHeader
+        contactKey={currentContactKey}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onRunDream={canRunDream ? () => void handleRunDream() : undefined}
+        onImportKnowledge={canImportKnowledge ? () => void handleImportKnowledge() : undefined}
+        actionBusy={employeeActionBusy}
+      />
       <ConversationHistoryDrawer
         contactKey={currentContactKey}
         open={historyOpen}

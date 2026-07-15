@@ -45,6 +45,14 @@ describe('adapter', () => {
       expect(err.retryAfterMs).toBe(30000);
     });
 
+    it('platform daily quota exhaustion is not retried', () => {
+      const err = classifyError(429, JSON.stringify({
+        error: { message: '今日额度已用完', code: 'uprow_daily_quota_exceeded' },
+      }));
+      expect(err.code).toBe('rate_limit');
+      expect(err.retryable).toBe(false);
+    });
+
     it('529 → overloaded (retryable)', () => {
       const err = classifyError(529, 'Service overloaded');
       expect(err.code).toBe('overloaded');

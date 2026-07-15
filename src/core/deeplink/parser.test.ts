@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDeepLink, isDownloadUrlAllowed, ALLOWED_DOWNLOAD_HOSTS } from './parser';
+import { parseDeepLink, isDownloadUrlAllowed, isEnrollmentUrlAllowed, ALLOWED_DOWNLOAD_HOSTS } from './parser';
 
 const OSS = ALLOWED_DOWNLOAD_HOSTS[0];
 
@@ -34,8 +34,10 @@ describe('deeplink parser', () => {
       const pkgUrl = `https://${OSS}/employees/generic-package.zip`;
       const result = parseDeepLink(
         `fuyao://install?type=employee&url=${encodeURIComponent(pkgUrl)}`
-        + '&employeeId=employee-42&packageId=generic-package'
-        + '&packageVersion=1.2.3&launchTarget=conversation',
+        + '&employeeId=employee-42&hireId=hire-42&packageId=generic-package'
+        + '&packageVersion=1.2.3&launchTarget=conversation&integrity=required'
+        + '&enrollmentCode=upr_enr_abcdefghijklmnopqrstuvwxyz123456'
+        + `&enrollmentUrl=${encodeURIComponent('http://127.0.0.1:3001/api/deployments/exchange')}`,
       );
 
       expect(result.ok).toBe(true);
@@ -45,8 +47,12 @@ describe('deeplink parser', () => {
           pkgType: 'employee',
           url: pkgUrl,
           employeeId: 'employee-42',
+          hireId: 'hire-42',
           packageId: 'generic-package',
           packageVersion: '1.2.3',
+          integrityRequired: true,
+          enrollmentCode: 'upr_enr_abcdefghijklmnopqrstuvwxyz123456',
+          enrollmentUrl: 'http://127.0.0.1:3001/api/deployments/exchange',
           launchTarget: 'conversation',
         });
       }
@@ -90,6 +96,17 @@ describe('deeplink parser', () => {
       );
       expect(result).toMatchObject({ ok: false, code: 'URL_NOT_ALLOWED' });
     });
+
+    it('rejects missing, partial, malformed, or unpinned enrollment context', () => {
+      const pkgUrl = encodeURIComponent(`https://${OSS}/employees/a.zip`);
+      const base = `fuyao://install?type=employee&url=${pkgUrl}&employeeId=emp_1&hireId=hire_1&integrity=required`;
+      expect(parseDeepLink(base)).toMatchObject({ ok: false, code: 'INVALID_ENROLLMENT' });
+      expect(parseDeepLink(`${base}&enrollmentCode=upr_enr_abcdefghijklmnopqrstuvwxyz123456`))
+        .toMatchObject({ ok: false, code: 'INVALID_ENROLLMENT' });
+      expect(parseDeepLink(
+        `${base}&enrollmentCode=short&enrollmentUrl=${encodeURIComponent('https://evil.example.com/api/deployments/exchange')}`,
+      )).toMatchObject({ ok: false, code: 'INVALID_ENROLLMENT' });
+    });
   });
 
   describe('isDownloadUrlAllowed', () => {
@@ -110,6 +127,15 @@ describe('deeplink parser', () => {
       expect(isDownloadUrlAllowed('file:///etc/passwd')).toBe(false);
       expect(isDownloadUrlAllowed('ftp://example.com/x.zip')).toBe(false);
       expect(isDownloadUrlAllowed('::::')).toBe(false);
+    });
+  });
+
+  describe('isEnrollmentUrlAllowed', () => {
+    it('allows loopback HTTP for development and rejects arbitrary HTTPS hosts', () => {
+      expect(isEnrollmentUrlAllowed('http://127.0.0.1:3001/api/deployments/exchange')).toBe(true);
+      expect(isEnrollmentUrlAllowed('http://localhost:3001/api/deployments/exchange')).toBe(true);
+      expect(isEnrollmentUrlAllowed('https://evil.example.com/api/deployments/exchange')).toBe(false);
+      expect(isEnrollmentUrlAllowed('file:///tmp/exchange')).toBe(false);
     });
   });
 });

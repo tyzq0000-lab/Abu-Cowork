@@ -233,7 +233,12 @@ describe('buildSystemPrompt - employee skill gating', () => {
     const route = {
       ...routeInput('你好'),
       name: 'content-creator',
-      definition: { name: 'content-creator', systemPrompt: '你是文爆爆', skills: ['humanizer'] },
+      definition: {
+        name: 'content-creator',
+        systemPrompt: '你是文爆爆',
+        skills: ['humanizer'],
+        source: 'employee',
+      },
     };
 
     const prompt = await buildSystemPrompt(route as never, basePrompt, 'test-conv');

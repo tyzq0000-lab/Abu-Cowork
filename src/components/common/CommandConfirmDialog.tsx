@@ -2,13 +2,10 @@ import { useEffect, useCallback } from 'react';
 import { AlertTriangle, ShieldAlert, ShieldX, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useI18n } from '@/i18n';
-import type { DangerLevel } from '@/core/tools/commandSafety';
+import type { ConfirmationInfo } from '@/core/tools/commandSafety';
+import { redactReviewDetail } from '@/core/approval/reviewQueue';
 
-export interface CommandConfirmRequest {
-  command: string;
-  level: DangerLevel;
-  reason: string;
-}
+export type CommandConfirmRequest = ConfirmationInfo;
 
 interface CommandConfirmDialogProps {
   request: CommandConfirmRequest;
@@ -60,6 +57,10 @@ export default function CommandConfirmDialog({
   const config = levelConfig[request.level];
   const Icon = config.icon;
   const isBlocked = request.level === 'block';
+  const isExternalAction = request.kind === 'external-action';
+  const displayCommand = isExternalAction
+    ? redactReviewDetail(request.reviewPayload ?? request.command)
+    : request.command;
 
   // Close on Escape key
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -91,10 +92,14 @@ export default function CommandConfirmDialog({
             </div>
             <div className="flex-1 min-w-0">
               <h2 className="text-lg font-semibold text-[var(--abu-text-primary)]">
-                {t.commandConfirm[config.titleKey]}
+                {isExternalAction
+                  ? t.commandConfirm.externalActionTitle
+                  : t.commandConfirm[config.titleKey]}
               </h2>
               <p className="text-[14px] text-[var(--abu-text-tertiary)] mt-0.5">
-                {t.commandConfirm[config.descKey]}
+                {isExternalAction
+                  ? t.commandConfirm.externalActionDescription
+                  : t.commandConfirm[config.descKey]}
               </p>
             </div>
           </div>
@@ -105,7 +110,7 @@ export default function CommandConfirmDialog({
           {/* Command display */}
           <div className="px-4 py-3 bg-[#1a1a1a] rounded-lg border border-[#333]">
             <code className="text-[13px] text-[#e0e0e0] font-mono break-all whitespace-pre-wrap">
-              {request.command}
+              {displayCommand}
             </code>
           </div>
 

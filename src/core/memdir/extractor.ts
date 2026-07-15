@@ -14,20 +14,76 @@ import { useSettingsStore, getActiveApiKey, getActiveProvider, getEffectiveModel
 import { ClaudeAdapter } from '../llm/claude';
 import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
 import type { LLMAdapter } from '../llm/adapter';
-import type { StreamEvent } from '../../types';
+import type { AgentMemoryCapture, StreamEvent } from '../../types';
 import type { Message } from '../../types';
 import type { MemoryType } from '../memdir/types';
+import { resolvePlatformRelayExecution } from '../employee/platformRelay';
 
 interface ExtractedMemory {
   name: string;
   content: string;
-  type: MemoryType;
+  type?: MemoryType;
+  capture?: AgentMemoryCapture;
   /**
    * Optional. When set, the writer will delete the referenced filename before
    * writing the new entry — used to atomically replace an outdated/conflicting
    * memory rather than producing a near-duplicate alongside it.
    */
   _replaces?: string;
+}
+
+export interface MemoryExtractionOptions {
+  /** Employee-private memdir key. When present, global/workspace memory is never scanned. */
+  memoryPath?: string;
+  allowedCaptures?: AgentMemoryCapture[];
+  writeMode?: 'auto' | 'approval';
+  agentName?: string;
+  mode?: 'conversation' | 'dream';
+  /** Prebuilt multi-session transcript used by Dream. */
+  transcript?: string;
+}
+
+export interface MemoryExtractionResult {
+  candidates: number;
+  written: number;
+  proposed: number;
+  safetyBlocked: number;
+  replaced: number;
+}
+
+const EMPTY_RESULT: MemoryExtractionResult = {
+  candidates: 0,
+  written: 0,
+  proposed: 0,
+  safetyBlocked: 0,
+  replaced: 0,
+};
+
+const CAPTURE_TO_TYPE: Record<AgentMemoryCapture, MemoryType> = {
+  preference: 'user',
+  feedback: 'feedback',
+  failure: 'feedback',
+  project: 'project',
+  reference: 'reference',
+};
+
+const MEMORY_TYPES = new Set<MemoryType>(['user', 'feedback', 'project', 'reference']);
+
+export function normalizeExtractedMemory(
+  value: unknown,
+  allowedCaptures?: readonly AgentMemoryCapture[],
+): (ExtractedMemory & { type: MemoryType }) | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const memory = value as ExtractedMemory;
+  if (typeof memory.name !== 'string' || !memory.name.trim()) return null;
+  if (typeof memory.content !== 'string' || !memory.content.trim()) return null;
+
+  if (allowedCaptures) {
+    if (!memory.capture || !allowedCaptures.includes(memory.capture)) return null;
+    return { ...memory, name: memory.name.trim(), content: memory.content.trim(), type: CAPTURE_TO_TYPE[memory.capture] };
+  }
+  if (!memory.type || !MEMORY_TYPES.has(memory.type)) return null;
+  return { ...memory, name: memory.name.trim(), content: memory.content.trim(), type: memory.type };
 }
 
 const EXTRACTION_SYSTEM_PROMPT = `你是一个记忆提取助手。分析给定的对话，提取值得长期记忆的信息。
@@ -125,6 +181,24 @@ feedback content 必须包含：规则本身 + Why（用户为什么这么要求
 
 type 可选值: user, feedback, project, reference`;
 
+function buildExtractionSystemPrompt(options: MemoryExtractionOptions): string {
+  const additions: string[] = [];
+  if (options.allowedCaptures) {
+    additions.push(`## 员工包允许的自动记忆类别
+本次只能提取以下 capture：${options.allowedCaptures.join(', ')}。
+每个输出对象必须增加 \`capture\` 字段；不在允许列表中的候选必须丢弃。
+映射规则：preference→user，feedback→feedback，failure→feedback，project→project，reference→reference。`);
+  }
+  if (options.mode === 'dream') {
+    additions.push(`## 周期性自省模式
+你正在分析该员工跨会话的历史记录。只提取反复出现、能改善未来工作的稳定模式；
+不要复述单次任务结果，不要提出能力/工作流/触发器改动，只能产出长期记忆候选。`);
+  }
+  return additions.length > 0
+    ? `${EXTRACTION_SYSTEM_PROMPT}\n\n${additions.join('\n\n')}`
+    : EXTRACTION_SYSTEM_PROMPT;
+}
+
 /** Summarize tool calls on an assistant message for extraction context */
 function summarizeToolCalls(message: Message): string {
   if (!message.toolCalls || message.toolCalls.length === 0) return '';
@@ -139,6 +213,25 @@ function summarizeToolCalls(message: Message): string {
     .join('\n');
 }
 
+export function buildMemoryTranscript(messages: readonly Message[], maxMessages = 20): string {
+  return messages
+    .slice(-maxMessages)
+    .filter((message) => message.role === 'user' || message.role === 'assistant')
+    .map((message) => {
+      const text = typeof message.content === 'string'
+        ? message.content
+        : (message.content as { type: string; text?: string }[])
+            .filter((content) => content.type === 'text')
+            .map((content) => content.text ?? '')
+            .join('\n');
+      const role = message.role === 'user' ? '用户' : 'AI';
+      const toolSummary = message.role === 'assistant' ? summarizeToolCalls(message) : '';
+      const line = `${role}: ${text.slice(0, 500)}`;
+      return toolSummary ? `${line}\n${toolSummary}` : line;
+    })
+    .join('\n');
+}
+
 /**
  * Extract memories from a conversation.
  * Best-effort: failures are silently ignored.
@@ -146,44 +239,33 @@ function summarizeToolCalls(message: Message): string {
 export async function extractMemoriesFromConversation(
   conversationId: string,
   workspacePath?: string | null,
-): Promise<void> {
+  options: MemoryExtractionOptions = {},
+): Promise<MemoryExtractionResult> {
   try {
-    const conv = useChatStore.getState().conversations[conversationId];
-    const messages = conv?.messages ?? await (async () => {
-      const { loadMessages } = await import('../session/conversationStorage');
-      return loadMessages(conversationId);
-    })();
-    if (messages.length < 4) return; // too short to extract
+    let transcript = options.transcript;
+    if (!transcript) {
+      const conv = useChatStore.getState().conversations[conversationId];
+      const messages = conv?.messages ?? await (async () => {
+        const { loadMessages } = await import('../session/conversationStorage');
+        return loadMessages(conversationId);
+      })();
+      if (messages.length < 4) return { ...EMPTY_RESULT };
+      transcript = buildMemoryTranscript(messages);
+    }
 
-    // Build transcript from recent messages (last 20)
-    const recentMsgs = messages.slice(-20);
-    const transcript = recentMsgs
-      .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => {
-        const text = typeof m.content === 'string'
-          ? m.content
-          : (m.content as { type: string; text?: string }[])
-              .filter(c => c.type === 'text')
-              .map(c => c.text ?? '')
-              .join('\n');
-        const role = m.role === 'user' ? '用户' : 'AI';
-        const toolSummary = m.role === 'assistant' ? summarizeToolCalls(m) : '';
-        const line = `${role}: ${text.slice(0, 500)}`;
-        return toolSummary ? `${line}\n${toolSummary}` : line;
-      })
-      .join('\n');
-
-    if (transcript.length < 50) return; // too little content
+    if (transcript.length < 50) return { ...EMPTY_RESULT };
 
     // Create adapter
     const settings = useSettingsStore.getState();
-    const activeApiKey = getActiveApiKey(settings);
+    const platformExecution = await resolvePlatformRelayExecution(conversationId);
+    const executionProvider = platformExecution?.provider ?? getActiveProvider(settings);
+    const activeApiKey = platformExecution?.provider.apiKey ?? getActiveApiKey(settings);
     if (!activeApiKey) {
       console.warn('[Memory] Auto-extraction skipped: no API key configured');
-      return;
+      return { ...EMPTY_RESULT };
     }
 
-    const adapter: LLMAdapter = getActiveProvider(settings)?.apiFormat === 'openai-compatible'
+    const adapter: LLMAdapter = executionProvider?.apiFormat === 'openai-compatible'
       ? new OpenAICompatibleAdapter()
       : new ClaudeAdapter();
 
@@ -192,13 +274,15 @@ export async function extractMemoriesFromConversation(
     // without a manifest (worse dedup, but extraction still happens).
     const MAX_MANIFEST_LINES = 50;
     let manifestSection = '';
+    const targetPath = options.memoryPath ?? workspacePath;
     try {
       const { scanMemoryFiles } = await import('./scan');
-      const [globalHeaders, wsHeaders] = await Promise.all([
-        scanMemoryFiles(null),
-        workspacePath ? scanMemoryFiles(workspacePath) : Promise.resolve([]),
-      ]);
-      const allHeaders = [...globalHeaders, ...wsHeaders];
+      const allHeaders = options.memoryPath
+        ? await scanMemoryFiles(options.memoryPath)
+        : [
+            ...await scanMemoryFiles(null),
+            ...(workspacePath ? await scanMemoryFiles(workspacePath) : []),
+          ];
       if (allHeaders.length > 0) {
         // Include filename so the extractor can reference it in _replaces
         // when emitting a conflict-resolving update.
@@ -216,7 +300,7 @@ export async function extractMemoriesFromConversation(
     const extractionMessage: Message = {
       id: 'mem-extract',
       role: 'user',
-      content: `${manifestSection}## 对话\n${transcript}\n\n请分析上面对话并提取值得长期记忆的信息。先核对"已有记忆索引"避免重复，再按 system prompt 中的"三问筛查"判断是否值得保存。`,
+      content: `${manifestSection}## ${options.mode === 'dream' ? '历史会话' : '对话'}\n${transcript}\n\n请分析以上内容并提取值得长期记忆的信息。先核对"已有记忆索引"避免重复，再按 system prompt 中的"三问筛查"判断是否值得保存。`,
       timestamp: Date.now(),
     };
 
@@ -224,10 +308,10 @@ export async function extractMemoriesFromConversation(
     await adapter.chat(
       [extractionMessage],
       {
-        model: getEffectiveModel(settings),
+        model: platformExecution?.modelId ?? getEffectiveModel(settings),
         apiKey: activeApiKey,
-        baseUrl: getActiveProvider(settings)?.baseUrl || undefined,
-        systemPrompt: EXTRACTION_SYSTEM_PROMPT,
+        baseUrl: executionProvider?.baseUrl || undefined,
+        systemPrompt: buildExtractionSystemPrompt(options),
         maxTokens: 1024,
       },
       (event: StreamEvent) => {
@@ -237,29 +321,59 @@ export async function extractMemoriesFromConversation(
       },
     );
 
-    if (!responseText.trim()) return;
+    if (!responseText.trim()) return { ...EMPTY_RESULT };
 
     // Parse JSON from response (may be wrapped in ```json```)
     const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return;
+    if (!jsonMatch) return { ...EMPTY_RESULT };
 
-    let extracted: ExtractedMemory[];
+    let extracted: unknown[];
     try {
       extracted = JSON.parse(jsonMatch[0]);
     } catch {
-      return; // malformed JSON
+      return { ...EMPTY_RESULT }; // malformed JSON
     }
 
-    if (!Array.isArray(extracted) || extracted.length === 0) return;
+    if (!Array.isArray(extracted) || extracted.length === 0) return { ...EMPTY_RESULT };
 
-    // Write to memdir as .md files
+    const candidates = extracted
+      .slice(0, 5)
+      .map((memory) => normalizeExtractedMemory(memory, options.allowedCaptures))
+      .filter((memory): memory is NonNullable<typeof memory> => !!memory);
+    if (candidates.length === 0) return { ...EMPTY_RESULT };
+
+    // Persist directly or create a durable Review Queue proposal, per package policy.
     const { writeMemory, deleteMemory } = await import('../memdir/write');
     const { ContentSafetyError } = await import('../safety/contentGuard');
     let written = 0;
+    let proposed = 0;
     let safetyBlocked = 0;
     let replaced = 0;
-    for (const mem of extracted.slice(0, 5)) { // max 5 entries per extraction
-      if (!mem.name || !mem.content || !mem.type) continue;
+    for (const mem of candidates) {
+      if (options.writeMode === 'approval') {
+        if (!options.memoryPath || !options.agentName) continue;
+        try {
+          const { createMemoryReviewProposal } = await import('../approval/reviewQueue');
+          await createMemoryReviewProposal({
+            conversationId,
+            agentName: options.agentName,
+            memoryPath: options.memoryPath,
+            name: mem.name,
+            description: mem.content.slice(0, 80),
+            type: mem.type,
+            content: mem.content,
+            ...(typeof mem._replaces === 'string' ? { replaces: mem._replaces } : {}),
+          });
+          proposed++;
+        } catch (err) {
+          if (err instanceof ContentSafetyError) {
+            safetyBlocked++;
+            continue;
+          }
+          throw err;
+        }
+        continue;
+      }
 
       // Handle _replaces: delete the conflicting old entry before writing
       // the new one. If delete fails (e.g. already gone) we still write the
@@ -267,7 +381,7 @@ export async function extractMemoriesFromConversation(
       // worse off than before.
       if (mem._replaces && typeof mem._replaces === 'string') {
         try {
-          await deleteMemory(mem._replaces, workspacePath);
+          await deleteMemory(mem._replaces, targetPath);
           replaced++;
           console.log(`[Memory] Replaced ${mem._replaces} with new entry "${mem.name}"`);
         } catch (err) {
@@ -285,7 +399,7 @@ export async function extractMemoriesFromConversation(
           type: mem.type,
           content: mem.content,
           source: 'auto_flush',
-          workspacePath,
+          workspacePath: targetPath,
         });
         written++;
       } catch (err) {
@@ -302,17 +416,20 @@ export async function extractMemoriesFromConversation(
       }
     }
 
-    if (written > 0) {
+    if (written > 0 || proposed > 0) {
       const parts = [];
+      if (proposed > 0) parts.push(`${proposed} proposed`);
       if (replaced > 0) parts.push(`${replaced} replaced`);
       if (safetyBlocked > 0) parts.push(`${safetyBlocked} blocked by safety scan`);
       const suffix = parts.length > 0 ? ` (${parts.join(', ')})` : '';
-      console.log(`[Memory] Extracted ${written} memories from conversation ${conversationId}${suffix}`);
+      console.log(`[Memory] Extracted ${written + proposed} memories from conversation ${conversationId}${suffix}`);
     } else if (safetyBlocked > 0) {
       console.log(`[Memory] All ${safetyBlocked} extracted entries blocked by safety scan for ${conversationId}`);
     }
+    return { candidates: candidates.length, written, proposed, safetyBlocked, replaced };
   } catch (err) {
     // Best-effort — never block session flow
     console.warn('[Memory] Extraction failed (non-critical):', err);
+    return { ...EMPTY_RESULT };
   }
 }

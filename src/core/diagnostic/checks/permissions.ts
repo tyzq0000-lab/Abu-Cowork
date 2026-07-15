@@ -43,7 +43,7 @@ function failedRow(
   };
 }
 
-async function probeWrite(path: string): Promise<{ ok: boolean; durationMs: number; error?: string }> {
+export async function probeWrite(path: string): Promise<{ ok: boolean; durationMs: number; error?: string }> {
   const start = Date.now();
   try {
     await writeTextFile(path, 'abu-diag-test');

@@ -25,10 +25,18 @@ export interface DeepLinkInstallRequest {
   name?: string;
   /** Platform employee record that initiated this deployment. */
   employeeId?: string;
+  /** Platform hire record; the true enterprise-tenant boundary. */
+  hireId?: string;
   /** Platform package identifier. */
   packageId?: string;
   /** Requested package version. */
   packageVersion?: string;
+  /** Platform packages must carry a valid uprow signature. */
+  integrityRequired?: boolean;
+  /** Short-lived, single-use code exchanged for this device's deployment credential. */
+  enrollmentCode?: string;
+  /** HTTPS platform endpoint that consumes enrollmentCode. */
+  enrollmentUrl?: string;
   /** Generic post-install destination. */
   launchTarget?: 'conversation' | 'employee';
 }
@@ -39,7 +47,8 @@ export type DeepLinkParseError =
   | 'UNKNOWN_ACTION'
   | 'INVALID_TYPE'
   | 'MISSING_URL'
-  | 'URL_NOT_ALLOWED';
+  | 'URL_NOT_ALLOWED'
+  | 'INVALID_ENROLLMENT';
 
 export type DeepLinkParseResult =
   | { ok: true; request: DeepLinkInstallRequest }
@@ -50,6 +59,11 @@ export type DeepLinkParseResult =
  * platform download endpoint goes live. Exact hostname match, https only.
  */
 const configuredDownloadHosts = String(import.meta.env.VITE_FUYAO_PACKAGE_HOSTS ?? '')
+  .split(',')
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
+
+const configuredPlatformHosts = String(import.meta.env.VITE_UPROW_PLATFORM_HOSTS ?? '')
   .split(',')
   .map((host) => host.trim().toLowerCase())
   .filter(Boolean);
@@ -80,6 +94,19 @@ export function isDownloadUrlAllowed(raw: string): boolean {
     return LOCAL_DEV_HOSTS.has(u.hostname) || configuredDownloadHosts.includes(u.hostname);
   }
   return false;
+}
+
+/** Platform enrollment is pinned separately from package/object-storage hosts. */
+export function isEnrollmentUrlAllowed(raw: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.username || u.password || u.search || u.hash) return false;
+  if (u.protocol === 'https:') return configuredPlatformHosts.includes(u.hostname);
+  return u.protocol === 'http:' && LOCAL_DEV_HOSTS.has(u.hostname);
 }
 
 /** Parse a raw deep-link URL string into a validated install request. */
@@ -120,8 +147,23 @@ export function parseDeepLink(raw: string): DeepLinkParseResult {
   };
   const name = optionalParam('name');
   const employeeId = optionalParam('employeeId');
+  const hireId = optionalParam('hireId');
   const packageId = optionalParam('packageId');
   const packageVersion = optionalParam('packageVersion');
+  const integrityRequired = optionalParam('integrity') === 'required';
+  const enrollmentCode = optionalParam('enrollmentCode');
+  const enrollmentUrl = optionalParam('enrollmentUrl');
+  const hasEnrollment = !!enrollmentCode || !!enrollmentUrl;
+  if (
+    (hasEnrollment && pkgType !== 'employee')
+    || (!!enrollmentCode !== !!enrollmentUrl)
+    || (hasEnrollment && (!employeeId || !hireId))
+    || (enrollmentCode !== undefined && !/^upr_enr_[A-Za-z0-9_-]{20,100}$/.test(enrollmentCode))
+    || (enrollmentUrl !== undefined && !isEnrollmentUrlAllowed(enrollmentUrl))
+    || (pkgType === 'employee' && integrityRequired && !!employeeId && !hasEnrollment)
+  ) {
+    return { ok: false, code: 'INVALID_ENROLLMENT', message: 'Invalid or incomplete deployment enrollment context' };
+  }
   const rawLaunchTarget = optionalParam('launchTarget');
   const launchTarget =
     rawLaunchTarget === 'conversation' || rawLaunchTarget === 'employee'
@@ -136,8 +178,12 @@ export function parseDeepLink(raw: string): DeepLinkParseResult {
       url: downloadUrl,
       ...(name ? { name } : {}),
       ...(employeeId ? { employeeId } : {}),
+      ...(hireId ? { hireId } : {}),
       ...(packageId ? { packageId } : {}),
       ...(packageVersion ? { packageVersion } : {}),
+      ...(integrityRequired ? { integrityRequired: true } : {}),
+      ...(enrollmentCode ? { enrollmentCode } : {}),
+      ...(enrollmentUrl ? { enrollmentUrl } : {}),
       ...(launchTarget ? { launchTarget } : {}),
     },
   };

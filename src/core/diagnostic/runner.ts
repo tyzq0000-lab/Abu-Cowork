@@ -13,6 +13,7 @@ import { runAIServicesChecks } from './checks/aiServices';
 import { runPermissionsChecks } from './checks/permissions';
 import { runMcpChecks } from './checks/mcp';
 import { runSkillsChecks } from './checks/skills';
+import { runEmployeeChecks } from './checks/employees';
 import { runNetworkChecks } from './checks/network';
 import { runAppChecks } from './checks/app';
 import { getI18n } from '@/i18n';
@@ -28,6 +29,7 @@ const RUNNERS: CategoryRunner[] = [
   { category: 'permissions', run: runPermissionsChecks },
   { category: 'mcp', run: runMcpChecks },
   { category: 'skills', run: runSkillsChecks },
+  { category: 'employees', run: runEmployeeChecks },
   { category: 'network', run: runNetworkChecks },
   { category: 'app', run: runAppChecks },
 ];

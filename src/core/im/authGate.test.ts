@@ -2,7 +2,7 @@
  * AuthGate Tests
  */
 import { describe, it, expect } from 'vitest';
-import { resolveCapability } from './authGate';
+import { getCallbacksForLevel, resolveCapability } from './authGate';
 import type { IMChannel } from '../../types/imChannel';
 
 function makeChannel(overrides: Partial<IMChannel> = {}): IMChannel {
@@ -60,5 +60,24 @@ describe('resolveCapability', () => {
     const channel = makeChannel({ capability: 'chat_only' });
     const result = resolveCapability('user1', channel);
     expect(result).toEqual({ allowed: true, capability: 'chat_only' });
+  });
+});
+
+describe('getCallbacksForLevel', () => {
+  it('does not let full IM capability approve external actions', async () => {
+    const callbacks = getCallbacksForLevel('full');
+
+    await expect(callbacks.commandConfirmCallback({
+      command: 'crm__send_message',
+      level: 'danger',
+      reason: 'requires approval',
+      kind: 'external-action',
+      externalActionKind: 'send',
+    })).resolves.toBe(false);
+    await expect(callbacks.commandConfirmCallback({
+      command: 'git status',
+      level: 'safe',
+      reason: '',
+    })).resolves.toBe(true);
   });
 });

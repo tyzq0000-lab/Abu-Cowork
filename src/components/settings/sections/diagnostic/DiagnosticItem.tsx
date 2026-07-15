@@ -5,6 +5,7 @@ import { useI18n } from '@/i18n';
 import { useSettingsStore, type SystemSettingsTab } from '@/stores/settingsStore';
 import { useCustomizeStore } from '@/stores/customizeStore';
 import { useDiagnosticStore } from '@/stores/diagnosticStore';
+import { useChatStore } from '@/stores/chatStore';
 import type { CheckResult, SuggestedAction } from '@/core/diagnostic/types';
 
 const STATUS_ICON = {
@@ -45,6 +46,9 @@ function ItemActions({ result }: { result: CheckResult }) {
       useCustomizeStore.getState().openCustomize('mcp');
     } else if (a.type === 'retry') {
       runItem(result.id);
+    } else if (a.type === 'open-conversation' && a.target) {
+      void useChatStore.getState().switchConversation(a.target);
+      useSettingsStore.getState().setViewMode('chat');
     }
   };
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   chooseDefaultInitPrompt,
   findExistingEmployeeConversation,
+  hasBlockingEmployeeDependencies,
   summarizeEmployeeDependencies,
 } from './deploymentFlow';
 
@@ -67,5 +68,9 @@ describe('generic employee deployment flow', () => {
       expect.objectContaining({ name: 'Python', state: 'ready' }),
       expect.objectContaining({ name: 'Optional account', state: 'available-to-configure' }),
     ]);
+    expect(hasBlockingEmployeeDependencies(result)).toBe(false);
+    expect(hasBlockingEmployeeDependencies([
+      { name: 'Python', required: true, state: 'unavailable' },
+    ])).toBe(true);
   });
 });

@@ -22,6 +22,7 @@ import { useTaskExecutionStore } from '@/stores/taskExecutionStore';
 import { useLedgerStore } from '@/stores/ledgerStore';
 import { useEmployeeDeploymentStore, type EmployeeDeploymentRecord } from '@/stores/employeeDeploymentStore';
 import { getBaseName } from '@/utils/pathUtils';
+import { getSecret, SECRET_KEYS } from '@/utils/secretStore';
 import type { TaskExecution, ExecutionStep, StepType } from '@/types/execution';
 
 /** Wire-contract version so the platform ingest can evolve the shape safely. */
@@ -81,13 +82,43 @@ function extractPath(input: Record<string, unknown>): string | undefined {
 export function resolveEmployeeId(
   agentName: string,
   deployments: Record<string, EmployeeDeploymentRecord>,
+  conversationId?: string,
 ): string | undefined {
+  if (conversationId) {
+    const exact = Object.values(deployments)
+      .filter((record) => record.conversationId === conversationId && !!record.employeeId)
+      .sort((a, b) => b.configuredAt - a.configuredAt)[0];
+    if (exact?.employeeId) return exact.employeeId;
+  }
   let best: EmployeeDeploymentRecord | undefined;
   for (const record of Object.values(deployments)) {
     if (record.agentName !== agentName || !record.employeeId) continue;
     if (!best || record.configuredAt > best.configuredAt) best = record;
   }
   return best?.employeeId;
+}
+
+/** Resolve the newest platform-bound deployment for this exact ledger entry. */
+export function resolveLedgerDeployment(
+  entry: Pick<EmployeeExecutionLedgerEntry, 'employeeId' | 'employeeName' | 'conversationId'>,
+  deployments: Record<string, EmployeeDeploymentRecord>,
+): EmployeeDeploymentRecord | undefined {
+  if (entry.conversationId) {
+    const exact = Object.values(deployments)
+      .filter((record) => record.deploymentId && record.conversationId === entry.conversationId)
+      .sort((a, b) => b.configuredAt - a.configuredAt)[0];
+    if (exact) return exact;
+  }
+  let best: EmployeeDeploymentRecord | undefined;
+  for (const record of Object.values(deployments)) {
+    if (!record.deploymentId) continue;
+    const matches = entry.employeeId
+      ? record.employeeId === entry.employeeId
+      : record.agentName === entry.employeeName;
+    if (!matches) continue;
+    if (!best || record.configuredAt > best.configuredAt) best = record;
+  }
+  return best;
 }
 
 /**
@@ -180,6 +211,41 @@ export async function reportToPlatformLedger(
 }
 
 /**
+ * Prefer the per-deployment OS-keyring credential. Once an employee is bound,
+ * missing binding data never falls back to the legacy shared token.
+ */
+export async function reportEmployeeLedgerEntry(
+  entry: EmployeeExecutionLedgerEntry,
+  deployments: Record<string, EmployeeDeploymentRecord>,
+  opts: {
+    getSecretImpl?: typeof getSecret;
+    fetchImpl?: typeof fetch;
+    legacyEndpoint?: string;
+    legacyToken?: string;
+  } = {},
+): Promise<LedgerReportResult> {
+  const deployment = resolveLedgerDeployment(entry, deployments);
+  if (deployment) {
+    if (!deployment.ledgerEndpoint || !deployment.deploymentId) return 'skipped';
+    let token: string | null;
+    try {
+      token = await (opts.getSecretImpl ?? getSecret)(SECRET_KEYS.deployment(deployment.deploymentId));
+    } catch {
+      return 'skipped';
+    }
+    if (!token?.trim()) return 'skipped';
+    return reportToPlatformLedger(entry, deployment.ledgerEndpoint, {
+      token,
+      fetchImpl: opts.fetchImpl,
+    });
+  }
+  return reportToPlatformLedger(entry, opts.legacyEndpoint, {
+    token: opts.legacyToken,
+    fetchImpl: opts.fetchImpl,
+  });
+}
+
+/**
  * Register the ledger on the `agentEnd` hook. On each completed employee run it
  * builds a desensitized entry and hands it to `record` (the durable ledger
  * store owns persistence + reporting + retry). Returns an unregister function.
@@ -189,18 +255,26 @@ export function initExecutionLedger(opts: {
   record: (entry: EmployeeExecutionLedgerEntry) => void | Promise<void>;
   getExecution?: (loopId: string) => TaskExecution | undefined;
   isReportable?: (agentName: string | undefined) => boolean;
-  resolveEmployeeId?: (agentName: string) => string | undefined;
+  resolveEmployeeId?: (agentName: string, conversationId?: string) => string | undefined;
 }): () => void {
   const getExecution =
     opts.getExecution ?? ((loopId: string) => useTaskExecutionStore.getState().getExecutionByLoopId(loopId));
   const reportable = opts.isReportable ?? isReportableEmployee;
   const resolveId =
     opts.resolveEmployeeId
-    ?? ((agentName: string) => resolveEmployeeId(agentName, useEmployeeDeploymentStore.getState().deployments));
+    ?? ((agentName: string, conversationId?: string) => resolveEmployeeId(
+      agentName,
+      useEmployeeDeploymentStore.getState().deployments,
+      conversationId,
+    ));
 
   return registerHook<AgentEndEvent>('agentEnd', async (event) => {
     if (!reportable(event.agentName)) return;
-    const entry = buildLedgerEntry(event, getExecution(event.loopId), resolveId(event.agentName));
+    const entry = buildLedgerEntry(
+      event,
+      getExecution(event.loopId),
+      resolveId(event.agentName, event.conversationId),
+    );
     await opts.record(entry);
   });
 }
@@ -210,19 +284,21 @@ let started = false;
 export const RETRY_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
- * Default startup wiring. Opt-in via VITE_PLATFORM_LEDGER_ENDPOINT (unset =
- * reports are skipped but records still accrue locally, mirroring the Langfuse
- * observability pattern). Idempotent.
- * ponytail: env-based endpoint for now; move to platform key-custody config
- * (Q1) when the relay is built.
+ * Default startup wiring. Platform deployments are opt-in by installation and
+ * use their own OS-keyring bearer. Legacy manual installs retain the optional
+ * build-time endpoint/token compatibility path. Idempotent.
  */
 export function startExecutionLedger(): () => void {
   if (started) return () => {};
   started = true;
-  const report = (entry: EmployeeExecutionLedgerEntry) =>
-    reportToPlatformLedger(entry, import.meta.env.VITE_PLATFORM_LEDGER_ENDPOINT as string | undefined, {
-      token: import.meta.env.VITE_PLATFORM_LEDGER_TOKEN as string | undefined,
-    });
+  const report = (entry: EmployeeExecutionLedgerEntry) => reportEmployeeLedgerEntry(
+    entry,
+    useEmployeeDeploymentStore.getState().deployments,
+    {
+      legacyEndpoint: import.meta.env.VITE_PLATFORM_LEDGER_ENDPOINT,
+      legacyToken: import.meta.env.VITE_PLATFORM_LEDGER_TOKEN,
+    },
+  );
   const unregister = initExecutionLedger({
     record: (entry) => {
       useLedgerStore.getState().append(entry);

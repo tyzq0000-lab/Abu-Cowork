@@ -5,6 +5,7 @@ import { homeDir, resolve, resolveResource } from '@tauri-apps/api/path';
 import type { Skill, SkillMetadata, SkillHookEntry, SkillSource } from '../../types';
 import { joinPath, getParentDir, normalizeSeparators } from '../../utils/pathUtils';
 import { sanitizePath } from '../memdir/paths';
+import { parseChaWorkSkillRegistry } from '../agent/employeeLoader';
 
 /**
  * Normalize tool list: accept both YAML array (Abu format) and
@@ -122,6 +123,8 @@ function parseSkillHooks(
 
 export class SkillLoader {
   private skills: Map<string, Skill> = new Map();
+  private employeeSkills: Map<string, Map<string, Skill>> = new Map();
+  private employeeSkillAliases: Map<string, Map<string, string>> = new Map();
   /** Last workspace this loader was discovered against (null = global-only). */
   private currentWorkspace: string | null = null;
 
@@ -146,6 +149,8 @@ export class SkillLoader {
    */
   async discoverSkills(workspacePath?: string | null): Promise<SkillMetadata[]> {
     this.skills.clear();
+    this.employeeSkills.clear();
+    this.employeeSkillAliases.clear();
     this.currentWorkspace = workspacePath ?? null;
 
     const home = await homeDir();
@@ -236,10 +241,39 @@ export class SkillLoader {
       const packages = await readDir(employeesRoot);
       for (const pkg of packages) {
         if (!pkg.isDirectory) continue;
-        await this.scanDirectory(joinPath(employeesRoot, pkg.name, 'skills'), 'employee');
+        const pkgDir = joinPath(employeesRoot, pkg.name);
+        const declaredSkills = await this.loadDeclaredEmployeeSkills(pkgDir);
+        await this.scanDirectory(
+          joinPath(pkgDir, 'skills'),
+          'employee',
+          pkg.name,
+          declaredSkills,
+        );
       }
     } catch {
       // Employees root unreadable — no employee skills.
+    }
+  }
+
+  /** Resolve declared skill directories; undefined preserves legacy packages. */
+  private async loadDeclaredEmployeeSkills(pkgDir: string): Promise<Set<string> | undefined> {
+    try {
+      const raw = JSON.parse(await readTextFile(joinPath(pkgDir, '.codebuddy-plugin/plugin.json'))) as unknown;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return new Set();
+      const declared = (raw as Record<string, unknown>).skills;
+      if (!Array.isArray(declared)) return new Set();
+      return new Set(declared
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => normalizeSeparators(item).split('/').filter(Boolean).pop())
+        .filter((item): item is string => Boolean(item)));
+    } catch {
+      // Not a canonical employee package; try the installed ChaWork registry.
+    }
+
+    try {
+      return new Set(parseChaWorkSkillRegistry(await readTextFile(joinPath(pkgDir, 'skills.json'))) ?? []);
+    } catch {
+      return undefined;
     }
   }
 
@@ -248,13 +282,19 @@ export class SkillLoader {
     return this.currentWorkspace;
   }
 
-  private async scanDirectory(dir: string, source: SkillSource): Promise<void> {
+  private async scanDirectory(
+    dir: string,
+    source: SkillSource,
+    employeeName?: string,
+    declaredSkills?: Set<string>,
+  ): Promise<void> {
     try {
       if (!(await exists(dir))) return;
 
       const entries = await readDir(dir);
       for (const entry of entries) {
         if (!entry.isDirectory) continue;
+        if (declaredSkills && !declaredSkills.has(entry.name)) continue;
 
         // Try both SKILL.md and skill.md (spec accepts both)
         for (const filename of ['SKILL.md', 'skill.md']) {
@@ -268,9 +308,25 @@ export class SkillLoader {
                   `[SkillLoader] name mismatch: directory "${entry.name}" but frontmatter name: "${skill.name}" (${skillPath})`,
                 );
               }
+              skill.source = source;
+              if (employeeName) {
+                let owned = this.employeeSkills.get(employeeName);
+                if (!owned) {
+                  owned = new Map();
+                  this.employeeSkills.set(employeeName, owned);
+                }
+                if (!owned.has(skill.name)) owned.set(skill.name, skill);
+                if (entry.name !== skill.name) {
+                  let aliases = this.employeeSkillAliases.get(employeeName);
+                  if (!aliases) {
+                    aliases = new Map();
+                    this.employeeSkillAliases.set(employeeName, aliases);
+                  }
+                  if (!aliases.has(entry.name)) aliases.set(entry.name, skill.name);
+                }
+              }
               // Earlier directories take priority — don't overwrite
               if (!this.skills.has(skill.name)) {
-                skill.source = source;
                 this.skills.set(skill.name, skill);
               }
               break; // Found a skill file, skip trying the other filename
@@ -286,8 +342,8 @@ export class SkillLoader {
   }
 
   /** Load full skill content by name */
-  async loadSkill(name: string): Promise<Skill | null> {
-    return this.skills.get(name) ?? null;
+  async loadSkill(name: string, employeeName?: string): Promise<Skill | null> {
+    return this.getSkill(name, employeeName) ?? null;
   }
 
   /**
@@ -298,9 +354,18 @@ export class SkillLoader {
    * index or agent-facing skill list. Pass `{ includeDrafts: true }` to
    * surface them (for the Settings → Skills → Drafts tab).
    */
-  getAvailableSkills(options: { includeDrafts?: boolean } = {}): SkillMetadata[] {
+  getAvailableSkills(options: { includeDrafts?: boolean; employeeName?: string } = {}): SkillMetadata[] {
     const includeDrafts = options.includeDrafts ?? false;
-    return Array.from(this.skills.values())
+    let skills = this.skills;
+    if (options.employeeName) {
+      skills = new Map(
+        Array.from(this.skills.entries()).filter(([, skill]) => skill.source !== 'employee'),
+      );
+      for (const [name, skill] of this.employeeSkills.get(options.employeeName) ?? []) {
+        skills.set(name, skill);
+      }
+    }
+    return Array.from(skills.values())
       .filter((skill) => includeDrafts || skill.source !== 'draft')
       .map((skill) => {
         // Omit runtime-only fields not part of SkillMetadata
@@ -316,7 +381,15 @@ export class SkillLoader {
   }
 
   /** Get full skill by name */
-  getSkill(name: string): Skill | undefined {
+  getSkill(name: string, employeeName?: string): Skill | undefined {
+    if (employeeName) {
+      const employee = this.employeeSkills.get(employeeName);
+      const owned = employee?.get(name)
+        ?? employee?.get(this.employeeSkillAliases.get(employeeName)?.get(name) ?? '');
+      if (owned) return owned;
+      const shared = this.skills.get(name);
+      return shared?.source === 'employee' ? undefined : shared;
+    }
     return this.skills.get(name);
   }
 
@@ -359,8 +432,8 @@ export class SkillLoader {
   }
 
   /** List supporting files in a skill's directory (excluding SKILL.md) */
-  async listSupportingFiles(skillName: string): Promise<string[]> {
-    const skill = this.skills.get(skillName);
+  async listSupportingFiles(skillName: string, employeeName?: string): Promise<string[]> {
+    const skill = this.getSkill(skillName, employeeName);
     if (!skill) return [];
 
     try {
@@ -371,8 +444,12 @@ export class SkillLoader {
   }
 
   /** Load a supporting file from a skill's directory */
-  async loadSupportingFile(skillName: string, relativePath: string): Promise<string | null> {
-    const skill = this.skills.get(skillName);
+  async loadSupportingFile(
+    skillName: string,
+    relativePath: string,
+    employeeName?: string,
+  ): Promise<string | null> {
+    const skill = this.getSkill(skillName, employeeName);
     if (!skill) return null;
 
     // Security: prevent path traversal

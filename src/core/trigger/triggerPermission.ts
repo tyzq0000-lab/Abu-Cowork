@@ -97,6 +97,10 @@ export function resolveTriggerCallbacks(action: TriggerAction): TriggerCallbacks
     case 'full':
       return {
         commandConfirmCallback: async (info) => {
+          if (info.kind === 'external-action') {
+            console.log(`[Trigger] full: external action requires interactive approval (${info.toolName ?? info.command})`);
+            return false;
+          }
           // Allow everything except hard-blocked commands
           const allowed = info.level !== 'block';
           if (!allowed) {
@@ -125,6 +129,10 @@ function buildCustomCallbacks(
 
   return {
     commandConfirmCallback: async (info) => {
+      if (info.kind === 'external-action') {
+        console.log(`[Trigger] custom: external action requires interactive approval (${info.toolName ?? info.command})`);
+        return false;
+      }
       if (info.level === 'block') return false;
       if (!allowedCommands || allowedCommands.length === 0) {
         console.log(`[Trigger] custom: no allowedCommands, denied "${info.command}"`);

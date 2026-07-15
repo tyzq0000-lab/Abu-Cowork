@@ -89,6 +89,24 @@ describe('deeplink installer', () => {
     browserFetch.mockRestore();
   });
 
+  it('rejects an unsigned employee archive when the platform requires integrity', async () => {
+    const archive = zipSync(entriesOf({
+      '.codebuddy-plugin/plugin.json': JSON.stringify({
+        name: 'unsigned-clerk',
+        agentName: 'unsigned-clerk',
+        version: '0.1.0',
+      }),
+    }));
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(archive, { status: 200 }));
+
+    await expect(installFromDeepLink({
+      action: 'install',
+      pkgType: 'employee',
+      url: 'https://abu-agent.oss-cn-beijing.aliyuncs.com/employees/unsigned-clerk.zip',
+      integrityRequired: true,
+    })).rejects.toMatchObject({ code: 'PACKAGE_SIGNATURE_REQUIRED' });
+  });
+
   describe('planEmployeeUnpack', () => {
     it('preserves generic package identity and first-launch metadata', () => {
       const plugin = JSON.stringify({

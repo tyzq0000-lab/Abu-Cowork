@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   auditEmployeePackage,
   parseEmployeePlugin,
+  validatePackageContract,
   type EmployeePluginManifest,
 } from './contract';
 
@@ -103,6 +104,46 @@ describe('employee package contract', () => {
       manifest: parsed,
       files: BASE_FILES,
     })).not.toThrow();
+  });
+
+  it('accepts and preserves a valid employee tool policy', () => {
+    const pluginJson = JSON.stringify({
+      ...baseManifest(),
+      runtime: {
+        version: 1,
+        toolPolicy: {
+          default: 'disabled',
+          overrides: {
+            read_file: 'enabled',
+            'mcp__knowledge__*': 'enabled',
+          },
+        },
+      },
+    });
+
+    expect(parseEmployeePlugin(pluginJson)?.runtime?.toolPolicy).toEqual({
+      default: 'disabled',
+      overrides: {
+        read_file: 'enabled',
+        'mcp__knowledge__*': 'enabled',
+      },
+    });
+    expect(validatePackageContract({ pluginJson, files: BASE_FILES }).errors).toEqual([]);
+  });
+
+  it.each([
+    ['unknown state', { overrides: { write_file: 'blocked' } }],
+    ['missing overrides', { default: 'enabled' }],
+    ['empty pattern', { overrides: { '': 'disabled' } }],
+    ['surrounding whitespace', { overrides: { ' read_file ': 'disabled' } }],
+    ['input constraint', { overrides: { 'run_command(git *)': 'disabled' } }],
+  ])('drops runtime for malformed tool policy: %s', (_label, toolPolicy) => {
+    const parsed = parseEmployeePlugin(JSON.stringify({
+      ...baseManifest(),
+      runtime: { version: 1, toolPolicy },
+    }));
+
+    expect(parsed?.runtime).toBeUndefined();
   });
 
   it('rejects incomplete nested runtime records', () => {

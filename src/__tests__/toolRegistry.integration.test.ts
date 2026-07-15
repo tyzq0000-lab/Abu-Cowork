@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toolRegistry, executeAnyTool } from '../core/tools/registry';
 import { authorizeWorkspace, revokeWorkspace } from '../core/tools/pathSafety';
 import { setPlatformForTest as _setPlatformForTest } from '../test/helpers';
+import { useSettingsStore } from '../stores/settingsStore';
 
 // Mock i18n
 vi.mock('../i18n', () => ({
@@ -13,6 +14,11 @@ vi.mock('../i18n', () => ({
     commandConfirm: {
       blocked: '已阻止',
       userCancelled: '用户取消了操作',
+      externalActionReason: '对外操作必须逐次人工批准',
+      externalApprovalUnavailable: '当前通道无法提供人工批准',
+    },
+    toolErrors: {
+      disabledByEmployeePolicy: '员工工具策略已禁用 {tool}',
     },
   }),
 }));
@@ -30,6 +36,7 @@ describe('toolRegistry integration', () => {
   beforeEach(() => {
     // Clean up workspace authorizations
     revokeWorkspace('/Users/testuser/Projects/myapp');
+    useSettingsStore.setState({ permissionMode: 'standard' });
   });
 
   // ── Command safety through executeAnyTool ──
@@ -76,6 +83,7 @@ describe('toolRegistry integration', () => {
         onConfirm
       );
       expect(onConfirm).toHaveBeenCalled();
+      expect(onConfirm).toHaveBeenCalledTimes(1);
       expect(result).toBe('pushed');
     });
 
@@ -94,6 +102,86 @@ describe('toolRegistry integration', () => {
         onConfirm
       );
       expect(result).toContain('用户取消');
+    });
+
+    it('cannot bypass external-action approval in autonomous mode', async () => {
+      const executeFn = vi.fn().mockResolvedValue('pushed');
+      toolRegistry.register({
+        name: 'run_command',
+        description: 'Run shell command',
+        inputSchema: { type: 'object', properties: { command: { type: 'string', description: 'cmd' } } },
+        execute: executeFn,
+      });
+      useSettingsStore.setState({ permissionMode: 'autonomous' });
+
+      const onConfirm = vi.fn().mockResolvedValue(false);
+      const result = await executeAnyTool('run_command', { command: 'git push origin main' }, onConfirm);
+
+      expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'external-action',
+        externalActionKind: 'publish',
+      }));
+      expect(result).toContain('用户取消');
+      expect(executeFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('external action approval', () => {
+    it('allows reads, but fails closed for HTTP writes without an approval channel', async () => {
+      const executeFn = vi.fn().mockResolvedValue('ok');
+      toolRegistry.register({
+        name: 'http_fetch',
+        description: 'HTTP',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'url' },
+            method: { type: 'string', description: 'method' },
+          },
+          required: ['url'],
+        },
+        execute: executeFn,
+      });
+
+      expect(await executeAnyTool('http_fetch', { url: 'https://example.com/data' })).toBe('ok');
+      const denied = await executeAnyTool('http_fetch', {
+        method: 'POST',
+        url: 'https://example.com/messages',
+      });
+
+      expect(denied).toContain('当前通道无法提供人工批准');
+      expect(executeFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('executes an HTTP write only after a fresh approval', async () => {
+      const executeFn = vi.fn().mockResolvedValue('sent');
+      toolRegistry.register({
+        name: 'http_fetch',
+        description: 'HTTP',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            url: { type: 'string', description: 'url' },
+            method: { type: 'string', description: 'method' },
+          },
+          required: ['url'],
+        },
+        execute: executeFn,
+      });
+      const onConfirm = vi.fn().mockResolvedValue(true);
+
+      const result = await executeAnyTool('http_fetch', {
+        method: 'POST',
+        url: 'https://example.com/messages?token=secret',
+      }, onConfirm);
+
+      expect(onConfirm).toHaveBeenCalledWith(expect.objectContaining({
+        command: 'POST https://example.com/messages',
+        kind: 'external-action',
+        externalActionKind: 'send',
+      }));
+      expect(result).toBe('sent');
+      expect(executeFn).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -152,6 +240,31 @@ describe('toolRegistry integration', () => {
 
   // ── Tool registry basics ──
   describe('registry operations', () => {
+    it('blocks a disabled employee tool at the final execution gate', async () => {
+      const executeFn = vi.fn().mockResolvedValue('should not execute');
+      toolRegistry.register({
+        name: 'employee_write',
+        description: 'Employee write action',
+        inputSchema: { type: 'object', properties: {} },
+        execute: executeFn,
+      });
+
+      const result = await executeAnyTool(
+        'employee_write',
+        {},
+        undefined,
+        undefined,
+        {
+          toolPolicy: {
+            overrides: { employee_write: 'disabled' },
+          },
+        },
+      );
+
+      expect(result).toContain('员工工具策略已禁用 employee_write');
+      expect(executeFn).not.toHaveBeenCalled();
+    });
+
     it('registers and retrieves tools', () => {
       toolRegistry.register({
         name: 'test_tool',

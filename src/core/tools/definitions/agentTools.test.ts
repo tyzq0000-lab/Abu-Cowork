@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeTextFile } from '@tauri-apps/plugin-fs';
-import { saveAgentTool } from './agentTools';
+import { createSubagentController } from '../../agent/subagentAbort';
+import { getCurrentLoopContext } from '../../agent/permissionBridge';
+import { runSubagentLoop } from '../../agent/subagentLoop';
+import { useChatStore } from '../../../stores/chatStore';
+import { skillLoader } from '../../skill/loader';
+import { delegateToAgentTool, saveAgentTool, useSkillTool } from './agentTools';
 
 // Mock dependencies not covered by global setup
 vi.mock('../../skill/loader', () => ({
@@ -11,6 +16,7 @@ vi.mock('../../agent/registry', () => ({
 }));
 vi.mock('../../agent/permissionBridge', () => ({
   getCurrentLoopContext: vi.fn(),
+  getLoopContext: vi.fn(),
   requestWorkspace: vi.fn(),
 }));
 vi.mock('../../agent/subagentLoop', () => ({
@@ -69,5 +75,59 @@ describe('save_agent multi-file support', () => {
       expect(result).toContain('附属文件');
       expect(result).toContain('scripts/helper.py');
     });
+  });
+});
+
+describe('use_skill employee ownership', () => {
+  it('resolves the active employee package instead of a same-name global skill', async () => {
+    vi.mocked(useChatStore.getState).mockReturnValue({ activeConversationId: null } as never);
+    vi.mocked(skillLoader.getSkill).mockReturnValue({
+      name: 'shared-research',
+      description: 'Employee-owned workflow',
+      content: 'Use the employee workflow.',
+      filePath: '/employees/nature/skills/shared-research/SKILL.md',
+      skillDir: '/employees/nature/skills/shared-research',
+      source: 'employee',
+    });
+
+    const result = await useSkillTool.execute(
+      { skill_name: 'shared-research' },
+      { employeeName: 'nature-researcher', inlineSkillContent: true },
+    );
+
+    expect(skillLoader.getSkill).toHaveBeenCalledWith('shared-research', 'nature-researcher');
+    expect(result).toContain('Use the employee workflow.');
+  });
+});
+
+describe('delegate_to_agent deployment identity propagation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useChatStore.getState).mockReturnValue({
+      activeConversationId: 'conv-platform-parent',
+      conversations: { 'conv-platform-parent': { messages: [] } },
+      setAgentStatus: vi.fn(),
+      removeActiveAgent: vi.fn(),
+    } as never);
+    vi.mocked(getCurrentLoopContext).mockReturnValue({
+      conversationId: 'conv-platform-parent',
+      loopId: 'loop-parent',
+      signal: new AbortController().signal,
+      toolCallToStepId: new Map(),
+      eventRouter: { getCurrentStepId: vi.fn() },
+    } as never);
+    vi.mocked(createSubagentController).mockReturnValue({
+      subagentId: 'sub-test',
+      signal: new AbortController().signal,
+      cleanup: vi.fn(),
+    });
+    vi.mocked(runSubagentLoop).mockResolvedValue({ text: 'done' } as never);
+  });
+
+  it('passes the parent conversation id into a delegated employee run', async () => {
+    await delegateToAgentTool.execute({ type: 'research', task: 'audit this' });
+    expect(runSubagentLoop).toHaveBeenCalledWith(expect.objectContaining({
+      parentConversationId: 'conv-platform-parent',
+    }));
   });
 });

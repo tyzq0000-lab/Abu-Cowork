@@ -1,4 +1,4 @@
-import { History } from 'lucide-react';
+import { BrainCircuit, FileUp, History, LoaderCircle } from 'lucide-react';
 import { useI18n } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { useContactDisplay } from '@/hooks/useContactDisplay';
@@ -13,9 +13,15 @@ import EmployeeAvatar from '@/components/common/EmployeeAvatar';
 export default function ChatHeader({
   contactKey,
   onOpenHistory,
+  onRunDream,
+  onImportKnowledge,
+  actionBusy,
 }: {
   contactKey: string | null;
   onOpenHistory: () => void;
+  onRunDream?: () => void;
+  onImportKnowledge?: () => void;
+  actionBusy?: 'dream' | 'knowledge' | null;
 }) {
   const { t } = useI18n();
   const c = useContactDisplay(contactKey);
@@ -35,11 +41,41 @@ export default function ChatHeader({
           </div>
         )}
       </div>
+      <div className="ml-auto flex shrink-0 items-center gap-1">
+        {onImportKnowledge && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onImportKnowledge}
+            disabled={!!actionBusy}
+            title={t.employeeGrowth.importKnowledge}
+            aria-label={t.employeeGrowth.importKnowledge}
+          >
+            {actionBusy === 'knowledge'
+              ? <LoaderCircle className="h-4 w-4 animate-spin" />
+              : <FileUp className="h-4 w-4" />}
+          </Button>
+        )}
+        {onRunDream && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRunDream}
+            disabled={!!actionBusy}
+            title={t.employeeGrowth.runDream}
+            aria-label={t.employeeGrowth.runDream}
+          >
+            {actionBusy === 'dream'
+              ? <LoaderCircle className="h-4 w-4 animate-spin" />
+              : <BrainCircuit className="h-4 w-4" />}
+          </Button>
+        )}
+      </div>
       <Button
         variant="outline"
         size="sm"
         onClick={onOpenHistory}
-        className="ml-auto gap-1.5 shrink-0"
+        className="gap-1.5 shrink-0"
       >
         <History className="h-3.5 w-3.5" />
         {t.sidebar.conversationHistory}

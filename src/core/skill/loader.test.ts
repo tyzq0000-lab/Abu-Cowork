@@ -194,6 +194,97 @@ describe('SkillLoader.discoverSkills · workspace awareness', () => {
     const shared = loader.getSkill('humanizer');
     expect(shared!.content).toContain('USER');
     expect(shared!.source).toBe('user');
+
+    const employeeOwned = loader.getSkill('humanizer', 'content-creator');
+    expect(employeeOwned!.content).toContain('EMPLOYEE');
+    expect(employeeOwned!.source).toBe('employee');
+  });
+
+  it('resolves same-name skills by exact employee owner', async () => {
+    const empRoot = '/Users/testuser/.uprow/employees';
+    const alphaSkills = `${empRoot}/alpha/skills`;
+    const betaSkills = `${empRoot}/beta/skills`;
+    stubFs(
+      {
+        [empRoot]: ['alpha', 'beta'],
+        [alphaSkills]: ['shared'],
+        [betaSkills]: ['shared'],
+      },
+      {
+        [`${alphaSkills}/shared/SKILL.md`]: SKILL_TEMPLATE('shared').replace('Body content', 'ALPHA'),
+        [`${betaSkills}/shared/SKILL.md`]: SKILL_TEMPLATE('shared').replace('Body content', 'BETA'),
+      },
+    );
+
+    const loader = new SkillLoader();
+    await loader.discoverSkills(null);
+
+    expect(loader.getSkill('shared', 'alpha')?.content).toContain('ALPHA');
+    expect(loader.getSkill('shared', 'beta')?.content).toContain('BETA');
+    expect(loader.getSkill('shared', 'missing-owner')).toBeUndefined();
+    expect(loader.getAvailableSkills({ employeeName: 'beta' }).map((skill) => skill.name))
+      .toContain('shared');
+    expect(loader.getAvailableSkills({ employeeName: 'missing-owner' }).map((skill) => skill.name))
+      .not.toContain('shared');
+  });
+
+  it('does not register disabled ChaWork skills', async () => {
+    const empRoot = '/Users/testuser/.uprow/employees';
+    const pkgDir = `${empRoot}/nature-researcher`;
+    const skillsDir = `${pkgDir}/skills`;
+    stubFs(
+      {
+        [empRoot]: ['nature-researcher'],
+        [skillsDir]: ['enabled-search', 'disabled-export'],
+      },
+      {
+        [`${pkgDir}/skills.json`]: JSON.stringify({
+          version: 1,
+          skills: [
+            { id: 'enabled-search', source: 'hub', enabled: true },
+            { id: 'disabled-export', source: 'hub', enabled: false },
+          ],
+        }),
+        [`${skillsDir}/enabled-search/SKILL.md`]: SKILL_TEMPLATE('enabled-search'),
+        [`${skillsDir}/disabled-export/SKILL.md`]: SKILL_TEMPLATE('disabled-export'),
+      },
+    );
+
+    const loader = new SkillLoader();
+    await loader.discoverSkills(null);
+
+    expect(loader.getSkill('enabled-search', 'nature-researcher')).toBeDefined();
+    expect(loader.getSkill('disabled-export', 'nature-researcher')).toBeUndefined();
+  });
+
+  it('resolves a declared directory alias to the SKILL.md standard name', async () => {
+    const empRoot = '/Users/testuser/.uprow/employees';
+    const pkgDir = `${empRoot}/brand-strategy-advisor`;
+    const skillsDir = `${pkgDir}/skills`;
+    stubFs(
+      {
+        [empRoot]: ['brand-strategy-advisor'],
+        [skillsDir]: ['marketing-copywriting'],
+      },
+      {
+        [`${pkgDir}/.codebuddy-plugin/plugin.json`]: JSON.stringify({
+          name: 'brand-strategy-advisor',
+          skills: ['./skills/marketing-copywriting'],
+        }),
+        [`${skillsDir}/marketing-copywriting/SKILL.md`]: SKILL_TEMPLATE('copywriting'),
+      },
+    );
+
+    const loader = new SkillLoader();
+    await loader.discoverSkills(null);
+
+    const byAlias = loader.getSkill('marketing-copywriting', 'brand-strategy-advisor');
+    const byStandardName = loader.getSkill('copywriting', 'brand-strategy-advisor');
+    expect(byAlias).toBe(byStandardName);
+    expect(byAlias?.name).toBe('copywriting');
+    expect(loader.getAvailableSkills({ employeeName: 'brand-strategy-advisor' })
+      .filter((skill) => skill.source === 'employee').map((skill) => skill.name))
+      .toEqual(['copywriting']);
   });
 
   it('first-win: workspace skill beats global with same name', async () => {

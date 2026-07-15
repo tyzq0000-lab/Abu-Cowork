@@ -9,11 +9,14 @@ import ChatView from '@/components/chat/ChatView';
 import AutomationView from '@/components/automation/AutomationView';
 import SystemSettingsView from '@/components/settings/SystemSettingsModal';
 import ToolboxView from '@/components/settings/ToolboxModal';
+import ReviewQueueView from '@/components/approval/ReviewQueueView';
 import RightPanel from '@/components/panel/RightPanel';
 import ToastContainer from '@/components/common/ToastContainer';
 import { registerBuiltinTools } from '@/core/tools/builtins';
 import { installLargeWriteGuard } from '@/core/agent/hooks/largeWriteGuard';
 import { startExecutionLedger } from '@/core/employee/executionLedger';
+import { startDeploymentHeartbeat } from '@/core/employee/deploymentHeartbeat';
+import { initializeReviewQueue } from '@/core/approval/reviewQueue';
 import { initPlatform } from '@/utils/platform';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
 import { useChatStore, useActiveConversation } from '@/stores/chatStore';
@@ -212,7 +215,11 @@ function App() {
   useEffect(() => {
     registerBuiltinTools();
     installLargeWriteGuard();
-    startExecutionLedger();
+    const stopExecutionLedger = startExecutionLedger();
+    const stopDeploymentHeartbeat = startDeploymentHeartbeat();
+    void initializeReviewQueue().catch((error) => {
+      console.error('[ReviewQueue] Initialization failed; external actions will be denied:', error);
+    });
     refreshDiscovery();
 
     // Surface the one-shot ~/.abu -> ~/.uprow migration failure (rare):
@@ -299,6 +306,8 @@ function App() {
     });
 
     return () => {
+      stopExecutionLedger();
+      stopDeploymentHeartbeat();
       cleanupMCPStoreSync();
       stopAllWatchers();
       import('@/stores/skillDraftsStore').then(({ stopDraftsSweeper }) => stopDraftsSweeper()).catch(() => {});
@@ -533,6 +542,7 @@ function App() {
         <main className={cn('flex-1 min-w-0 bg-[var(--abu-bg-base)]', mac ? 'pt-11' : 'pt-8')}>
           {viewMode === 'automation' && <AutomationView />}
           {viewMode === 'toolbox' && <ToolboxView />}
+          {viewMode === 'review' && <ReviewQueueView />}
           {viewMode === 'settings' && <SystemSettingsView />}
           {(viewMode === 'chat' || !viewMode) && <ChatView />}
         </main>

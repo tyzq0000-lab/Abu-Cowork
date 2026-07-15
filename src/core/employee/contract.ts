@@ -1,4 +1,5 @@
 import type { ScheduleConfig } from '@/types/schedule';
+import type { AgentMemoryCapture, ToolPolicy } from '@/types';
 import type {
   TriggerCapability,
   TriggerFilter,
@@ -132,12 +133,14 @@ export interface EmployeeRuntimeProfile {
    * are regression-safe (they never opt into codex implicitly).
    */
   engine?: 'codex' | 'native' | 'auto';
+  /** Package-owned least-privilege policy. Omitted means all tools enabled. */
+  toolPolicy?: ToolPolicy;
   targetMaturity?: 'L2' | 'L3';
   workspace?: EmployeeWorkspaceRequirement;
   onboarding?: EmployeeOnboarding;
   memory?: {
     scope: 'session' | 'project' | 'user';
-    autoCapture?: Array<'preference' | 'feedback' | 'failure' | 'project' | 'reference'>;
+    autoCapture?: AgentMemoryCapture[];
   };
   workflows?: EmployeeWorkflowTemplate[];
   review?: {
@@ -247,6 +250,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
+function isToolPolicy(value: unknown): value is ToolPolicy {
+  if (!isRecord(value) || !isRecord(value.overrides)) return false;
+  if (
+    value.default !== undefined
+    && value.default !== 'enabled'
+    && value.default !== 'disabled'
+  ) return false;
+  return Object.entries(value.overrides).every(([pattern, state]) =>
+    pattern.trim().length > 0
+    && pattern === pattern.trim()
+    && !pattern.includes('(')
+    && !pattern.includes(')')
+    && (state === 'enabled' || state === 'disabled'));
 }
 
 function hasOptionalString(record: Record<string, unknown>, key: string): boolean {
@@ -457,6 +475,7 @@ function isRuntimeProfile(value: unknown): value is EmployeeRuntimeProfile {
   ) {
     return false;
   }
+  if (value.toolPolicy !== undefined && !isToolPolicy(value.toolPolicy)) return false;
   if (
     value.targetMaturity !== undefined
     && value.targetMaturity !== 'L2'
@@ -532,7 +551,7 @@ export interface ContractValidation {
  * A single enforced allowlist is what "single mandatory schema" means.
  */
 const KNOWN_RUNTIME_KEYS: ReadonlySet<string> = new Set([
-  'version', 'engine', 'targetMaturity', 'workspace', 'onboarding', 'memory',
+  'version', 'engine', 'toolPolicy', 'targetMaturity', 'workspace', 'onboarding', 'memory',
   'workflows', 'review', 'evolution', 'escalation', 'acceptance',
   'dependencies', 'authorizations', 'reliability', 'sources',
 ]);

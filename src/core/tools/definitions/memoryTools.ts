@@ -105,9 +105,10 @@ export const updateMemoryTool: ToolDefinition = {
       if (context?.memoryScope === 'session') {
         return 'Error: 当前 Agent 使用会话记忆，不能读写持久记忆。';
       }
-      const workspacePath = context?.memoryScope === 'user'
-        ? null
-        : context?.workspacePath ?? useWorkspaceStore.getState().currentPath;
+      const workspacePath = context?.memoryPath
+        ?? (context?.memoryScope === 'user'
+          ? null
+          : context?.workspacePath ?? useWorkspaceStore.getState().currentPath);
       if (context?.memoryScope === 'project' && !workspacePath) {
         return 'Error: 当前 Agent 使用项目记忆，但任务没有配置工作区。';
       }
@@ -139,11 +140,12 @@ export const updateMemoryTool: ToolDefinition = {
         const { ContentSafetyError } = await import('../../safety/contentGuard');
 
         // Find the existing memory across both global and workspace dirs
+        const isolatedEmployeeMemory = !!context?.memoryPath;
         const [globalHeaders, wsHeaders] = await Promise.all([
-          context?.memoryScope === 'project'
+          context?.memoryScope === 'project' || isolatedEmployeeMemory
             ? Promise.resolve([])
             : scanMemoryFiles(null),
-          context?.memoryScope === 'user' || !workspacePath
+          (context?.memoryScope === 'user' && !isolatedEmployeeMemory) || !workspacePath
             ? Promise.resolve([])
             : scanMemoryFiles(workspacePath),
         ]);

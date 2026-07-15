@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/core/employee/deploymentFlow', () => ({
   checkEmployeeDependencies: vi.fn().mockResolvedValue([]),
   completeEmployeeDeployment: mocks.completeEmployeeDeployment,
+  hasBlockingEmployeeDependencies: (health: Array<{ required: boolean; state: string }>) =>
+    health.some((dependency) => dependency.required && dependency.state !== 'ready'),
 }));
 
 function setRuntimeSetup(recommended = false) {

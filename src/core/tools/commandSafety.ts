@@ -20,6 +20,12 @@ export interface ConfirmationInfo {
   command: string;
   level: DangerLevel;
   reason: string;
+  /** External side effects always require a fresh human decision. */
+  kind?: 'command' | 'external-action';
+  externalActionKind?: 'publish' | 'send' | 'payment';
+  toolName?: string;
+  /** Full action preview for the live Review Queue; never persisted verbatim. */
+  reviewPayload?: string;
 }
 
 /**

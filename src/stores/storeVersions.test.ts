@@ -19,7 +19,7 @@ const PERSISTED_STORES = [
   { key: 'abu-discovered-caps', minVersion: 1 },
   { key: 'abu-todos', minVersion: 1 },
   { key: 'abu-inbox', minVersion: 1 },
-  { key: 'abu-employee-deployments', minVersion: 1 },
+  { key: 'abu-employee-deployments', minVersion: 3 },
   { key: 'abu-employee-ledger', minVersion: 1 },
 ] as const;
 

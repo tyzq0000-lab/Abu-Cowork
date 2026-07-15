@@ -4,6 +4,7 @@ import { useDiscoveryStore } from '@/stores/discoveryStore';
 import { useEmployeeDeploymentStore } from '@/stores/employeeDeploymentStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import type { EmployeeDependency, LocalePair } from './contract';
+import type { EmployeePlatformBinding } from './deploymentEnrollment';
 import { hasEmbeddedPython } from '@/utils/pythonRuntime';
 
 export interface EmployeeDependencyHealth {
@@ -61,6 +62,10 @@ export async function checkEmployeeDependencies(
   return summarizeEmployeeDependencies(dependencies, workspacePath, { python });
 }
 
+export function hasBlockingEmployeeDependencies(health: EmployeeDependencyHealth[]): boolean {
+  return health.some((dependency) => dependency.required && dependency.state !== 'ready');
+}
+
 export function chooseDefaultInitPrompt(
   prompt: LocalePair | undefined,
   locale: 'zh' | 'en' = 'zh',
@@ -92,6 +97,7 @@ export interface CompleteEmployeeDeploymentInput {
   agentName: string;
   workspacePath: string | null;
   defaultInitPrompt?: LocalePair;
+  platformBinding?: EmployeePlatformBinding;
 }
 
 export async function completeEmployeeDeployment(
@@ -107,17 +113,22 @@ export async function completeEmployeeDeployment(
   }
 
   const chat = useChatStore.getState();
-  const deployment = useEmployeeDeploymentStore.getState().deployments[input.packageId];
+  const deployments = useEmployeeDeploymentStore.getState().deployments;
+  const deployment = input.platformBinding?.hireId
+    ? Object.values(deployments).find((record) => record.hireId === input.platformBinding?.hireId)
+    : deployments[input.packageId];
   const recordedConversation =
     deployment?.conversationId && chat.conversationIndex[deployment.conversationId]
       ? deployment.conversationId
       : undefined;
   const existingConversation = recordedConversation
-    ?? findExistingEmployeeConversation(
-      chat.conversationIndex,
-      input.agentName,
-      input.workspacePath,
-    );
+    ?? (input.platformBinding
+      ? undefined
+      : findExistingEmployeeConversation(
+          chat.conversationIndex,
+          input.agentName,
+          input.workspacePath,
+        ));
 
   let conversationId: string;
   let created = false;
@@ -143,7 +154,15 @@ export async function completeEmployeeDeployment(
   useEmployeeDeploymentStore.getState().saveDeployment({
     packageId: input.packageId,
     packageVersion: input.packageVersion,
-    employeeId: input.employeeId,
+    employeeId: input.employeeId ?? deployment?.employeeId,
+    hireId: input.platformBinding?.hireId ?? deployment?.hireId,
+    deploymentId: input.platformBinding?.deploymentId ?? deployment?.deploymentId,
+    ledgerEndpoint: input.platformBinding?.ledgerEndpoint ?? deployment?.ledgerEndpoint,
+    heartbeatEndpoint: input.platformBinding?.heartbeatEndpoint ?? deployment?.heartbeatEndpoint,
+    relayBaseUrl: input.platformBinding?.relayBaseUrl ?? deployment?.relayBaseUrl,
+    relayModel: input.platformBinding?.relayModel ?? deployment?.relayModel,
+    integrityKeyId: useEmployeeDeploymentStore.getState().integrity[input.agentName]?.keyId,
+    integrityManifestSha256: useEmployeeDeploymentStore.getState().integrity[input.agentName]?.manifestSha256,
     agentName: input.agentName,
     workspacePath: input.workspacePath,
     conversationId,

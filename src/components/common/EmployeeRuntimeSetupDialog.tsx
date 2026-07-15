@@ -3,6 +3,7 @@ import ConfirmDialog from './ConfirmDialog';
 import FolderSelector from './FolderSelector';
 import { Toggle } from '@/components/ui/toggle';
 import { useDeepLinkStore } from '@/stores/deepLinkStore';
+import type { EmployeeRuntimeSetupRequest } from '@/stores/deepLinkStore';
 import { useToastStore } from '@/stores/toastStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import { useChatStore } from '@/stores/chatStore';
@@ -10,8 +11,10 @@ import { installRuntimeTemplates } from '@/core/employee/runtimeTemplates';
 import {
   checkEmployeeDependencies,
   completeEmployeeDeployment,
+  hasBlockingEmployeeDependencies,
   type EmployeeDependencyHealth,
 } from '@/core/employee/deploymentFlow';
+import { exchangeDeploymentEnrollment } from '@/core/employee/deploymentEnrollment';
 
 export default function EmployeeRuntimeSetupDialog() {
   const runtimeSetup = useDeepLinkStore((state) => state.runtimeSetup);
@@ -20,6 +23,7 @@ export default function EmployeeRuntimeSetupDialog() {
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [dependencyHealth, setDependencyHealth] = useState<EmployeeDependencyHealth[]>([]);
+  const [checkedSetup, setCheckedSetup] = useState<EmployeeRuntimeSetupRequest | null>(null);
   const [checking, setChecking] = useState(false);
   const [completing, setCompleting] = useState(false);
 
@@ -33,9 +37,13 @@ export default function EmployeeRuntimeSetupDialog() {
     if (!runtimeSetup) return;
     let cancelled = false;
     setChecking(true);
+    setCheckedSetup(null);
     void checkEmployeeDependencies(runtimeSetup.profile.dependencies ?? [], workspacePath)
       .then((health) => {
-        if (!cancelled) setDependencyHealth(health);
+        if (!cancelled) {
+          setDependencyHealth(health);
+          setCheckedSetup(runtimeSetup);
+        }
       })
       .finally(() => {
         if (!cancelled) setChecking(false);
@@ -74,6 +82,14 @@ export default function EmployeeRuntimeSetupDialog() {
           templateIds: Array.from(selectedIds),
           workspacePath,
         });
+        const platformBinding = request.enrollmentCode && request.enrollmentUrl && request.employeeId && request.hireId
+          ? await exchangeDeploymentEnrollment({
+              employeeId: request.employeeId,
+              hireId: request.hireId,
+              enrollmentCode: request.enrollmentCode,
+              enrollmentUrl: request.enrollmentUrl,
+            })
+          : undefined;
         await completeEmployeeDeployment({
           packageId: request.packageId ?? request.name,
           packageVersion: request.packageVersion,
@@ -81,6 +97,7 @@ export default function EmployeeRuntimeSetupDialog() {
           agentName: request.name,
           workspacePath,
           defaultInitPrompt: request.defaultInitPrompt,
+          platformBinding,
         });
         // Restore the first message the user typed before this dialog interrupted
         // them — now that the employee conversation is open, its ChatInput picks it
@@ -116,6 +133,7 @@ export default function EmployeeRuntimeSetupDialog() {
   const workflows = runtimeSetup.profile.workflows ?? [];
   const workspaceRequired = runtimeSetup.profile.workspace?.required === true;
   const authorizations = runtimeSetup.profile.authorizations ?? [];
+  const hasBlockingDependency = hasBlockingEmployeeDependencies(dependencyHealth);
 
   return (
     <ConfirmDialog
@@ -193,7 +211,13 @@ export default function EmployeeRuntimeSetupDialog() {
       )}
       confirmText={completing ? '正在创建会话...' : '完成配置并开始工作'}
       cancelText="稍后配置"
-      confirmDisabled={checking || completing || (workspaceRequired && !workspacePath)}
+      confirmDisabled={
+        checking
+        || checkedSetup !== runtimeSetup
+        || completing
+        || hasBlockingDependency
+        || (workspaceRequired && !workspacePath)
+      }
       onConfirm={handleConfirm}
       onCancel={handleCancel}
     />

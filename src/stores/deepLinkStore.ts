@@ -10,6 +10,9 @@ export interface EmployeeRuntimeSetupRequest {
   packageId?: string;
   packageVersion?: string;
   employeeId?: string;
+  hireId?: string;
+  enrollmentCode?: string;
+  enrollmentUrl?: string;
   defaultInitPrompt?: { zh?: string; en?: string };
   level: EmployeeMaturityLevel;
   profile: EmployeeRuntimeProfile;

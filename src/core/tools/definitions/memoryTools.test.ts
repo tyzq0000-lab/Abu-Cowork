@@ -70,6 +70,21 @@ describe('updateMemoryTool — append (default)', () => {
     );
   });
 
+  it('uses the employee-private memory path instead of global or workspace memory', async () => {
+    await updateMemoryTool.execute(
+      { action: 'append', name: 'client-rule', content: 'Only for this employer' },
+      {
+        memoryScope: 'project',
+        workspacePath: '/test/workspace',
+        memoryPath: 'uprow-employee-memory://deployment/dep_a/project/test',
+      },
+    );
+
+    expect(mockWriteMemory).toHaveBeenCalledWith(expect.objectContaining({
+      workspacePath: 'uprow-employee-memory://deployment/dep_a/project/test',
+    }));
+  });
+
   it('writes a new memory when action omitted', async () => {
     const result = await updateMemoryTool.execute({
       name: 'preference',

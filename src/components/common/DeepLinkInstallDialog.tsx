@@ -7,6 +7,7 @@ import { installFromDeepLink } from '@/core/deeplink/installer';
 import { useI18n, format } from '@/i18n';
 import { useEmployeeDeploymentStore } from '@/stores/employeeDeploymentStore';
 import { completeEmployeeDeployment } from '@/core/employee/deploymentFlow';
+import { exchangeDeploymentEnrollment } from '@/core/employee/deploymentEnrollment';
 
 /**
  * Confirm dialog for fuyao://install deep links. Renders when the deep-link
@@ -35,6 +36,9 @@ export default function DeepLinkInstallDialog() {
       try {
         const installed = await installFromDeepLink(req);
         const displayName = req.name ?? installed.name;
+        if (installed.kind === 'employee' && installed.integrity) {
+          useEmployeeDeploymentStore.getState().saveIntegrity(installed.name, installed.integrity);
+        }
         await useDiscoveryStore.getState().refresh();
         if (installed.kind === 'employee') {
           const discovered = useDiscoveryStore
@@ -45,8 +49,19 @@ export default function DeepLinkInstallDialog() {
             throw new Error(`Employee "${installed.name}" was installed but could not be loaded.`);
           }
           const packageId = req.packageId ?? installed.packageId ?? installed.name;
-          const existing = useEmployeeDeploymentStore.getState().deployments[packageId];
+          const deployments = useEmployeeDeploymentStore.getState().deployments;
+          const existing = req.hireId
+            ? Object.values(deployments).find((record) => record.hireId === req.hireId)
+            : deployments[packageId];
           if (existing && existing.agentName === installed.name) {
+            const platformBinding = req.enrollmentCode && req.enrollmentUrl && req.employeeId && req.hireId
+              ? await exchangeDeploymentEnrollment({
+                  employeeId: req.employeeId,
+                  hireId: req.hireId,
+                  enrollmentCode: req.enrollmentCode,
+                  enrollmentUrl: req.enrollmentUrl,
+                })
+              : undefined;
             await completeEmployeeDeployment({
               packageId,
               packageVersion: req.packageVersion ?? installed.packageVersion,
@@ -54,18 +69,30 @@ export default function DeepLinkInstallDialog() {
               agentName: installed.name,
               workspacePath: existing.workspacePath,
               defaultInitPrompt: installed.defaultInitPrompt,
+              platformBinding,
             });
           } else if (installed.runtimeProfile) {
-          useDeepLinkStore.getState().setRuntimeSetup({
-            name: installed.name,
+            useDeepLinkStore.getState().setRuntimeSetup({
+              name: installed.name,
               packageId,
               packageVersion: req.packageVersion ?? installed.packageVersion,
               employeeId: req.employeeId,
+              hireId: req.hireId,
+              enrollmentCode: req.enrollmentCode,
+              enrollmentUrl: req.enrollmentUrl,
               defaultInitPrompt: installed.defaultInitPrompt,
-            level: installed.audit?.level ?? 'L1',
-            profile: installed.runtimeProfile,
-          });
+              level: installed.audit?.level ?? 'L1',
+              profile: installed.runtimeProfile,
+            });
           } else {
+            const platformBinding = req.enrollmentCode && req.enrollmentUrl && req.employeeId && req.hireId
+              ? await exchangeDeploymentEnrollment({
+                  employeeId: req.employeeId,
+                  hireId: req.hireId,
+                  enrollmentCode: req.enrollmentCode,
+                  enrollmentUrl: req.enrollmentUrl,
+                })
+              : undefined;
             await completeEmployeeDeployment({
               packageId,
               packageVersion: req.packageVersion ?? installed.packageVersion,
@@ -73,6 +100,7 @@ export default function DeepLinkInstallDialog() {
               agentName: installed.name,
               workspacePath: null,
               defaultInitPrompt: installed.defaultInitPrompt,
+              platformBinding,
             });
           }
         }

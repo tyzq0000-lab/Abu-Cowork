@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SubagentDefinition } from '@/types';
+import { skillLoader } from '../skill/loader';
 import { buildEmployeeSkillsSection } from './employeeSkills';
 
 vi.mock('../skill/loader', () => ({
@@ -30,5 +31,6 @@ describe('buildEmployeeSkillsSection', () => {
     expect(section).toContain('use_skill');
     expect(section).not.toContain('Follow the content review workflow.');
     expect(section).not.toContain('missing-skill');
+    expect(skillLoader.getSkill).toHaveBeenCalledWith('content-review', 'new-media-ops');
   });
 });

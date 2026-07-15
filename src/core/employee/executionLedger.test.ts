@@ -5,6 +5,8 @@ import {
   isReportableEmployee,
   initExecutionLedger,
   resolveEmployeeId,
+  resolveLedgerDeployment,
+  reportEmployeeLedgerEntry,
   LEDGER_SCHEMA_VERSION,
   type EmployeeExecutionLedgerEntry,
 } from './executionLedger';
@@ -102,9 +104,84 @@ describe('resolveEmployeeId (agentName → platform id via deployment records)',
     expect(resolveEmployeeId('growth-operator', deployments)).toBe('emp_new');
   });
 
+  it('uses the exact conversation binding before the latest same-name deployment', () => {
+    const deployments = {
+      companyA: dep({ packageId: 'a', employeeId: 'emp_a', conversationId: 'c1', configuredAt: 1 }),
+      companyB: dep({ packageId: 'b', employeeId: 'emp_b', conversationId: 'c2', configuredAt: 2 }),
+    };
+    expect(resolveEmployeeId('growth-operator', deployments, 'c1')).toBe('emp_a');
+  });
+
   it('undefined for unknown agents or id-less deployments', () => {
     expect(resolveEmployeeId('growth-operator', {})).toBeUndefined();
     expect(resolveEmployeeId('growth-operator', { p: dep({}) })).toBeUndefined();
+  });
+});
+
+describe('per-deployment ledger routing', () => {
+  const deployment = (over: Partial<EmployeeDeploymentRecord> = {}): EmployeeDeploymentRecord => ({
+    packageId: 'pkg',
+    employeeId: 'emp_123',
+    deploymentId: 'dep_11111111111111111111111111111111',
+    ledgerEndpoint: 'https://uprow.example.com/api/ledger',
+    agentName: 'growth-operator',
+    workspacePath: null,
+    configuredAt: 1,
+    ...over,
+  });
+  const entry = buildLedgerEntry(endEvent(), execution(), 'emp_123');
+
+  it('resolves by employee id and prefers the newest binding', () => {
+    const records = {
+      old: deployment({ packageId: 'old', configuredAt: 1 }),
+      latest: deployment({ packageId: 'latest', configuredAt: 2 }),
+      other: deployment({ packageId: 'other', employeeId: 'emp_other', configuredAt: 3 }),
+    };
+    expect(resolveLedgerDeployment(entry, records)?.packageId).toBe('latest');
+  });
+
+  it('routes by conversation before employee id when two tenants deploy the same employee', () => {
+    const records = {
+      companyA: deployment({ packageId: 'company-a', conversationId: 'c1', configuredAt: 1 }),
+      companyB: deployment({ packageId: 'company-b', conversationId: 'c2', configuredAt: 2 }),
+    };
+    expect(resolveLedgerDeployment(entry, records)?.packageId).toBe('company-a');
+  });
+
+  it('uses the deployment endpoint and OS-keyring bearer', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+    const result = await reportEmployeeLedgerEntry(entry, { pkg: deployment() }, {
+      getSecretImpl: vi.fn().mockResolvedValue('device-secret'),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      legacyEndpoint: 'https://legacy.example.com/ledger',
+      legacyToken: 'legacy-secret',
+    });
+    expect(result).toBe('sent');
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://uprow.example.com/api/ledger');
+    expect((fetchImpl.mock.calls[0][1].headers as Record<string, string>).Authorization)
+      .toBe('Bearer device-secret');
+  });
+
+  it('never falls back to the shared token when a bound credential is missing', async () => {
+    const fetchImpl = vi.fn();
+    expect(await reportEmployeeLedgerEntry(entry, { pkg: deployment() }, {
+      getSecretImpl: vi.fn().mockResolvedValue(null),
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      legacyEndpoint: 'https://legacy.example.com/ledger',
+      legacyToken: 'legacy-secret',
+    })).toBe('skipped');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('keeps the legacy opt-in path for non-platform installs', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true });
+    const manualEntry = buildLedgerEntry(endEvent(), execution());
+    expect(await reportEmployeeLedgerEntry(manualEntry, {}, {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      legacyEndpoint: 'https://legacy.example.com/ledger',
+      legacyToken: 'legacy-secret',
+    })).toBe('sent');
+    expect(fetchImpl.mock.calls[0][0]).toBe('https://legacy.example.com/ledger');
   });
 });
 
