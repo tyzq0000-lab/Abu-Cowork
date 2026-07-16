@@ -70,6 +70,8 @@ const configuredPlatformHosts = String(import.meta.env.VITE_UPROW_PLATFORM_HOSTS
 
 export const ALLOWED_DOWNLOAD_HOSTS: readonly string[] = Array.from(new Set([
   'abu-agent.oss-cn-beijing.aliyuncs.com',
+  // uprow 自有发布桶（2026-07-16 起）：安装包与后续员工包分发走这里
+  'fuyao-desktop.oss-cn-beijing.aliyuncs.com',
   ...configuredDownloadHosts,
 ]));
 
