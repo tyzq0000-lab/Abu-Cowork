@@ -262,6 +262,21 @@ describe('deeplink installer', () => {
       ).toThrowError(expect.objectContaining({ code: 'PATH_TRAVERSAL' }) as Error);
     });
 
+    it('keeps legit filenames containing consecutive dots (segment-wise .. check)', () => {
+      const plan = planEmployeeUnpack(
+        entriesOf({
+          '.codebuddy-plugin/plugin.json': PLUGIN_JSON,
+          'skills/x/chapter1..2.md': 'keep',
+          'skills/x/notes...txt': 'keep',
+        }),
+      );
+      expect(plan.files.map((f) => f.path).sort()).toEqual([
+        '.codebuddy-plugin/plugin.json',
+        'skills/x/chapter1..2.md',
+        'skills/x/notes...txt',
+      ]);
+    });
+
     it('normalizes backslash separators from Windows-built archives', () => {
       const plan = planEmployeeUnpack(
         entriesOf({

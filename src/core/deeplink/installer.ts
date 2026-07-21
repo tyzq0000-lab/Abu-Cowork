@@ -151,7 +151,9 @@ export function planEmployeeUnpack(
 
   const files: EmployeeUnpackPlan['files'] = [];
   for (const [path, data] of Object.entries(entries)) {
-    if (path.includes('..') || path.startsWith('/')) {
+    // 按路径段精确判 '..'（与签名路径 packageIntegrity.ts 的 safePath 一致）；
+    // 子串 includes('..') 会误伤 chapter1..2.md 这类合法文件名，挡掉正常包安装。
+    if (path.startsWith('/') || path.split('/').some((seg) => seg === '..')) {
       throw new DeepLinkInstallError('PATH_TRAVERSAL', `Unsafe path in archive: ${path}`);
     }
     if (data.length > MAX_SINGLE_FILE) {
