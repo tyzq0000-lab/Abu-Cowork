@@ -18,6 +18,8 @@ import { resolvePlatformRelayExecution } from '../employee/platformRelay';
 export interface LLMCallOptions {
   /** Owning conversation; platform-bound calls must use that deployment's relay. */
   conversationId?: string;
+  /** Employee identity when the call runs inside an employee-owned tool. */
+  employeeName?: string;
   /** System prompt */
   system?: string;
   /** Conversation messages */
@@ -51,7 +53,9 @@ export interface LLMCallResult {
 export async function llmCall(options: LLMCallOptions): Promise<LLMCallResult> {
   const settings = useSettingsStore.getState();
   const platformExecution = options.conversationId
-    ? await resolvePlatformRelayExecution(options.conversationId)
+    ? await resolvePlatformRelayExecution(options.conversationId, {
+        agentName: options.employeeName,
+      })
     : null;
   const executionProvider = platformExecution?.provider ?? getActiveProvider(settings);
   const adapter: LLMAdapter = executionProvider?.apiFormat === 'openai-compatible'

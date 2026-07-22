@@ -257,7 +257,9 @@ export async function extractMemoriesFromConversation(
 
     // Create adapter
     const settings = useSettingsStore.getState();
-    const platformExecution = await resolvePlatformRelayExecution(conversationId);
+    const platformExecution = await resolvePlatformRelayExecution(conversationId, {
+      agentName: options.agentName,
+    });
     const executionProvider = platformExecution?.provider ?? getActiveProvider(settings);
     const activeApiKey = platformExecution?.provider.apiKey ?? getActiveApiKey(settings);
     if (!activeApiKey) {

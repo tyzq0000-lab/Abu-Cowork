@@ -27,6 +27,8 @@ export interface ReviewContext {
   staticReason: string;
   /** Active conversation id — used to pull the user's recent intent. */
   conversationId?: string;
+  /** Active employee identity for platform deployment isolation. */
+  employeeName?: string;
 }
 
 export interface ReviewVerdict {
@@ -168,6 +170,7 @@ export async function reviewAction(ctx: ReviewContext, signal?: AbortSignal): Pr
   try {
     const { text } = await llmCall({
       conversationId: ctx.conversationId,
+      employeeName: ctx.employeeName,
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: buildUserMessage(ctx, recentUserIntent(ctx.conversationId)) }],
       maxTokens: 200,

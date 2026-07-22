@@ -23,6 +23,9 @@ vi.mock('../stores/workspaceStore', () => ({
 // Mock the LLM adapters to return controlled responses
 // Use class-based mocks so they work with `new`
 const mockClaudeChat = vi.fn();
+const { mockResolvePlatformRelayExecution } = vi.hoisted(() => ({
+  mockResolvePlatformRelayExecution: vi.fn(),
+}));
 vi.mock('../core/llm/claude', () => ({
   ClaudeAdapter: class {
     chat = mockClaudeChat;
@@ -37,6 +40,10 @@ vi.mock('../core/llm/openai-compatible', () => ({
 
 vi.mock('../core/llm/tauriFetch', () => ({
   getTauriFetch: vi.fn().mockResolvedValue(vi.fn()),
+}));
+
+vi.mock('../core/employee/platformRelay', () => ({
+  resolvePlatformRelayExecution: mockResolvePlatformRelayExecution,
 }));
 
 // Mock tool registry
@@ -294,6 +301,7 @@ import { runAgentLoop, escalateMaxOutputTokens } from '../core/agent/agentLoop';
 import type { StreamEvent, Message } from '../types';
 // Mocked module reference — used to override token estimator per-test
 import * as tokenEstimatorModule from '../core/context/tokenEstimator';
+import * as orchestratorModule from '../core/agent/orchestrator';
 
 describe('Agent Pipeline Integration', () => {
   beforeEach(() => {
@@ -324,6 +332,25 @@ describe('Agent Pipeline Integration', () => {
       activeModel: { providerId: 'anthropic', modelId: 'claude-sonnet-4' },
     });
     vi.clearAllMocks();
+    mockResolvePlatformRelayExecution.mockResolvedValue(null);
+  });
+
+  it('passes the routed employee identity to the platform gate before @delegation', async () => {
+    vi.mocked(orchestratorModule.routeInput).mockReturnValueOnce({
+      type: 'delegate',
+      cleanInput: '完成任务',
+      name: 'platform-agent',
+      delegateAgent: { name: 'platform-agent', source: 'employee' },
+    } as never);
+    mockResolvePlatformRelayExecution.mockRejectedValueOnce(new Error('payment required'));
+    const convId = useChatStore.getState().createConversation();
+
+    await runAgentLoop(convId, '@platform-agent 完成任务');
+
+    expect(mockResolvePlatformRelayExecution).toHaveBeenCalledWith(convId, {
+      agentName: 'platform-agent',
+    });
+    expect(mockClaudeChat).not.toHaveBeenCalled();
   });
 
   it('complete conversation: user message → LLM text response → done', async () => {

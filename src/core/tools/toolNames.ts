@@ -43,6 +43,7 @@ export const TOOL_NAMES = {
   RECALL: 'recall',
   READ_MEMORY: 'read_memory',
   TODO_WRITE: 'todo_write',
+  SOP_ADVANCE: 'sop_advance',
 
   // Automation
   MANAGE_SCHEDULED_TASK: 'manage_scheduled_task',

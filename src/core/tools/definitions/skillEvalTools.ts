@@ -118,6 +118,7 @@ ${skillsList}
       try {
         const response = await llmCall({
           conversationId: context?.conversationId,
+          employeeName: context?.employeeName,
           system: systemPrompt,
           messages: [{ role: 'user', content: q.query }],
           tools: [useSkillToolDef],
@@ -234,6 +235,7 @@ ${skillContent ? `技能内容（供参考）：\n${skillContent.slice(0, 2000)}
     try {
       const response = await llmCall({
         conversationId: context?.conversationId,
+        employeeName: context?.employeeName,
         messages: [{ role: 'user', content: prompt }],
         maxTokens: 1024,
       });

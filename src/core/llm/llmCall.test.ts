@@ -47,9 +47,12 @@ describe('llmCall platform binding', () => {
 
     await expect(llmCall({
       conversationId: 'conv-platform',
+      employeeName: 'platform-agent',
       messages: [{ role: 'user', content: 'check' }],
     })).resolves.toMatchObject({ text: 'relay-result' });
-    expect(mocks.resolvePlatformRelayExecution).toHaveBeenCalledWith('conv-platform');
+    expect(mocks.resolvePlatformRelayExecution).toHaveBeenCalledWith('conv-platform', {
+      agentName: 'platform-agent',
+    });
     expect(mocks.chat).toHaveBeenCalledWith(
       expect.any(Array),
       expect.objectContaining({

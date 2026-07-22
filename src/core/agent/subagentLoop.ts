@@ -252,7 +252,9 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
     // one was injected (modelConfig), otherwise the global active provider
     // with the existing model-compatibility semantics.
     const platformExecution = parentConversationId
-      ? await resolvePlatformRelayExecution(parentConversationId)
+      ? await resolvePlatformRelayExecution(parentConversationId, {
+          agentName: agent.source === 'employee' ? agent.name : undefined,
+        })
       : null;
     const execution = platformExecution ?? resolveAgentExecution(agent, settings);
     const effectiveModelId = execution?.modelId ?? settings.activeModel.modelId;

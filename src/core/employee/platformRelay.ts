@@ -46,18 +46,31 @@ export async function resolvePlatformRelayExecution(
   opts: {
     deployments?: Record<string, EmployeeDeploymentRecord>;
     readSecret?: (key: string) => Promise<string | null>;
+    /** Employee selected by routing. Enables new conversations and @delegation
+     *  to reuse exactly one platform deployment without weakening tenant isolation. */
+    agentName?: string;
   } = {},
 ): Promise<PlatformRelayExecution | null> {
   const deployments = opts.deployments ?? useEmployeeDeploymentStore.getState().deployments;
-  const matches = Object.values(deployments).filter(
+  const exactMatches = Object.values(deployments).filter(
     (deployment) => deployment.conversationId === conversationId && !!deployment.deploymentId,
   );
+  const matches = exactMatches.length > 0
+    ? exactMatches
+    : opts.agentName
+      ? Object.values(deployments).filter(
+          (deployment) => deployment.agentName === opts.agentName && !!deployment.deploymentId,
+        )
+      : [];
   if (matches.length === 0) return null;
   if (matches.length > 1) {
-    throw new PlatformRelayUnavailableError('当前对话绑定了多个平台部署，已停止执行以防企业身份串用。请重新部署该员工。');
+    throw new PlatformRelayUnavailableError('该员工匹配了多个平台部署，已停止执行以防企业身份串用。请撤销旧设备后重新部署。');
   }
 
   const deployment = matches[0];
+  if (opts.agentName && deployment.agentName !== opts.agentName) {
+    throw new PlatformRelayUnavailableError('当前对话与平台员工身份不一致，已停止执行以防账本串用。请从有谱平台重新部署。');
+  }
   if (!deployment.employeeId || !deployment.hireId || !validStoredRelayBinding(deployment)) {
     throw new PlatformRelayUnavailableError('该平台员工尚未获得可用的模型中继配置，请从有谱平台重新部署。');
   }

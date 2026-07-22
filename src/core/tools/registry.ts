@@ -299,6 +299,7 @@ export async function executeAnyTool(
             detail: command,
             staticReason: analysis.reason || (boundary === 'outside' ? '写入工作区外' : ''),
             conversationId: toolContext?.conversationId,
+            employeeName: toolContext?.employeeName,
           },
           toolContext?.loopId ? getLoopContext(toolContext.loopId)?.signal : undefined,
         );
@@ -347,6 +348,7 @@ export async function executeAnyTool(
                 detail: pathCheck.permissionPath,
                 staticReason: '访问工作区外路径',
                 conversationId: toolContext?.conversationId,
+                employeeName: toolContext?.employeeName,
               },
               toolContext?.loopId ? getLoopContext(toolContext.loopId)?.signal : undefined,
             );

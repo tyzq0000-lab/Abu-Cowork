@@ -24,6 +24,7 @@ import { webSearchTool, httpFetchTool } from './definitions/webTools';
 
 // --- Memory tools ---
 import { reportPlanTool, updateMemoryTool, todoWriteTool, logTaskCompletionTool } from './definitions/memoryTools';
+import { sopAdvanceTool } from './definitions/sopTools';
 import { recallTool, readMemoryTool } from './definitions/recallTool';
 import { updateSoulTool } from './definitions/updateSoulTool';
 
@@ -64,6 +65,7 @@ export function registerBuiltinTools(): void {
   toolRegistry.register(recallTool);
   toolRegistry.register(readMemoryTool);
   toolRegistry.register(todoWriteTool);
+  toolRegistry.register(sopAdvanceTool);
   toolRegistry.register(manageScheduledTaskTool);
   toolRegistry.register(manageTriggerTool);
   toolRegistry.register(saveAgentTool);

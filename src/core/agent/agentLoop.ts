@@ -45,6 +45,7 @@ import { executeToolBatch } from './toolExecutor';
 import { startConversationTrace, endConversationTrace, startGeneration } from '../observability/langfuse';
 import { calculateTurnCost } from '../llm/costTracker';
 import { formatTodosForPrompt } from './todoManager';
+import { formatSopForPrompt, maybeActivateSopForSkill } from '../skill/sop';
 import { isWindows } from '../../utils/platform';
 import { getBuiltinSearchConfig } from '../capabilities';
 import { resolveCapabilities, resolveEffectiveContextWindow, computeReasoningParams, type ModelCapabilities } from '../llm/modelCapabilities';
@@ -432,6 +433,13 @@ async function loadActiveSkillContent(
     const processed = substituteVariables(s.content, args, s.skillDir, conversationId ?? '', workspacePath ?? undefined);
     let block = `### ${s.name}\n${processed}`;
 
+    // Structured SOP: activate the skill's sop.json (if any) for this
+    // conversation. Idempotent + fail-open; state lives in sopStore and
+    // survives loop end (skills are single-turn, SOP runs are not).
+    if (conversationId) {
+      await maybeActivateSopForSkill(conversationId, name, s.skillDir);
+    }
+
     // SK-5: List supporting files for progressive disclosure
     const supportingFiles = await skillLoader.listSupportingFiles(name, employeeName);
     if (supportingFiles.length > 0) {
@@ -574,9 +582,23 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     },
   });
 
+  // Resolve the requested employee before choosing a provider. Platform-managed
+  // employees must keep using their deployment relay in new conversations and
+  // direct @delegation, not silently fall back to a local provider.
+  const boundAgentName = useChatStore.getState().conversations[conversationId]?.agentName
+    ?? useChatStore.getState().conversationIndex[conversationId]?.agentName;
+  const route = routeInput(userMessage, boundAgentName);
+  const routedEmployeeName = route.type === 'agent' && route.definition?.source === 'employee'
+    ? route.definition.name
+    : route.type === 'delegate' && route.delegateAgent?.source === 'employee'
+      ? route.delegateAgent.name
+      : undefined;
+
   let platformExecution: Awaited<ReturnType<typeof resolvePlatformRelayExecution>>;
   try {
-    platformExecution = await resolvePlatformRelayExecution(conversationId);
+    platformExecution = await resolvePlatformRelayExecution(conversationId, {
+      agentName: routedEmployeeName,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const userContent = await buildUserMessageContent(conversationId, userMessage, options?.images);
@@ -639,9 +661,6 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // agent as the primary persona — read the binding fresh from the store so a
   // contact picked just before send is reflected. IM/scheduled/trigger convs
   // carry no agentName, so this is a no-op for them.
-  const boundAgentName = useChatStore.getState().conversations[conversationId]?.agentName
-    ?? useChatStore.getState().conversationIndex[conversationId]?.agentName;
-  const route = routeInput(userMessage, boundAgentName);
   const _wsForPrompt = options?.imContext?.workspacePath
     ?? useChatStore.getState().conversations[conversationId]?.workspacePath
     ?? useWorkspaceStore.getState().currentPath;
@@ -1174,6 +1193,10 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       }
       if (todoState) {
         dynamicSections.push({ name: 'todos', text: todoState, cacheable: false });
+      }
+      const sopState = formatSopForPrompt(conversationId);
+      if (sopState) {
+        dynamicSections.push({ name: 'sop-state', text: sopState, cacheable: false });
       }
       if (deferredToolsSummary) {
         dynamicSections.push({ name: 'deferred-tools', text: deferredToolsSummary, cacheable: false });
