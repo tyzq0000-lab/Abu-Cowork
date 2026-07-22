@@ -48,7 +48,8 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 }));
 
 vi.mock('@tauri-apps/plugin-os', () => ({
-  platform: vi.fn().mockResolvedValue('macos'),
+  platform: vi.fn().mockReturnValue('macos'),
+  hostname: vi.fn().mockResolvedValue('test-device'),
   arch: vi.fn().mockResolvedValue('aarch64'),
   version: vi.fn().mockResolvedValue('14.0'),
 }));

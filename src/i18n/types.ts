@@ -175,6 +175,29 @@ export interface TranslationDict {
     memoryGuideTip: string;
   };
 
+  account: {
+    title: string;
+    subtitle: string;
+    signIn: string;
+    signingIn: string;
+    signedOutTitle: string;
+    signedOutDescription: string;
+    browserHint: string;
+    signedInAs: string;
+    personalRole: string;
+    enterpriseRole: string;
+    adminRole: string;
+    deviceSessions: string;
+    deviceSessionsDescription: string;
+    currentDevice: string;
+    lastActive: string;
+    expiresAt: string;
+    refresh: string;
+    revoke: string;
+    signOut: string;
+    retry: string;
+  };
+
   // Chat/Welcome
   chat: {
     inputPlaceholder: string;

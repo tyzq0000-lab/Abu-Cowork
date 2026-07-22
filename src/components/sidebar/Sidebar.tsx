@@ -16,6 +16,11 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { readTextFile } from '@tauri-apps/plugin-fs';
 import { isMacOS } from '@/utils/platform';
 import { getReviewQueueSnapshot, subscribeToReviewQueue } from '@/core/approval/reviewQueue';
+import { usePlatformAccountStore } from '@/stores/platformAccountStore';
+
+function maskedPhone(phone: string): string {
+  return phone.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2');
+}
 
 export default function Sidebar() {
   const conversationIndex = useChatStore((s) => s.conversationIndex);
@@ -68,6 +73,8 @@ export default function Sidebar() {
   const [profileOpen, setProfileOpen] = useState(false);
   const userNickname = useSettingsStore((s) => s.userNickname);
   const userAvatar = useSettingsStore((s) => s.userAvatar);
+  const accountUser = usePlatformAccountStore((s) => s.user);
+  const accountStatus = usePlatformAccountStore((s) => s.status);
 
   // IM 化: the "current contact" highlights the ContactList. Derived from the
   // active conversation's binding, falling back to the pending agent (set when a
@@ -150,19 +157,22 @@ export default function Sidebar() {
             )}
           </button>
           <button
-            onClick={() => setProfileOpen(true)}
+            onClick={() => openSystemSettings('account')}
             className="flex-1 min-w-0 text-left"
-            title={t.sidebar.editProfile}
+            title={t.account.title}
           >
             <div
               className={cn(
                 'text-[13px] font-semibold truncate',
-                userNickname
+                accountUser || userNickname
                   ? 'text-[var(--abu-text-primary)]'
                   : 'text-[var(--abu-text-tertiary)]'
               )}
             >
-              {userNickname || t.sidebar.defaultNickname}
+              {accountUser?.name || (accountUser ? maskedPhone(accountUser.phone) : userNickname || t.sidebar.defaultNickname)}
+            </div>
+            <div className="truncate text-[11px] text-[var(--abu-text-muted)]">
+              {accountUser ? maskedPhone(accountUser.phone) : accountStatus === 'authorizing' ? t.account.signingIn : t.account.signIn}
             </div>
           </button>
           {/* Import session */}

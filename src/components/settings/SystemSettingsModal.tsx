@@ -1,12 +1,13 @@
 import { useSettingsStore, type SystemSettingsTab } from '@/stores/settingsStore';
 import { useI18n } from '@/i18n';
-import { Settings2, Info, Shield, SlidersHorizontal, Radio, Brain, Heart, Activity, BarChart3 } from 'lucide-react';
+import { Settings2, Info, Shield, SlidersHorizontal, Radio, Brain, Heart, Activity, BarChart3, CircleUserRound } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIServicesSection, AboutSection, SandboxSection, GeneralSection, IMChannelSection } from './sections';
 import PersonalMemorySection from './sections/PersonalMemorySection';
 import SoulSection from './sections/SoulSection';
 import DiagnosticSection from './sections/DiagnosticSection';
 import UsageSection from './sections/UsageSection';
+import AccountSection from './sections/AccountSection';
 
 export default function SystemSettingsView() {
   const {
@@ -16,6 +17,7 @@ export default function SystemSettingsView() {
   const { t } = useI18n();
 
   const navItems: { id: SystemSettingsTab; label: string; icon: typeof Settings2 }[] = [
+    { id: 'account', label: t.account.title, icon: CircleUserRound },
     { id: 'usage', label: t.usage.title, icon: BarChart3 },
     { id: 'ai-services', label: t.settings.aiServices, icon: Settings2 },
     { id: 'im-channels', label: t.imChannel.title, icon: Radio },
@@ -29,6 +31,8 @@ export default function SystemSettingsView() {
 
   const renderContent = () => {
     switch (activeSystemTab) {
+      case 'account':
+        return <AccountSection />;
       case 'general':
         return <GeneralSection />;
       case 'ai-services':

@@ -75,6 +75,7 @@ import AnnouncementBanner from '@/components/common/AnnouncementBanner';
 import DisclaimerBanner from '@/components/common/DisclaimerBanner';
 import { pushDiagnosticSnapshot } from '@/utils/consoleDiagnostic';
 import { useDiagnosticStore } from '@/stores/diagnosticStore';
+import { usePlatformAccountStore } from '@/stores/platformAccountStore';
 
 /**
  * Drain Notice inbox if we're in a state that can actually deliver.
@@ -121,6 +122,10 @@ function App() {
   const hasRunningAgent = useChatStore((s) =>
     Object.values(s.conversations).some((c) => c.status === 'running')
   );
+
+  useEffect(() => {
+    void usePlatformAccountStore.getState().initialize();
+  }, []);
 
   const handleQuit = useCallback(() => {
     setShowCloseDialog(false);
