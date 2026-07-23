@@ -2,7 +2,7 @@
 
 本文档记录阿布的每次版本更新。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/)。
 
-## v0.24.0 · 2026-07-16 — 平台托管运行时 + 执行账本全链路
+## v1.0.0 · 2026-07-23 — 平台托管运行时 + 执行账本全链路（扶摇首个正式发布版）
 
 ### ✨ Features
 
@@ -17,10 +17,13 @@
 - HTML 预览改走 loopback HTTP 服务，子资源加载不再失败 (preview via loopback server)
 - 企业端不再可见 maker 注入的模型 provider（模型名/endpoint 隐藏）
 - 欢迎页人设按当前会话绑定 agent 解析；员工头像渲染与切会话竞态修复
+- 一键部署被误拦：员工包新私有桶 `uprow-packages` 补入下载来源信任列表 (deploy deep-link allowlist)
+- 平台域名不再只靠 CI secret：`www.trustworkai.com` 内置为零配置回退，secret 缺失的构建也能登录与部署
 
 ### ⚠️ 升级说明
 
-- **更新器签名密钥已轮换**：0.23.x 无法自动升级到本版，需手动下载安装一次，此后恢复自动更新 (updater key rotated — one manual install required)
+- **版本号自 0.24.0 直接跃至 1.0.0**：扶摇与上游 abu-cowork 共用过同一条版本线，`v0.24.0`–`v0.33.0` 标签均已被上游占用（且上游仍在推进），扶摇无法在该区间打自己的标签。1.0.0 让扶摇拥有独立且不会再撞车的版本线，同时对应首个面向真实客户的正式发布。
+- **更新器签名密钥已轮换**：更早的本地自建包无法自动升级到本版，需手动下载安装一次，此后恢复自动更新 (updater key rotated — one manual install required)
 - 产品名与产物文件名标准化为 ASCII "Fuyao"
 
 ### English Summary

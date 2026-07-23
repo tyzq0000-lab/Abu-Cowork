@@ -2,7 +2,7 @@
   "name": "fuyao",
   "private": false,
   "license": "Apache-2.0",
-  "version": "0.24.0",
+  "version": "1.0.0",
   "description": "扶摇 (Fuyao) - AI Desktop Office Assistant · uprow",
   "type": "module",
   "scripts": {
