@@ -68,10 +68,23 @@ const configuredPlatformHosts = String(import.meta.env.VITE_UPROW_PLATFORM_HOSTS
   .map((host) => host.trim().toLowerCase())
   .filter(Boolean);
 
+/**
+ * Platform hosts for login + deployment enrollment. Env-configured hosts win
+ * (self-hosted uprow), the official domain is the zero-config fallback so a
+ * release built without CI secrets still works out of the box.
+ */
+export const PLATFORM_HOSTS: readonly string[] = Array.from(new Set([
+  ...configuredPlatformHosts,
+  // uprow 官方平台域名（2026-07-23 HTTPS 上线）
+  'www.trustworkai.com',
+]));
+
 export const ALLOWED_DOWNLOAD_HOSTS: readonly string[] = Array.from(new Set([
   'abu-agent.oss-cn-beijing.aliyuncs.com',
   // uprow 自有发布桶（2026-07-16 起）：安装包与后续员工包分发走这里
   'fuyao-desktop.oss-cn-beijing.aliyuncs.com',
+  // uprow 员工包私有桶（2026-07-23 起）：平台 install-link 签名 URL 的下载来源
+  'uprow-packages.oss-cn-beijing.aliyuncs.com',
   ...configuredDownloadHosts,
 ]));
 
@@ -107,7 +120,7 @@ export function isEnrollmentUrlAllowed(raw: string): boolean {
     return false;
   }
   if (u.username || u.password || u.search || u.hash) return false;
-  if (u.protocol === 'https:') return configuredPlatformHosts.includes(u.hostname);
+  if (u.protocol === 'https:') return PLATFORM_HOSTS.includes(u.hostname);
   return u.protocol === 'http:' && LOCAL_DEV_HOSTS.has(u.hostname);
 }
 

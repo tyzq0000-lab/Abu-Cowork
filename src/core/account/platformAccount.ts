@@ -1,4 +1,4 @@
-import { isEnrollmentUrlAllowed } from '@/core/deeplink/parser';
+import { isEnrollmentUrlAllowed, PLATFORM_HOSTS } from '@/core/deeplink/parser';
 
 export interface PlatformAccountUser {
   id: string;
@@ -61,10 +61,9 @@ async function createPkce(): Promise<{ verifier: string; challenge: string }> {
 }
 
 function firstPlatformHost(): string {
-  return String(import.meta.env.VITE_UPROW_PLATFORM_HOSTS ?? '')
-    .split(',')
-    .map((host) => host.trim())
-    .find(Boolean) ?? '';
+  // Env-configured host wins; official domain is the zero-config fallback
+  // (PLATFORM_HOSTS order guarantees this). See deeplink/parser.ts.
+  return PLATFORM_HOSTS[0] ?? '';
 }
 
 export function resolvePlatformOrigin(): string {
