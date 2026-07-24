@@ -14,8 +14,9 @@
  *   Never raw tool inputs/outputs, model keys, message content, or full local
  *   paths (which would leak the user's directory / username).
  *
- * ponytail: first slice is best-effort POST only. A durable local ledger with
- * offline retry is a follow-up — add when reliability of delivery matters.
+ * Delivery: entries persist to a durable local ledger (`ledgerStore`, survives
+ * restarts) before best-effort POST; a failed send stays queued and is retried
+ * via `flush` on a `RETRY_INTERVAL_MS` (5min) interval — see `startExecutionLedger`.
  */
 import { registerHook, type AgentEndEvent } from '../agent/lifecycleHooks';
 import { useTaskExecutionStore } from '@/stores/taskExecutionStore';

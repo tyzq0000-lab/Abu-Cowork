@@ -473,9 +473,11 @@ export async function loadMessages(convId: string): Promise<Message[]> {
   // Per-line parse failures are tolerated: skip the bad line, keep the rest.
   // Previously we .map()'d + caught the whole block, which meant any single
   // corrupt line nuked the entire conversation for the UI even though most
-  // lines were fine. This is pure damage reduction for a storage bug we
-  // eventually need to fix on the write side (see conversationStorage write
-  // race / TODO in Task #15 follow-up).
+  // lines were fine. The concurrent-write race that used to cause this
+  // (Task #15) is now fixed on the write side via `withFileLock` above,
+  // which serializes all writers per file path. This per-line skip remains
+  // as defense-in-depth for a single write interrupted mid-flush (crash /
+  // OS write-syscall boundary), not as a substitute for the write-side fix.
   const lines = raw.trimEnd().split('\n').filter((l) => l.length > 0);
   const messages: Message[] = [];
   let corruptCount = 0;
