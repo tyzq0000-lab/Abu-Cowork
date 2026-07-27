@@ -1,6 +1,6 @@
 {
   "productName": "Fuyao",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.abu.app",
   "build": {
     "beforeDevCommand": "npm run copy-resources && npm run dev",
