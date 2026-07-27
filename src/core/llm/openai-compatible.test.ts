@@ -16,6 +16,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Message, StreamEvent, ToolDefinition } from '../../types';
 import { LLMError } from './adapter';
+// 同 claude.test.ts：超时边界从常量派生，不硬编码 90s。
+import { DEFAULT_STREAM_HANG_TIMEOUT_MS } from './heartbeat';
 import type { ChatOptions } from './adapter';
 
 function abortError(): Error {
@@ -393,7 +395,7 @@ describe('OpenAICompatibleAdapter hang timeouts (abort on no progress)', () => {
     let settled = false;
     chatPromise.then(() => { settled = true; }, () => { settled = true; });
 
-    await vi.advanceTimersByTimeAsync(89_000);
+    await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_HANG_TIMEOUT_MS - 1_000);
     expect(settled).toBe(false);
 
     await vi.advanceTimersByTimeAsync(2_000);
@@ -425,7 +427,7 @@ describe('OpenAICompatibleAdapter hang timeouts (abort on no progress)', () => {
     let settled = false;
     chatPromise.then(() => { settled = true; }, () => { settled = true; });
 
-    await vi.advanceTimersByTimeAsync(89_000);
+    await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_HANG_TIMEOUT_MS - 1_000);
     expect(settled).toBe(false);
 
     await vi.advanceTimersByTimeAsync(2_000);

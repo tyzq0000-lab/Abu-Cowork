@@ -127,15 +127,19 @@ class TauriStdioTransport {
 let Client: typeof import('@modelcontextprotocol/sdk/client/index.js').Client | null = null;
 let StreamableHTTPClientTransport: typeof import('@modelcontextprotocol/sdk/client/streamableHttp.js').StreamableHTTPClientTransport | null = null;
 let SSEClientTransport: typeof import('@modelcontextprotocol/sdk/client/sse.js').SSEClientTransport | null = null;
+let cspSafeValidator: InstanceType<
+  typeof import('@modelcontextprotocol/sdk/validation/cfworker').CfWorkerJsonSchemaValidator
+> | null = null;
 let mcpAvailable = false;
 
 async function loadMCPSDK(): Promise<boolean> {
   if (mcpAvailable) return true;
 
-  const [clientResult, streamableResult, sseResult] = await Promise.allSettled([
+  const [clientResult, streamableResult, sseResult, cfworkerResult] = await Promise.allSettled([
     import('@modelcontextprotocol/sdk/client/index.js'),
     import('@modelcontextprotocol/sdk/client/streamableHttp.js'),
     import('@modelcontextprotocol/sdk/client/sse.js'),
+    import('@modelcontextprotocol/sdk/validation/cfworker'),
   ]);
 
   // Core Client — required
@@ -145,6 +149,16 @@ async function loadMCPSDK(): Promise<boolean> {
   } else {
     console.log('[MCP] Client not available:', clientResult.reason);
     return false;
+  }
+
+  if (cfworkerResult.status === 'fulfilled') {
+    try {
+      cspSafeValidator = new cfworkerResult.value.CfWorkerJsonSchemaValidator();
+    } catch (err) {
+      console.warn('[MCP] CSP-safe validator failed, using SDK default:', err);
+    }
+  } else {
+    console.warn('[MCP] CSP-safe validator unavailable, using SDK default:', cfworkerResult.reason);
   }
 
   // HTTP transports — optional
@@ -161,6 +175,14 @@ async function loadMCPSDK(): Promise<boolean> {
   mcpAvailable = true;
   console.log('[MCP] SDK loaded successfully');
   return true;
+}
+
+function createMcpClient(): InstanceType<NonNullable<typeof Client>> {
+  if (!Client) throw new Error('MCP Client not loaded');
+  return new Client(
+    { name: 'abu-desktop', version: '0.1.0' },
+    { capabilities: {}, jsonSchemaValidator: cspSafeValidator ?? undefined },
+  );
 }
 
 /** Determine effective transport type from config */
@@ -316,10 +338,7 @@ export class MCPClientManager {
         });
 
         // Create MCP client and connect for stdio
-        client = new Client(
-          { name: 'abu-desktop', version: '0.1.0' },
-          { capabilities: {} }
-        );
+        client = createMcpClient();
         await client.connect(transport as Parameters<typeof client.connect>[0]);
       }
 
@@ -407,10 +426,7 @@ export class MCPClientManager {
       try {
         this.addLog(displayName, 'info', 'Trying StreamableHTTP transport...');
         const transport = new StreamableHTTPClientTransport(url, transportOpts);
-        const client = new Client(
-          { name: 'abu-desktop', version: '0.1.0' },
-          { capabilities: {} }
-        );
+        const client = createMcpClient();
         await client.connect(transport as Parameters<typeof client.connect>[0]);
         this.addLog(displayName, 'info', 'Connected via StreamableHTTP');
         return { transport, client };
@@ -425,10 +441,7 @@ export class MCPClientManager {
       try {
         this.addLog(displayName, 'info', 'Trying SSE transport...');
         const transport = new SSEClientTransport(url, transportOpts);
-        const client = new Client(
-          { name: 'abu-desktop', version: '0.1.0' },
-          { capabilities: {} }
-        );
+        const client = createMcpClient();
         await client.connect(transport as Parameters<typeof client.connect>[0]);
         this.addLog(displayName, 'info', 'Connected via SSE');
         return { transport, client };

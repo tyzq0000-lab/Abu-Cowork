@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+// 从常量派生超时边界，别硬编码 90s：调常量时测试仍守住「到点前不触发、过点即触发」这个不变量，
+// 而不是因为改了一个合法数值就变红。
+import { DEFAULT_STREAM_HANG_TIMEOUT_MS } from './heartbeat';
 
 // Mock Tauri fetch before importing
 vi.mock('./tauriFetch', () => ({
@@ -78,11 +81,11 @@ describe('ClaudeAdapter', () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(events).toHaveLength(0);
 
-      // 89s — should NOT have timed out yet
-      await vi.advanceTimersByTimeAsync(89_000);
+      // Just before the hang timeout — should NOT have timed out yet
+      await vi.advanceTimersByTimeAsync(DEFAULT_STREAM_HANG_TIMEOUT_MS - 1_000);
       expect(settled).toBe(false);
 
-      // Past 90s — heartbeat aborts the request, chat() rejects with retryable error
+      // Past the timeout — heartbeat aborts the request, chat() rejects with retryable error
       await vi.advanceTimersByTimeAsync(2_000);
       await expect(chatPromise).rejects.toMatchObject({
         code: 'network_error',

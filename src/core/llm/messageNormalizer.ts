@@ -98,7 +98,7 @@ function extractImages(resultContent: ToolResultContent[] | undefined): Prepared
   if (!resultContent || !Array.isArray(resultContent)) return [];
   const images: PreparedImage[] = [];
   for (const b of resultContent) {
-    if (b.type === 'image') {
+    if (b.type === 'image' && b.source.data) {
       images.push({ mediaType: b.source.media_type as PreparedImage['mediaType'], data: b.source.data });
     }
   }
@@ -121,10 +121,12 @@ function convertUserContent(
     if (c.type === 'text') {
       blocks.push({ type: 'text', text: c.text });
     } else if (c.type === 'image') {
-      if (supportsVision) {
+      if (!supportsVision) {
+        imageCount++;
+      } else if (c.source.data) {
         blocks.push({ type: 'image', mediaType: c.source.media_type, data: c.source.data });
       } else {
-        imageCount++;
+        blocks.push({ type: 'text', text: '[An image was attached but could not be loaded.]' });
       }
     } else if (c.type === 'document') {
       blocks.push({ type: 'document', mediaType: c.source.media_type, data: c.source.data });

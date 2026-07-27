@@ -49,6 +49,7 @@ import { formatSopForPrompt, maybeActivateSopForSkill } from '../skill/sop';
 import { isWindows } from '../../utils/platform';
 import { getBuiltinSearchConfig } from '../capabilities';
 import { resolveCapabilities, resolveEffectiveContextWindow, computeReasoningParams, type ModelCapabilities } from '../llm/modelCapabilities';
+import { rehydrateForSend, type ImageBase64Cache } from '../llm/imageRehydration';
 import { TOOL_NAMES } from '../tools/toolNames';
 import { prefetchTools } from '../tools/toolPrefetch';
 import { classifyTools, buildDeferredToolsSummary } from '../tools/toolSearch';
@@ -760,12 +761,9 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
       if (execution.provider.source === 'employee') dedicatedProvider = execution.provider;
     }
   }
-  // Provider used for transport (adapter/apiKey/baseUrl). Re-reads fresh
-  // settings each call to preserve the existing mid-loop-config-change
-  // semantics for the global provider; a dedicated employee provider stays
-  // pinned for the loop's lifetime.
-  const execProviderOf = (s: Parameters<typeof getActiveProvider>[0]) =>
-    dedicatedProvider ?? getActiveProvider(s);
+  // Model and provider identity must remain paired for this whole loop.
+  // Global settings can change mid-run for another conversation.
+  const executionProvider = dedicatedProvider ?? getActiveProvider(settings);
   // Set active model for per-model token calibration
   setActiveModel(effectiveModelId);
 
@@ -789,7 +787,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     } : undefined,
   });
 
-  const adapter: LLMAdapter = execProviderOf(settings)?.apiFormat === 'openai-compatible'
+  const adapter: LLMAdapter = executionProvider?.apiFormat === 'openai-compatible'
     ? new OpenAICompatibleAdapter()
     : new ClaudeAdapter();
 
@@ -964,6 +962,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   let continueLoop = true;
   let exitReason: AgentLoopExitReason = 'completed';
   let exitError: string | undefined;
+  const imageBase64Cache: ImageBase64Cache = new Map();
   // maxTurns priority: skill > agent definition > global setting > undefined (unlimited)
   const globalMaxTurns = useSettingsStore.getState().agentMaxTurns;
   const maxTurns = route.skill?.maxTurns ?? route.definition?.maxTurns ?? globalMaxTurns;
@@ -1097,7 +1096,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
     try {
       // ── Per-turn: refresh tools and dynamic prompt sections ──
       const freshSettings = useSettingsStore.getState();
-      const activeProvider = execProviderOf(freshSettings);
+      const activeProvider = executionProvider;
       const builtinWebSearch = activeProvider
         ? getBuiltinSearchConfig(activeProvider.id as LLMProvider, true)
         : undefined;
@@ -1237,8 +1236,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
               {
                 adapter,
                 model: effectiveModelId,
-                apiKey: execProviderOf(freshSettings)?.apiKey ?? '',
-                baseUrl: execProviderOf(freshSettings)?.baseUrl || undefined,
+                apiKey: executionProvider?.apiKey ?? '',
+                baseUrl: executionProvider?.baseUrl || undefined,
                 signal: abortController.signal,
               },
               toolTokens
@@ -1321,10 +1320,17 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
         toolTokens
       );
 
+      preparedMessages = await rehydrateForSend(preparedMessages, {
+        vision: modelCaps.vision,
+        conversationId,
+        workspacePath: useChatStore.getState().conversations[conversationId]?.workspacePath ?? null,
+        cache: imageBase64Cache,
+      });
+
       const chatOptions = {
         model: effectiveModelId,
-        apiKey: execProviderOf(freshSettings)?.apiKey ?? '',
-        baseUrl: execProviderOf(freshSettings)?.baseUrl || undefined,
+        apiKey: executionProvider?.apiKey ?? '',
+        baseUrl: executionProvider?.baseUrl || undefined,
         systemPrompt: effectiveSystemPrompt,
         systemPromptSections: allSections,
         tools: tools.length > 0 ? tools : undefined,
@@ -1579,8 +1585,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
                 {
                   adapter,
                   model: effectiveModelId,
-                  apiKey: execProviderOf(freshSettings)?.apiKey ?? '',
-                  baseUrl: execProviderOf(freshSettings)?.baseUrl || undefined,
+                  apiKey: executionProvider?.apiKey ?? '',
+                  baseUrl: executionProvider?.baseUrl || undefined,
                   signal: abortController.signal,
                 },
                 toolTokens
@@ -1616,6 +1622,13 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
             }
             recovered = true;
           }
+
+          preparedMessages = await rehydrateForSend(preparedMessages, {
+            vision: modelCaps.vision,
+            conversationId,
+            workspacePath: useChatStore.getState().conversations[conversationId]?.workspacePath ?? null,
+            cache: imageBase64Cache,
+          });
 
           // Retry with recovered messages
           try {

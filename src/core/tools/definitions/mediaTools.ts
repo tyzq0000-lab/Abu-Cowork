@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { ToolDefinition } from '../../../types';
 import { isWindows } from '../../../utils/platform';
 import { joinPath, ensureParentDir, getParentDir } from '../../../utils/pathUtils';
+import { base64ToUint8Array } from '../../../utils/base64';
 import { getTauriFetch } from '../../llm/tauriFetch';
 import { isSandboxEnabled, isNetworkIsolationEnabled } from '../../sandbox/config';
 import { useSettingsStore, getActiveApiKey, getActiveProvider } from '../../../stores/settingsStore';
@@ -110,8 +111,7 @@ export const generateImageTool: ToolDefinition = {
       let bytes: Uint8Array;
       const b64Data = result.data?.[0]?.b64_json;
       if (b64Data) {
-        const resp = await fetch(`data:image/png;base64,${b64Data}`);
-        bytes = new Uint8Array(await resp.arrayBuffer());
+        bytes = base64ToUint8Array(b64Data);
       } else {
         const imageUrl = result.data?.[0]?.url;
         if (!imageUrl) {

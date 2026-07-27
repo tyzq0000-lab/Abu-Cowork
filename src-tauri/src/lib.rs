@@ -82,6 +82,17 @@ pub struct CommandOutput {
     code: i32,
 }
 
+/// Read byte streams line-by-line without dropping the tail after invalid UTF-8.
+fn lossy_lines<R: BufRead>(reader: R) -> impl Iterator<Item = String> {
+    reader.split(b'\n').map_while(Result::ok).map(|chunk| {
+        let mut line = String::from_utf8_lossy(&chunk).into_owned();
+        if line.ends_with('\r') {
+            line.pop();
+        }
+        line
+    })
+}
+
 /// Spawn a pre-built command, stream stdout/stderr line-by-line with an
 /// output-line cap, enforce `timeout_secs`, and collect the final
 /// CommandOutput. Must be called from a blocking context (e.g. inside
@@ -105,7 +116,7 @@ fn execute_foreground_command(
     if let Some(out) = stdout {
         thread::spawn(move || {
             let reader = BufReader::new(out);
-            for line in reader.lines().map_while(Result::ok) {
+            for line in lossy_lines(reader) {
                 if let Ok(mut lines) = stdout_lines_clone.lock() {
                     if lines.len() >= MAX_OUTPUT_LINES {
                         lines.push(format!("[truncated: exceeded {} lines]", MAX_OUTPUT_LINES));
@@ -121,7 +132,7 @@ fn execute_foreground_command(
     if let Some(err) = stderr {
         thread::spawn(move || {
             let reader = BufReader::new(err);
-            for line in reader.lines().map_while(Result::ok) {
+            for line in lossy_lines(reader) {
                 if let Ok(mut lines) = stderr_lines_clone.lock() {
                     if lines.len() >= MAX_OUTPUT_LINES {
                         lines.push(format!("[truncated: exceeded {} lines]", MAX_OUTPUT_LINES));
@@ -238,7 +249,7 @@ async fn run_shell_command(
             if let Some(out) = stdout {
                 thread::spawn(move || {
                     let reader = BufReader::new(out);
-                    for line in reader.lines().map_while(Result::ok) {
+                    for line in lossy_lines(reader) {
                         if let Ok(mut lines) = stdout_lines_clone.lock() {
                             if lines.len() >= MAX_OUTPUT_LINES {
                                 lines.push(format!("[truncated: exceeded {} lines]", MAX_OUTPUT_LINES));
@@ -255,7 +266,7 @@ async fn run_shell_command(
             if let Some(err) = stderr {
                 thread::spawn(move || {
                     let reader = BufReader::new(err);
-                    for line in reader.lines().map_while(Result::ok) {
+                    for line in lossy_lines(reader) {
                         if let Ok(mut lines) = stderr_lines_clone.lock() {
                             if lines.len() >= MAX_OUTPUT_LINES {
                                 lines.push(format!("[truncated: exceeded {} lines]", MAX_OUTPUT_LINES));
@@ -464,7 +475,7 @@ async fn run_shell_command_streaming(
         if let Some(out) = stdout {
             thread::spawn(move || {
                 let reader = BufReader::new(out);
-                for line in reader.lines().map_while(Result::ok) {
+                for line in lossy_lines(reader) {
                     let _ = app_clone.emit(&format!("abu://command-output-{}", event_id_clone), CommandOutputLine {
                         stream: "stdout".to_string(),
                         line: line.clone(),
@@ -487,7 +498,7 @@ async fn run_shell_command_streaming(
         if let Some(err) = stderr {
             thread::spawn(move || {
                 let reader = BufReader::new(err);
-                for line in reader.lines().map_while(Result::ok) {
+                for line in lossy_lines(reader) {
                     let _ = app_clone2.emit(&format!("abu://command-output-{}", event_id_clone2), CommandOutputLine {
                         stream: "stderr".to_string(),
                         line: line.clone(),
@@ -855,7 +866,7 @@ async fn mcp_spawn(
     let id_stderr = id.clone();
     thread::spawn(move || {
         let reader = BufReader::new(stderr);
-        for line in reader.lines().map_while(Result::ok) {
+        for line in lossy_lines(reader) {
             let _ = app_stderr.emit(&format!("mcp-err-{}", id_stderr), &line);
         }
     });
@@ -1511,6 +1522,14 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lossy_lines_keeps_output_after_invalid_utf8_and_strips_crlf() {
+        let bytes: &[u8] = b"header\r\n\x86\x86name.md\ntail\n";
+        let lines: Vec<String> = lossy_lines(std::io::BufReader::new(bytes)).collect();
+
+        assert_eq!(lines, vec!["header", "\u{fffd}\u{fffd}name.md", "tail"]);
+    }
 
     #[test]
     fn execute_foreground_captures_stdout_and_exit_code() {

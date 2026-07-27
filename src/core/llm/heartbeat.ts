@@ -15,12 +15,15 @@
  */
 
 /**
- * Default idle/connect timeout (ms) for LLM streaming connections. 90s is the
- * CC-validated threshold — long enough for slow reasoning models to produce a
- * first token, short enough to detect a real network hang. Shared by both LLM
- * adapters for the connect/header phase and the inter-chunk idle timeout.
+ * Default idle/connect timeout (ms) for LLM streaming connections. Shared by both
+ * LLM adapters for the connect/header phase and the inter-chunk idle timeout.
+ *
+ * 取值权衡：太短会把「慢推理模型迟迟不出第一个 token」误判成网络挂起（功能被打断）；
+ * 太长则连到一个已死的 socket 时用户要干等整段时间才会看到可重试错误。
+ * 原为 90s（CC 验证值），2026-07-26 提到 180s——放宽是为迁就更慢的推理模型。
+ * 边界测试从本常量派生（claude.test.ts / openai-compatible.test.ts），改值不会误红。
  */
-export const DEFAULT_STREAM_HANG_TIMEOUT_MS = 90_000;
+export const DEFAULT_STREAM_HANG_TIMEOUT_MS = 180_000;
 
 /**
  * Create a heartbeat timer that calls `onTimeout` if not reset within `timeoutMs`.
