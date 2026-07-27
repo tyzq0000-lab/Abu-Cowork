@@ -600,6 +600,11 @@ export function validatePackageContract(input: {
    * kept live and tested so it's a one-flag switch when that day comes.
    */
   enforceLicense?: boolean;
+  /**
+   * SKILL.md 正文，用于「引用了但没打包」的缺件检查（MISSING_SKILL_BUNDLE）。
+   * 可选：不传就跳过该检查，既有调用方与测试不受影响。
+   */
+  skillDocs?: { path: string; text: string }[];
 }): ContractValidation {
   const errors: ContractIssue[] = [];
   const warnings: ContractIssue[] = [];
@@ -617,7 +622,7 @@ export function validatePackageContract(input: {
   }
 
   const manifest = isRecord(parsed) ? (parsed as EmployeePluginManifest) : null;
-  const audit = auditEmployeePackage({ manifest, files: input.files });
+  const audit = auditEmployeePackage({ manifest, files: input.files, skillDocs: input.skillDocs });
 
   if (!manifest || !(manifest.agentName || manifest.name)) {
     errors.push({ code: 'INVALID_MANIFEST', message: '缺少可识别的 plugin.json 或员工标识' });
@@ -703,9 +708,47 @@ function dependencyOwner(type: EmployeeDependency['type']): EmployeeGapOwner {
   return type === 'account' || type === 'service' ? 'external-service' : 'runtime-config';
 }
 
+/**
+ * SKILL.md 里指向包内资源的相对路径（Agent Skills 约定的三个捆绑目录）。
+ * 只认 references/ scripts/ assets/ 三个前缀 —— 正文里提到的产出路径（output/…）、
+ * 外部 URL、示例命令不在此列，避免把散文误判成缺件。
+ */
+const SKILL_BUNDLE_REF = /(?:^|[\s`'"([])((?:references|scripts|assets)\/[A-Za-z0-9_][A-Za-z0-9_.-]*)/g;
+
+/**
+ * 找出「SKILL.md 让员工去用、但包里根本没有」的捆绑文件。
+ *
+ * 为什么必须查：从技能 hub 整包拉下来的员工包常常只有 SKILL.md 这一层壳，
+ * 正文却写着 `python scripts/step ...`。这种包能过结构门、能安装、能被派活，
+ * 然后第一次干活就抓瞎（或者由模型现编一个不存在的流程）。结构完整 ≠ 能干活。
+ *
+ * 与平台侧 server/src/runtime/packageContract.ts 保持同源（两侧同一套判定）。
+ */
+function missingSkillBundleRefs(
+  files: Set<string>,
+  skillDocs: { path: string; text: string }[],
+): { skill: string; refs: string[] }[] {
+  const out: { skill: string; refs: string[] }[] = [];
+  for (const doc of skillDocs) {
+    const dir = normalizePackagePath(doc.path).replace(/\/SKILL\.md$/i, '');
+    const missing = new Set<string>();
+    for (const m of doc.text.matchAll(SKILL_BUNDLE_REF)) {
+      const rel = m[1];
+      // 技能目录内优先；少数包把资源放在包根，两处都不在才算缺
+      if (!files.has(normalizePackagePath(`${dir}/${rel}`)) && !files.has(normalizePackagePath(rel))) {
+        missing.add(rel);
+      }
+    }
+    if (missing.size) out.push({ skill: dir, refs: [...missing].sort() });
+  }
+  return out;
+}
+
 export function auditEmployeePackage(input: {
   manifest: EmployeePluginManifest | null;
   files: string[];
+  /** SKILL.md 正文（可选）。给了才做「引用了但没打包」的缺件检查。 */
+  skillDocs?: { path: string; text: string }[];
 }): EmployeeAuditReport {
   const manifest = input.manifest;
   const files = new Set(input.files.map(normalizePackagePath));
@@ -814,6 +857,17 @@ export function auditEmployeePackage(input: {
     }
     if (!ledgerComplete) {
       addGap('employee-package', 'INCOMPLETE_SOURCE_LEDGER', '开源能力采用与裁剪账本不完整');
+    }
+    // 故意**不**列进阻断码：正文里的示例文件名会被误判（实测我方 5 包 180 个技能误报 2 处，
+    // 都是散文里的示例产物名）。拿它拒安装会误伤自家冷启动包，所以只进 warnings。
+    for (const { skill, refs } of missingSkillBundleRefs(files, input.skillDocs ?? [])) {
+      const shown = refs.slice(0, 3).join('、');
+      addGap(
+        'employee-package',
+        'MISSING_SKILL_BUNDLE',
+        `技能 ${skill} 的 SKILL.md 引用了包内没有的文件：${shown}`
+          + (refs.length > 3 ? ` 等 ${refs.length} 个` : ''),
+      );
     }
 
     for (const dependency of runtime.dependencies ?? []) {
