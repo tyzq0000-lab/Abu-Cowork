@@ -271,6 +271,7 @@
     "global-shortcut:allow-is-registered",
     "updater:default",
     "process:default",
-    "deep-link:default"
+    "deep-link:default",
+    "os:allow-hostname"
   ]
 }

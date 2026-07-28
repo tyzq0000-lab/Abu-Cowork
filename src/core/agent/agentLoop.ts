@@ -669,7 +669,7 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
 
   if (route.type === 'agent' && route.definition) {
     try {
-      await assertEmployeePackageIntegrity(route.definition, conversationId);
+      await assertEmployeePackageIntegrity(route.definition);
       if (route.definition.source === 'employee') {
         employeeMemoryPath = resolveAgentMemoryPaths(
           route.definition,

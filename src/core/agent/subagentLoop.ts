@@ -237,7 +237,7 @@ export async function runSubagentLoop(options: SubagentLoopOptions): Promise<Sub
   try {
     const settings = useSettingsStore.getState();
 
-    await assertEmployeePackageIntegrity(agent, parentConversationId);
+    await assertEmployeePackageIntegrity(agent);
 
     // 1. Build system prompt
     const workspacePath = options.imContext?.workspacePath ?? useWorkspaceStore.getState().currentPath;

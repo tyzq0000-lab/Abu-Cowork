@@ -165,28 +165,37 @@ describe('employee package integrity verification', () => {
       filePath: `${root}/.codebuddy-plugin/plugin.json`,
     };
     const integrity = await verifyEmployeePackageEntries(entries, { required: true });
-    await expect(assertEmployeePackageIntegrity(agent, 'conv-platform')).rejects.toThrow(/未绑定当前企业部署/);
+    await expect(assertEmployeePackageIntegrity(agent)).rejects.toThrow(/未绑定当前企业部署/);
 
+    const bound = {
+      packageId: 'signed-fixture',
+      employeeId: 'emp-platform',
+      hireId: 'hire-platform',
+      deploymentId: 'dep_11111111111111111111111111111111',
+      integrityKeyId: integrity!.keyId,
+      integrityManifestSha256: integrity!.manifestSha256,
+      agentName: 'signed-fixture',
+      workspacePath: null,
+      conversationId: 'conv-platform',
+      configuredAt: 1,
+    };
+    useEmployeeDeploymentStore.setState({ deployments: { dep_platform: bound } });
+    // 部署记录上仍带着部署时那条会话的 id，但绑定判据**不看**它 —— 用户在别的会话里
+    // 跟员工聊天照样放行。（曾经把 conversationId 算进判据，员工只能在一条线程里活着。）
+    await expect(assertEmployeePackageIntegrity(agent)).resolves.toBeUndefined();
+
+    // 真正的绑定：平台三件套 + 签名哈希，缺一不可。
     useEmployeeDeploymentStore.setState({
-      deployments: {
-        dep_platform: {
-          packageId: 'signed-fixture',
-          employeeId: 'emp-platform',
-          hireId: 'hire-platform',
-          deploymentId: 'dep_11111111111111111111111111111111',
-          integrityKeyId: integrity!.keyId,
-          integrityManifestSha256: integrity!.manifestSha256,
-          agentName: 'signed-fixture',
-          workspacePath: null,
-          conversationId: 'conv-platform',
-          configuredAt: 1,
-        },
-      },
+      deployments: { dep_platform: { ...bound, hireId: '' } },
     });
-    await expect(assertEmployeePackageIntegrity(agent, 'conv-platform')).resolves.toBeUndefined();
-    await expect(assertEmployeePackageIntegrity(agent, 'conv-other')).rejects.toThrow(/未绑定当前企业部署/);
+    await expect(assertEmployeePackageIntegrity(agent)).rejects.toThrow(/未绑定当前企业部署/);
+    useEmployeeDeploymentStore.setState({
+      deployments: { dep_platform: { ...bound, agentName: 'someone-else' } },
+    });
+    await expect(assertEmployeePackageIntegrity(agent)).rejects.toThrow(/未绑定当前企业部署/);
 
+    useEmployeeDeploymentStore.setState({ deployments: { dep_platform: bound } });
     entries['agents/signed-fixture.md'] = strToU8('tampered');
-    await expect(assertEmployeePackageIntegrity(agent, 'conv-platform')).rejects.toThrow(/校验失败/);
+    await expect(assertEmployeePackageIntegrity(agent)).rejects.toThrow(/校验失败/);
   });
 });

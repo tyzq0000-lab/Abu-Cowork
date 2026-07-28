@@ -143,7 +143,10 @@ export default function Sidebar() {
 
       {/* User Section */}
       <div className="px-5 py-4 shrink-0">
-        <div className="flex items-center gap-2.5">
+        {/* 头像 + 昵称 + 6 个图标共需 ≈258px，而侧栏内容宽只有 220px（260 减去 px-5 两侧）。
+            外层 App.tsx 的 260px 容器是 overflow-hidden，溢出部分会被**裁掉**（不是被右侧
+            对话区盖住），最后一个「帮助」图标因此点不到。gap-2.5→gap-1 省回 7×6=42px 收进来。 */}
+        <div className="flex items-center gap-1">
           {/* User avatar + nickname (clickable to edit) */}
           <button
             onClick={() => setProfileOpen(true)}

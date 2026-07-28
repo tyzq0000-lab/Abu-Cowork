@@ -237,7 +237,6 @@ async function readPackageDirectory(
 
 export async function assertEmployeePackageIntegrity(
   agent: SubagentDefinition,
-  conversationId?: string,
 ): Promise<void> {
   if (agent.source !== 'employee' || !agent.filePath) return;
   const pluginDir = getParentDir(agent.filePath);
@@ -260,9 +259,14 @@ export async function assertEmployeePackageIntegrity(
   if (!actual) {
     throw new PackageIntegrityError('INVALID_INTEGRITY', '平台签名员工包缺少完整性结果');
   }
+  // 绑定判据 = 「这个包对应一条真实的平台部署记录」：agentName + 平台三件套 id +
+  // 签名 keyId/manifest 哈希。**刻意不含 conversationId** —— 部署绑的是「企业雇了这个员工」，
+  // 不是「某一条聊天线程」。曾经把 conversationId 也算进来，导致用户在部署时那条会话之外
+  // 新开对话（Sidebar.handlePickContact 找不到旧会话就 startNewConversation）就必然报
+  // 「未绑定当前企业部署」，员工等于只能在一条线程里活着。conversationId 也不构成安全边界：
+  // 能伪造部署记录的人同样能伪造会话 id。
   const boundDeployment = Object.values(deploymentState.deployments).find((deployment) => (
     deployment.agentName === agent.name
-    && deployment.conversationId === conversationId
     && !!deployment.deploymentId
     && !!deployment.employeeId
     && !!deployment.hireId

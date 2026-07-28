@@ -49,12 +49,23 @@ export function parseAgentFile(raw: string, filePath: string): SubagentDefinitio
 export class AgentRegistry {
   private agents: Map<string, SubagentDefinition> = new Map();
 
-  /** Scan directories and load AGENT.md files */
+  /**
+   * Scan directories and load AGENT.md files.
+   *
+   * 扫描写进一张**局部 map**，扫完整体换上，全程不动现役 `this.agents`。
+   * 曾经是入口先 `this.agents.clear()` 再慢慢异步扫回来，于是每次刷新都有一个
+   * 「只剩 6 个内置、员工包全消失」的空窗期；而 discoveryStore 的 workspace 订阅
+   * 会在用户点击员工时同步触发一次 refresh（点击必经 clearWorkspace），React 恰好
+   * 在空窗期渲染，ChatView 直接读 registry 拿到 undefined 就回落成默认扶摇欢迎页
+   * ——标题栏读的是扫描结束才整体替换的 discoveryStore.agents 数组，所以是对的，
+   * 两边就此分叉。registry 又不是响应式的，扫描完成也不会重渲染，错误状态卡住，
+   * 非得再点一次别的员工才自愈。整体换上之后，读者任何时刻拿到的都是一份完整快照。
+   */
   async discoverAgents(): Promise<SubagentMetadata[]> {
-    this.agents.clear();
+    const next = new Map<string, SubagentDefinition>();
 
     // Register built-in agents first
-    this.registerBuiltins();
+    this.registerBuiltins(next);
 
     const home = await homeDir();
     const projectDir = await resolve('.abu/agents');
@@ -74,7 +85,7 @@ export class AgentRegistry {
     ];
 
     for (const dir of dirs) {
-      await this.scanDirectory(dir);
+      await this.scanDirectory(dir, next);
     }
 
     // Employee packages: WorkBuddy / CodeBuddy `.codebuddy-plugin` format under
@@ -85,13 +96,14 @@ export class AgentRegistry {
       // Never let a dropped-in package clobber the default fallback agent —
       // 'abu' is the routing default and must always resolve to the builtin.
       if (emp.name === 'abu') continue;
-      this.agents.set(emp.name, emp);
+      next.set(emp.name, emp);
     }
 
+    this.agents = next;
     return this.getAvailableAgents();
   }
 
-  private registerBuiltins() {
+  private registerBuiltins(target: Map<string, SubagentDefinition>) {
     const builtins: SubagentDefinition[] = [
       {
         name: 'abu',
@@ -420,11 +432,11 @@ export class AgentRegistry {
     ];
 
     for (const agent of builtins) {
-      this.agents.set(agent.name, agent);
+      target.set(agent.name, agent);
     }
   }
 
-  private async scanDirectory(dir: string): Promise<void> {
+  private async scanDirectory(dir: string, target: Map<string, SubagentDefinition>): Promise<void> {
     try {
       if (!(await exists(dir))) return;
 
@@ -437,7 +449,7 @@ export class AgentRegistry {
           const raw = await readTextFile(agentPath);
           const agent = parseAgentFile(raw, agentPath);
           if (agent) {
-            this.agents.set(agent.name, agent);
+            target.set(agent.name, agent);
           }
         } catch {
           // Skip unreadable / non-existent files
