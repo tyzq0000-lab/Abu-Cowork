@@ -604,6 +604,24 @@ export function hasUsableEmployeeProvider(state: SettingsState): boolean {
   );
 }
 
+/**
+ * Whether the user must still configure a personal API key before anything can run.
+ *
+ * 全站唯一判定入口：凡是「要不要提示/拦着让用户去配 API Key」的地方都调它，
+ * 不要各自再拼一遍 providers 条件。曾经 ChatView 的发送前拦截与首屏横幅各写了一份
+ * 只看全局 providers 的判断，于是**跟平台签名员工聊天也会被推去配 key** —— 与已锁的
+ * 「企业侧永远不该看到 key/token/模型配置」正相反；而真正执行处 agentLoop 早就把
+ * 员工自带 provider 算进来了，两边判定不一致才是病根。
+ *
+ * 注意：本函数只覆盖「员工自带 provider」这一路。走平台中继的签名员工连本地 provider
+ * 都不需要，那一路由调用方额外用 `hasPlatformDeployment(agentName)` 判定。
+ */
+export function needsUserApiKeySetup(state: SettingsState): boolean {
+  return providerRequiresApiKey(state)
+    && !getActiveApiKey(state).trim()
+    && !hasUsableEmployeeProvider(state);
+}
+
 /** Returns the effective model ID (backward-compatible) */
 export function getEffectiveModel(state: SettingsState): string {
   return state.activeModel.modelId;

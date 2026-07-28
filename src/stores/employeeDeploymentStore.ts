@@ -60,3 +60,20 @@ export const useEmployeeDeploymentStore = create<EmployeeDeploymentState>()(
     },
   ),
 );
+
+/**
+ * Whether this agent is a platform-deployed (signed) employee.
+ *
+ * 这类员工由平台中继供模型，**企业侧不需要、也不该被要求配任何 API Key**（已锁的
+ * Q1/Q2：企业永不见 key/token/模型配置）。UI 上任何"去配 key"的提示都要先绕开它。
+ * 传 deployments 快照即可在 zustand selector 里同步用，不必新开订阅。
+ */
+export function hasPlatformDeployment(
+  deployments: Record<string, EmployeeDeploymentRecord>,
+  agentName: string | null,
+): boolean {
+  if (!agentName) return false;
+  return Object.values(deployments).some(
+    (d) => d.agentName === agentName && !!d.deploymentId,
+  );
+}

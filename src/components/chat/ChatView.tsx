@@ -4,7 +4,8 @@ import type { Message, ImageAttachment } from '@/types';
 import { useAutoScroll } from '@/hooks/useAutoScroll';
 import { runAgentLoop } from '@/core/agent/agentLoop';
 import { getPendingCommandConfirmation, resolveCommandConfirmation, subscribeToCommandConfirmation, getPendingFilePermission, resolveFilePermission, subscribeToFilePermission, getPendingWorkspaceRequest, resolveWorkspaceRequest, subscribeToWorkspaceRequest } from '@/core/agent/permissionBridge';
-import { useSettingsStore, getActiveApiKey, providerRequiresApiKey } from '@/stores/settingsStore';
+import { useSettingsStore, needsUserApiKeySetup } from '@/stores/settingsStore';
+import { useEmployeeDeploymentStore, hasPlatformDeployment } from '@/stores/employeeDeploymentStore';
 import { useWorkspaceStore } from '@/stores/workspaceStore';
 import type { PermissionDuration } from '@/stores/permissionStore';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -111,6 +112,10 @@ export default function ChatView() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [employeeActionBusy, setEmployeeActionBusy] = useState<'dream' | 'knowledge' | null>(null);
   const currentEmployee = currentContactKey ? agentRegistry.getAgent(currentContactKey) : undefined;
+  // 平台签名员工 = 模型由平台中继供给，企业侧不需要也不该被要求配 key（已锁 Q1/Q2）。
+  const isPlatformEmployee = useEmployeeDeploymentStore(
+    (s) => hasPlatformDeployment(s.deployments, currentContactKey),
+  );
   const canImportKnowledge = !!activeConv
     && currentEmployee?.source === 'employee'
     && (currentEmployee.memory ?? 'session') !== 'session';
@@ -297,9 +302,10 @@ export default function ChatView() {
   }, [activeConvId, scrollToBottom]);
 
   const handleSend = async (text: string, images?: ImageAttachment[], workspacePath?: string | null) => {
-    // Block sending if API key is not configured (Ollama doesn't need one)
+    // Block sending if API key is not configured (Ollama doesn't need one).
+    // 平台签名员工由平台中继供模型 → 一律不拦、不提示配 key（已锁 Q1/Q2）。
     const currentState = useSettingsStore.getState();
-    if (providerRequiresApiKey(currentState) && !getActiveApiKey(currentState)?.trim()) {
+    if (!isPlatformEmployee && needsUserApiKeySetup(currentState)) {
       currentState.openSystemSettings('ai-services');
       return;
     }
@@ -341,13 +347,11 @@ export default function ChatView() {
   };
 
 
-  // First-run banner: show when no provider has been configured yet.
-  // "Configured" = has an API key OR is a keyless provider (ollama/lmstudio).
-  const needsSetup = useSettingsStore((s) => {
-    return !s.providers.some(
-      p => p.apiKey.trim().length > 0 || p.id === 'ollama' || p.id === 'lmstudio'
-    );
-  });
+  // First-run banner: show when the user still has to configure a key themselves.
+  // 与 handleSend / agentLoop 共用 needsUserApiKeySetup，三处判定同源；平台签名员工
+  // 走中继，不需要用户配任何 key，故先绕开。
+  const needsUserKey = useSettingsStore(needsUserApiKeySetup);
+  const needsSetup = !isPlatformEmployee && needsUserKey;
 
   // Scenario guide state — lifted here so ChatInput can receive the custom placeholder
   const [scenarioPlaceholder, setScenarioPlaceholder] = useState<string | null>(null);

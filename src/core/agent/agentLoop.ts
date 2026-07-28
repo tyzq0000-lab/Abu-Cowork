@@ -6,7 +6,7 @@ import { OpenAICompatibleAdapter } from '../llm/openai-compatible';
 import { getAllTools, type ConfirmationInfo, type FilePermissionCallback } from '../tools/registry';
 import type { ToolDefinition } from '../../types';
 import { useChatStore, flushTokenBuffer } from '../../stores/chatStore';
-import { useSettingsStore, getEffectiveModel, getActiveApiKey, getActiveProvider, resolveAgentExecution, providerRequiresApiKey, hasUsableEmployeeProvider } from '../../stores/settingsStore';
+import { useSettingsStore, getEffectiveModel, getActiveProvider, resolveAgentExecution, needsUserApiKeySetup } from '../../stores/settingsStore';
 import type { ProviderInstance } from '../../types/provider';
 import { resolvePlatformRelayExecution } from '../employee/platformRelay';
 import { useDiscoveredCapsStore } from '../../stores/discoveredCapabilitiesStore';
@@ -617,12 +617,8 @@ export async function runAgentLoop(conversationId: string, userMessage: string, 
   // orchestrator hasn't run, so we can't know the exact route target — the loose
   // employee-provider check avoids blocking employee conversations that have
   // their own key; precise fallback is handled by resolveAgentExecution.
-  if (
-    !platformExecution &&
-    providerRequiresApiKey(settings) &&
-    !getActiveApiKey(settings) &&
-    !hasUsableEmployeeProvider(settings)
-  ) {
+  // needsUserApiKeySetup 与 ChatView 的发送前拦截 / 首屏横幅同源，三处判定不再各写一份。
+  if (!platformExecution && needsUserApiKeySetup(settings)) {
     // Persist the user's input first so the chat history isn't an orphan warning.
     // Use raw userMessage (orchestrator hasn't run); skill metadata is intentionally omitted —
     // the user needs to configure a key before any skill/agent routing takes effect.

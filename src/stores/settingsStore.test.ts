@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   getAllEnabledModels,
   hasUsableEmployeeProvider,
+  needsUserApiKeySetup,
   reconcileActiveProvider,
   resolveAgentExecution,
   selectUserProviders,
@@ -531,6 +532,44 @@ describe('employee dedicated providers (modelConfig injection)', () => {
         activeModel: { providerId: 'global', modelId: 'm1' },
       });
       expect(hasUsableEmployeeProvider(useSettingsStore.getState())).toBe(false);
+    });
+  });
+
+  // 全站唯一的「还得让用户去配 key 吗」判定。ChatView 的发送前拦截、首屏横幅、
+  // agentLoop 的硬拦截三处共用它 —— 曾经各写一份，导致 UI 把跟员工聊天的用户
+  // 推去配 API Key，而 agentLoop 其实根本不会拦。
+  describe('needsUserApiKeySetup', () => {
+    it('is true when the active provider needs a key and none is configured', () => {
+      useSettingsStore.setState({
+        providers: [makeProvider({ id: 'global', apiKey: '' })],
+        activeModel: { providerId: 'global', modelId: 'm1' },
+      });
+      expect(needsUserApiKeySetup(useSettingsStore.getState())).toBe(true);
+    });
+
+    it('is false once the active provider has a key', () => {
+      useSettingsStore.setState({
+        providers: [makeProvider({ id: 'global', apiKey: 'sk-global' })],
+        activeModel: { providerId: 'global', modelId: 'm1' },
+      });
+      expect(needsUserApiKeySetup(useSettingsStore.getState())).toBe(false);
+    });
+
+    it('is false when an employee brings its own provider, even with no global key', () => {
+      useSettingsStore.setState({
+        providers: [makeProvider({ id: 'global', apiKey: '' })],
+        activeModel: { providerId: 'global', modelId: 'm1' },
+      });
+      useSettingsStore.getState().upsertEmployeeProvider('new-media-ops', MODEL_CONFIG);
+      expect(needsUserApiKeySetup(useSettingsStore.getState())).toBe(false);
+    });
+
+    it('is false for keyless providers (ollama / lmstudio)', () => {
+      useSettingsStore.setState({
+        providers: [makeProvider({ id: 'ollama', apiKey: '' })],
+        activeModel: { providerId: 'ollama', modelId: 'm1' },
+      });
+      expect(needsUserApiKeySetup(useSettingsStore.getState())).toBe(false);
     });
   });
 
