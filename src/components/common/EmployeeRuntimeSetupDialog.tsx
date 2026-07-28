@@ -12,9 +12,18 @@ import {
   checkEmployeeDependencies,
   completeEmployeeDeployment,
   hasBlockingEmployeeDependencies,
+  unmetEmployeeDependencies,
   type EmployeeDependencyHealth,
 } from '@/core/employee/deploymentFlow';
 import { exchangeDeploymentEnrollment } from '@/core/employee/deploymentEnrollment';
+
+// 别把 'available-to-configure' 这种裸英文枚举直接甩给用户看。
+const DEPENDENCY_STATE_LABEL: Record<EmployeeDependencyHealth['state'], string> = {
+  ready: '已就绪',
+  unavailable: '未安装 / 未选择',
+  'needs-authorization': '开工时需授权',
+  'available-to-configure': '可稍后配置',
+};
 
 export default function EmployeeRuntimeSetupDialog() {
   const runtimeSetup = useDeepLinkStore((state) => state.runtimeSetup);
@@ -134,6 +143,17 @@ export default function EmployeeRuntimeSetupDialog() {
   const workspaceRequired = runtimeSetup.profile.workspace?.required === true;
   const authorizations = runtimeSetup.profile.authorizations ?? [];
   const hasBlockingDependency = hasBlockingEmployeeDependencies(dependencyHealth);
+  // 「完成配置并开始工作」曾经是个哑巴禁用态：灰着，但一个字都不说为什么。
+  // 这里把每一种 disabled 成因翻成一句能照做的话。
+  const blockReasons = [
+    ...(checking || checkedSetup !== runtimeSetup ? ['正在检查运行环境…'] : []),
+    ...(workspaceRequired && !workspacePath ? ['请先选择项目工作区'] : []),
+    ...unmetEmployeeDependencies(dependencyHealth).map((dependency) => (
+      dependency.state === 'unavailable'
+        ? `请先在本机安装「${dependency.name}」，装好后重开本弹窗即可`
+        : `「${dependency.name}」需要在开工时完成授权`
+    )),
+  ];
 
   return (
     <ConfirmDialog
@@ -165,10 +185,21 @@ export default function EmployeeRuntimeSetupDialog() {
                 {dependencyHealth.map((dependency) => (
                   <div key={`${dependency.name}-${dependency.state}`} className="flex justify-between gap-3 text-[12px]">
                     <span>{dependency.name}{dependency.required ? '（必需）' : ''}</span>
-                    <span>{dependency.state}</span>
+                    <span className={dependency.state === 'ready' ? '' : 'text-[var(--abu-text-muted)]'}>
+                      {DEPENDENCY_STATE_LABEL[dependency.state]}
+                    </span>
                   </div>
                 ))}
               </div>
+            </section>
+          )}
+
+          {blockReasons.length > 0 && (
+            <section className="space-y-1 rounded-xl border border-[var(--abu-border)] p-3">
+              <div className="font-medium text-[var(--abu-text-primary)]">还差这些才能开工</div>
+              <ul className="list-disc space-y-0.5 pl-4 text-[12px] text-[var(--abu-text-tertiary)]">
+                {blockReasons.map((reason) => <li key={reason}>{reason}</li>)}
+              </ul>
             </section>
           )}
 

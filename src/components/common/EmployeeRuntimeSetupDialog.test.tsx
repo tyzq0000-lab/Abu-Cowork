@@ -14,8 +14,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/core/employee/deploymentFlow', () => ({
   checkEmployeeDependencies: vi.fn().mockResolvedValue([]),
   completeEmployeeDeployment: mocks.completeEmployeeDeployment,
+  // 与真实实现同语义：只有「查实了确实不满足」的必需项才拦部署。
   hasBlockingEmployeeDependencies: (health: Array<{ required: boolean; state: string }>) =>
-    health.some((dependency) => dependency.required && dependency.state !== 'ready'),
+    health.some((dependency) => dependency.required && dependency.state === 'unavailable'),
+  unmetEmployeeDependencies: (health: Array<{ required: boolean; state: string }>) =>
+    health.filter((dependency) => dependency.required && dependency.state !== 'ready'),
 }));
 
 function setRuntimeSetup(recommended = false) {

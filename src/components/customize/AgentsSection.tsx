@@ -9,6 +9,7 @@ import { Toggle } from '@/components/ui/toggle';
 import { ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2, MessageCircle, Eye, Code, Search, Plus, X, Wand2, PenLine, Upload, Check } from 'lucide-react';
 import { remove } from '@tauri-apps/plugin-fs';
 import { getParentDir } from '@/utils/pathUtils';
+import { resolveEmployeePackageDir } from '@/core/employee/packageIntegrity';
 import { isImageAvatarPath } from '@/core/agent/employeeLoader';
 import { useAvatarDataUrl } from '@/hooks/useAvatarDataUrl';
 import type { SubagentDefinition } from '@/types';
@@ -157,7 +158,11 @@ export default function AgentsSection({ manualCreateTrigger, onAICreate, onManua
   const handleDelete = async (agent: SubagentDefinition) => {
     if (agent.filePath === '__builtin__' || agent.filePath.includes('builtin-agents')) return;
     try {
-      const agentDir = getParentDir(agent.filePath);
+      // 员工包要删整个包目录，不是 .codebuddy-plugin 那一层 —— 后者会把
+      // agents/ skills/ avatars/ 全留在磁盘上，列表里看着没了，文件还在。
+      const agentDir = agent.source === 'employee'
+        ? resolveEmployeePackageDir(agent.filePath)
+        : getParentDir(agent.filePath);
       await remove(agentDir, { recursive: true });
       // Select adjacent item so the user stays in context after deletion
       if (selectedAgent === agent.name) {

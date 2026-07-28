@@ -54,8 +54,18 @@ describe('deployment authorization heartbeat', () => {
       readSecret: async () => 'upr_dep_test-secret',
       fetchImpl: async () => heartbeatResponse({ error: 'revoked' }, 401),
       removeSecret,
-    })).resolves.toEqual({ state: 'revoked' });
+    // reason 必须是 unauthorized —— 只有这一态才允许后续删用户磁盘上的员工包。
+    })).resolves.toEqual({ state: 'revoked', reason: 'unauthorized' });
     expect(removeSecret).toHaveBeenCalledWith('deployment:dep_11111111111111111111111111111111');
+  });
+
+  it('本地凭据缺失只算 no-credential，绝不当成平台解雇', async () => {
+    // 钥匙串读不到 ≠ 企业解除了雇佣。若这一态也标成 unauthorized，
+    // 清理逻辑会把用户还在用的员工包删掉。
+    await expect(heartbeatEmployeeDeployment(deployment(), {
+      readSecret: async () => null,
+      fetchImpl: async () => { throw new Error('should not be called'); },
+    })).resolves.toEqual({ state: 'revoked', reason: 'no-credential' });
   });
 
   it('treats network, malformed identity, and tampered endpoints as offline', async () => {

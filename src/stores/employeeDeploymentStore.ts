@@ -25,6 +25,8 @@ interface EmployeeDeploymentState {
   integrity: Record<string, PackageIntegrityExpectation>;
   saveDeployment: (record: EmployeeDeploymentRecord) => void;
   saveIntegrity: (agentName: string, expectation: PackageIntegrityExpectation) => void;
+  /** 平台确认解除雇佣后清掉本地记录（部署行 + 签名期望）。 */
+  forgetDeployment: (deploymentKey: string, agentName: string) => void;
 }
 
 export const useEmployeeDeploymentStore = create<EmployeeDeploymentState>()(
@@ -48,6 +50,13 @@ export const useEmployeeDeploymentStore = create<EmployeeDeploymentState>()(
           [agentName]: expectation,
         },
       })),
+      forgetDeployment: (deploymentKey, agentName) => set((state) => {
+        const deployments = { ...state.deployments };
+        delete deployments[deploymentKey];
+        const integrity = { ...state.integrity };
+        delete integrity[agentName];
+        return { deployments, integrity };
+      }),
     }),
     {
       name: 'abu-employee-deployments',

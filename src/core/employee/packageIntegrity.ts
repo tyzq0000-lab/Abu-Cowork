@@ -235,14 +235,24 @@ async function readPackageDirectory(
   return out;
 }
 
+/**
+ * 从 agent.filePath 反推员工包根目录。
+ *
+ * 员工包的 filePath 是 `<包>/.codebuddy-plugin/plugin.json`，所以**不能**直接拿
+ * getParentDir —— 那只到 `.codebuddy-plugin` 这一层。删除员工时用错这个，
+ * `agents/`、`skills/`、`avatars/` 会全部留在磁盘上（删了个寂寞）。
+ * 凡是要对"整个员工包"做事（删除、校验、清理）的地方都走这个函数。
+ */
+export function resolveEmployeePackageDir(filePath: string): string {
+  const pluginDir = getParentDir(filePath);
+  return getBaseName(pluginDir) === '.codebuddy-plugin' ? getParentDir(pluginDir) : pluginDir;
+}
+
 export async function assertEmployeePackageIntegrity(
   agent: SubagentDefinition,
 ): Promise<void> {
   if (agent.source !== 'employee' || !agent.filePath) return;
-  const pluginDir = getParentDir(agent.filePath);
-  const packageDir = getBaseName(pluginDir) === '.codebuddy-plugin'
-    ? getParentDir(pluginDir)
-    : pluginDir;
+  const packageDir = resolveEmployeePackageDir(agent.filePath);
   const deploymentState = useEmployeeDeploymentStore.getState();
   const expectation = deploymentState.integrity[getBaseName(packageDir)];
   if (!expectation) {

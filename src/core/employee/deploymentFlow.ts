@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore';
 import type { EmployeeDependency, LocalePair } from './contract';
 import type { EmployeePlatformBinding } from './deploymentEnrollment';
 import { hasEmbeddedPython } from '@/utils/pythonRuntime';
+import { probeCommands } from '@/utils/commandProbe';
 
 export interface EmployeeDependencyHealth {
   name: string;
@@ -17,7 +18,7 @@ export interface EmployeeDependencyHealth {
 export function summarizeEmployeeDependencies(
   dependencies: EmployeeDependency[],
   workspacePath: string | null,
-  runtimeAvailability: { python: boolean },
+  runtimeAvailability: { python: boolean; commands?: Record<string, boolean> },
 ): EmployeeDependencyHealth[] {
   return dependencies.map((dependency) => {
     if (dependency.type === 'workspace') {
@@ -32,7 +33,18 @@ export function summarizeEmployeeDependencies(
       return {
         name: dependency.name,
         required: dependency.required,
-        state: runtimeAvailability.python ? 'ready' : 'available-to-configure',
+        state: runtimeAvailability.python ? 'ready' : 'unavailable',
+        description: dependency.description,
+      };
+    }
+    if (dependency.type === 'command') {
+      // 真去机器上查（where/which）。查到=ready，确实没装=unavailable（照旧拦住，
+      // 但现在弹窗能说清缺的是什么）；探测没跑（undefined）才退回"可稍后配置"。
+      const probed = runtimeAvailability.commands?.[dependency.name.trim()];
+      return {
+        name: dependency.name,
+        required: dependency.required,
+        state: probed === undefined ? 'available-to-configure' : probed ? 'ready' : 'unavailable',
         description: dependency.description,
       };
     }
@@ -58,12 +70,33 @@ export async function checkEmployeeDependencies(
   workspacePath: string | null,
 ): Promise<EmployeeDependencyHealth[]> {
   const needsPython = dependencies.some((dependency) => dependency.runtimeId === 'python');
-  const python = needsPython ? await hasEmbeddedPython() : false;
-  return summarizeEmployeeDependencies(dependencies, workspacePath, { python });
+  const commandNames = dependencies
+    .filter((dependency) => dependency.type === 'command' && dependency.runtimeId !== 'python')
+    .map((dependency) => dependency.name);
+  const [python, commands] = await Promise.all([
+    needsPython ? hasEmbeddedPython() : Promise.resolve(false),
+    commandNames.length ? probeCommands(commandNames) : Promise.resolve({}),
+  ]);
+  return summarizeEmployeeDependencies(dependencies, workspacePath, { python, commands });
 }
 
+/**
+ * 只有**查实了确实不满足**的必需项才拦部署。
+ *
+ * 以前是 `state !== 'ready'` 就拦，于是两类依赖永远部署不了：
+ * ① 非 Python 的命令依赖 —— 代码压根没探测，恒为 available-to-configure；
+ * ② 必需的账号/服务授权 —— 恒为 needs-authorization，而授权本来就只能等到
+ *    真正开工、在对话里发生，部署时无从完成。
+ * 现在 command 有了真实探测（查不到 → unavailable，照拦），而"只能稍后做"的两类
+ * 不再挡在部署门口，改由弹窗把未满足项列清楚，让用户知道开工前还差什么。
+ */
 export function hasBlockingEmployeeDependencies(health: EmployeeDependencyHealth[]): boolean {
-  return health.some((dependency) => dependency.required && dependency.state !== 'ready');
+  return health.some((dependency) => dependency.required && dependency.state === 'unavailable');
+}
+
+/** 必需但尚未就绪的项（含只能稍后完成的授权），供弹窗把"还差什么"列出来。 */
+export function unmetEmployeeDependencies(health: EmployeeDependencyHealth[]): EmployeeDependencyHealth[] {
+  return health.filter((dependency) => dependency.required && dependency.state !== 'ready');
 }
 
 export function chooseDefaultInitPrompt(
