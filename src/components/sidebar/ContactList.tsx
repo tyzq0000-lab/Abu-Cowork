@@ -3,6 +3,8 @@ import { useChatStore } from '@/stores/chatStore';
 import { useDiscoveryStore } from '@/stores/discoveryStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useNoticeBadgeStore } from '@/stores/noticeBadgeStore';
+import { useEmployeeDeploymentStore } from '@/stores/employeeDeploymentStore';
+import { resolveEmployeeIdentity } from '@/core/employee/displayIdentity';
 import { useI18n } from '@/i18n';
 import { cn } from '@/lib/utils';
 import EmployeeAvatar from '@/components/common/EmployeeAvatar';
@@ -38,6 +40,7 @@ export default function ContactList({
   const conversationIndex = useChatStore((s) => s.conversationIndex);
   const disabledAgents = useSettingsStore((s) => s.disabledAgents);
   const badgeCounts = useNoticeBadgeStore((s) => s.counts);
+  const deployments = useEmployeeDeploymentStore((s) => s.deployments);
 
   const contacts = useMemo<Contact[]>(() => {
     const disabled = new Set(disabledAgents ?? []);
@@ -59,13 +62,13 @@ export default function ContactList({
         const isDefault = a.name === DEFAULT_AGENT_KEY;
         return {
           key: a.name,
-          name: isDefault
-            ? t.common.appName
-            : a.displayNames?.[locale] ?? a.name,
-          avatar: a.avatar ?? (isDefault ? '🍮' : '🤖'),
-          profession: isDefault
-            ? t.sidebar.defaultAssistant
-            : a.descriptions?.[locale] ?? a.description,
+          ...(isDefault
+            ? {
+                name: t.common.appName,
+                avatar: a.avatar ?? '🍮',
+                profession: t.sidebar.defaultAssistant,
+              }
+            : resolveEmployeeIdentity(a, a.name, deployments, locale)),
           isDefault,
           lastTime: lastTime.get(a.name) ?? 0,
           unread: unread.get(a.name) ?? 0,
@@ -80,7 +83,7 @@ export default function ContactList({
       return x.name.localeCompare(y.name);
     });
     return built;
-  }, [agents, conversationIndex, disabledAgents, badgeCounts, locale, t]);
+  }, [agents, conversationIndex, disabledAgents, badgeCounts, deployments, locale, t]);
 
   return (
     <div className="px-2 space-y-0.5">

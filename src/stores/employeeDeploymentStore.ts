@@ -14,6 +14,15 @@ export interface EmployeeDeploymentRecord {
   relayModel?: string;
   integrityKeyId?: string;
   integrityManifestSha256?: string;
+  /**
+   * Identity as minted on the platform, captured once at enrollment. Rendering
+   * prefers these over whatever the package manifest declares, so a hired
+   * employee wears the same name and face here as on the platform. Absent for
+   * packages installed outside the platform — those keep their own identity.
+   */
+  platformDisplayName?: string;
+  platformProfession?: string;
+  platformAvatar?: string;
   agentName: string;
   workspacePath: string | null;
   conversationId?: string;
@@ -60,10 +69,13 @@ export const useEmployeeDeploymentStore = create<EmployeeDeploymentState>()(
     }),
     {
       name: 'abu-employee-deployments',
-      version: 3,
+      version: 4,
       migrate: (persisted: unknown, version) => {
         const state = persisted as Partial<EmployeeDeploymentState>;
         if (version < 2) state.integrity = {};
+        // v3 → v4 添加了 platformDisplayName / platformProfession / platformAvatar。
+        // 三者全可选，老记录缺了它们正好回落到员工包自带的身份 —— 这就是期望行为，
+        // 故无需回填。下次该员工重新部署时会自然带上平台身份。
         return state as EmployeeDeploymentState;
       },
     },

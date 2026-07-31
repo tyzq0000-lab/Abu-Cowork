@@ -5,6 +5,11 @@ import { isImageAvatarPath } from '@/core/agent/employeeLoader';
 // Module-level cache so the same avatar file is read once per app session.
 const dataUrlCache = new Map<string, string>();
 
+/** An avatar string an `<img>` can render as-is, with no file read. */
+export function isRenderableAvatarUrl(avatar: string): boolean {
+  return /^data:image\//i.test(avatar) || /^https:\/\//i.test(avatar);
+}
+
 function extToMime(path: string): string {
   const ext = path.toLowerCase().split('.').pop() ?? '';
   switch (ext) {
@@ -43,7 +48,19 @@ export function useAvatarDataUrl(avatar: string | undefined): string | null {
   );
 
   useEffect(() => {
-    if (!avatar || !isImageAvatarPath(avatar)) {
+    if (!avatar) {
+      setSrc(null);
+      return;
+    }
+    // Already a renderable URL — platform-minted avatars arrive as `data:` URLs
+    // (and could be https). These must NOT go through readFile: `data:image/png;…`
+    // contains a `/`, so isImageAvatarPath() calls it a path and the read fails
+    // silently, dropping the avatar back to an initial.
+    if (isRenderableAvatarUrl(avatar)) {
+      setSrc(avatar);
+      return;
+    }
+    if (!isImageAvatarPath(avatar)) {
       setSrc(null);
       return;
     }

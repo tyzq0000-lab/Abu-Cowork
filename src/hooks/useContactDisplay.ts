@@ -1,4 +1,6 @@
 import { useDiscoveryStore } from '@/stores/discoveryStore';
+import { useEmployeeDeploymentStore } from '@/stores/employeeDeploymentStore';
+import { resolveEmployeeIdentity } from '@/core/employee/displayIdentity';
 import { useI18n } from '@/i18n';
 import { DEFAULT_AGENT_KEY } from '@/utils/contacts';
 
@@ -20,6 +22,7 @@ export interface ContactDisplay {
 export function useContactDisplay(agentKey: string | null): ContactDisplay {
   const { t, locale } = useI18n();
   const agents = useDiscoveryStore((s) => s.agents);
+  const deployments = useEmployeeDeploymentStore((s) => s.deployments);
 
   const key = agentKey || DEFAULT_AGENT_KEY;
   if (key === DEFAULT_AGENT_KEY) {
@@ -35,9 +38,7 @@ export function useContactDisplay(agentKey: string | null): ContactDisplay {
   const a = agents.find((x) => x.name === key);
   return {
     key,
-    name: a?.displayNames?.[locale] ?? a?.name ?? key,
-    avatar: a?.avatar ?? '🤖',
-    profession: a?.descriptions?.[locale] ?? a?.description ?? '',
+    ...resolveEmployeeIdentity(a, key, deployments, locale),
     isDefault: false,
   };
 }

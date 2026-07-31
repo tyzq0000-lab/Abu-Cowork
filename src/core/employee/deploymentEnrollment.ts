@@ -16,6 +16,15 @@ export interface EmployeePlatformBinding {
   heartbeatEndpoint: string;
   relayBaseUrl?: string;
   relayModel?: string;
+  /**
+   * Identity as minted on the platform. Overrides whatever the package manifest
+   * declares, so the employee shows up here under the same name/face the
+   * enterprise hired on the platform. All three are optional: a package
+   * installed outside the platform has none of them and keeps its own identity.
+   */
+  displayName?: string;
+  profession?: string;
+  avatar?: string;
 }
 
 export class DeploymentEnrollmentError extends Error {
@@ -37,6 +46,49 @@ function validPlatformEndpoint(raw: string, enrollmentUrl: string, pathname: str
       && !endpoint.hash;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Platform-minted identity is cosmetic, so it **degrades instead of failing**:
+ * anything malformed is dropped and the package's own name/face is used. Failing
+ * a working deployment over a bad avatar would be the wrong trade.
+ *
+ * The avatar ends up in an `<img src>`, so the scheme is whitelisted — `data:`
+ * restricted to image types, or `https:`. Without this, a compromised or
+ * misconfigured platform response could hand us `javascript:` or
+ * `data:text/html`. The size cap exists because this string is persisted by a
+ * zustand `persist` store: an oversized avatar would eat the storage quota and
+ * take unrelated deployment records down with it.
+ */
+const MAX_DISPLAY_NAME = 60;
+const MAX_PROFESSION = 80;
+const MAX_AVATAR_CHARS = 256 * 1024;
+
+function cleanIdentityText(raw: unknown, maxLength: number): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  // Strip control characters so a crafted name can't garble the sidebar layout.
+  // Iterated by code point (not `split('')`) so emoji and other astral
+  // characters in a name survive intact instead of being torn into surrogates.
+  const text = [...raw]
+    .filter((char) => {
+      const code = char.codePointAt(0) ?? 0;
+      return code > 0x1f && code !== 0x7f;
+    })
+    .join('')
+    .trim();
+  return text && text.length <= maxLength ? text : undefined;
+}
+
+function cleanAvatar(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const value = raw.trim();
+  if (!value || value.length > MAX_AVATAR_CHARS) return undefined;
+  if (/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/i.test(value)) return value;
+  try {
+    return new URL(value).protocol === 'https:' ? value : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -102,6 +154,10 @@ export async function exchangeDeploymentEnrollment(
     throw new DeploymentEnrollmentError('平台返回的部署身份不完整或与员工不匹配。');
   }
 
+  const displayName = cleanIdentityText(body.displayName, MAX_DISPLAY_NAME);
+  const profession = cleanIdentityText(body.profession, MAX_PROFESSION);
+  const avatar = cleanAvatar(body.avatar);
+
   await (opts.saveSecret ?? setSecret)(SECRET_KEYS.deployment(deploymentId), credential);
   return {
     deploymentId,
@@ -110,6 +166,9 @@ export async function exchangeDeploymentEnrollment(
     ledgerEndpoint,
     heartbeatEndpoint,
     ...(hasRelayBinding ? { relayBaseUrl, relayModel } : {}),
+    ...(displayName ? { displayName } : {}),
+    ...(profession ? { profession } : {}),
+    ...(avatar ? { avatar } : {}),
   };
 }
 

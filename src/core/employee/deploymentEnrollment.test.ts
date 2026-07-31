@@ -88,3 +88,70 @@ describe('deployment enrollment exchange', () => {
     expect(saveSecret).not.toHaveBeenCalled();
   });
 });
+
+describe('platform-minted identity in the exchange response', () => {
+  async function bindingFor(over: Record<string, unknown>) {
+    return exchangeDeploymentEnrollment(input, {
+      fetchImpl: vi.fn().mockResolvedValue(new Response(JSON.stringify(okBody(over)), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })),
+      getClientId: async () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      saveSecret: vi.fn().mockResolvedValue(undefined),
+    });
+  }
+
+  const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+
+  it('carries name, profession and a data-url avatar through to the binding', async () => {
+    const binding = await bindingFor({
+      displayName: '小野同学',
+      profession: '新媒体增长运营数字人',
+      avatar: tinyPng,
+    });
+    expect(binding.displayName).toBe('小野同学');
+    expect(binding.profession).toBe('新媒体增长运营数字人');
+    expect(binding.avatar).toBe(tinyPng);
+  });
+
+  it('degrades to no identity rather than failing the whole deployment', async () => {
+    // A package installed outside the platform gets none of these fields; the
+    // deployment must still succeed and keep the package's own identity.
+    const binding = await bindingFor({});
+    expect(binding.deploymentId).toBe('dep_11111111111111111111111111111111');
+    expect(binding.displayName).toBeUndefined();
+    expect(binding.profession).toBeUndefined();
+    expect(binding.avatar).toBeUndefined();
+  });
+
+  it('rejects avatar values that are not renderable images', async () => {
+    // The avatar lands in an <img src>. Anything outside data:image/* and https:
+    // is dropped rather than rendered.
+    for (const avatar of [
+      'javascript:alert(1)',
+      'data:text/html;base64,PHNjcmlwdD4=',
+      'http://uprow.example.com/a.png',
+      'file:///etc/passwd',
+    ]) {
+      expect((await bindingFor({ avatar })).avatar).toBeUndefined();
+    }
+    expect((await bindingFor({ avatar: 'https://cdn.example.com/a.png' })).avatar)
+      .toBe('https://cdn.example.com/a.png');
+  });
+
+  it('drops an oversized avatar so it cannot blow the persisted store quota', async () => {
+    const huge = `data:image/png;base64,${'A'.repeat(256 * 1024)}`;
+    expect((await bindingFor({ avatar: huge })).avatar).toBeUndefined();
+  });
+
+  it('strips control characters and drops over-long names', async () => {
+    const bell = String.fromCharCode(7);
+    expect((await bindingFor({ displayName: `小野${bell}同学` })).displayName)
+      .toBe('小野同学');
+    // Emoji must survive - iterating by code point, not by UTF-16 unit.
+    expect((await bindingFor({ displayName: '小野🚀' })).displayName).toBe('小野🚀');
+    expect((await bindingFor({ displayName: 'x'.repeat(61) })).displayName).toBeUndefined();
+    expect((await bindingFor({ profession: 'y'.repeat(81) })).profession).toBeUndefined();
+    expect((await bindingFor({ displayName: 42 })).displayName).toBeUndefined();
+  });
+});
