@@ -5,6 +5,7 @@ import { rename, writeFile } from '@tauri-apps/plugin-fs';
 import {
   planEmployeeUnpack,
   installFromDeepLink,
+  redactUrls,
   DeepLinkInstallError,
 } from './installer';
 
@@ -83,10 +84,57 @@ describe('deeplink installer', () => {
 
     expect(browserFetch).toHaveBeenCalledWith(
       'http://127.0.0.1:3102/api/skills/local-test-clerk/zip',
-      { method: 'GET' },
+      expect.objectContaining({ method: 'GET' }),
     );
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
     browserFetch.mockRestore();
+  });
+
+  describe('download hardening', () => {
+    // 真实事故：reqwest 传输错误的 Display 文本里带着整条 OSS 预签名 URL，
+    // 原样进了 toast，用户截图就把 AccessKeyId/Signature 一起发出来了。
+    const SIGNED_URL = 'https://uprow-packages.oss-cn-beijing.aliyuncs.com/skills/sk_XXXX/original.zip'
+      + '?OSSAccessKeyId=LTAI5tSecret&Expires=1790000000&Signature=abc%2Fdef%3D';
+
+    it('strips the signed query string but keeps host and path for diagnosis', () => {
+      const redacted = redactUrls(`error sending request for url (${SIGNED_URL})`);
+      expect(redacted).toBe(
+        'error sending request for url '
+        + '(https://uprow-packages.oss-cn-beijing.aliyuncs.com/skills/sk_XXXX/original.zip?[redacted])',
+      );
+      expect(redacted).not.toContain('OSSAccessKeyId');
+      expect(redacted).not.toContain('Signature');
+    });
+
+    it('retries transport failures and never leaks the signed URL in the error', async () => {
+      vi.mocked(fetch).mockReset();
+      vi.mocked(fetch).mockRejectedValue(new Error(`error sending request for url (${SIGNED_URL})`));
+      vi.useFakeTimers();
+      try {
+        const attempt = installFromDeepLink({ action: 'install', pkgType: 'employee', url: SIGNED_URL });
+        const assertion = expect(attempt).rejects.toMatchObject({
+          code: 'DOWNLOAD_FAILED',
+          message: expect.stringContaining('/skills/sk_XXXX/original.zip?[redacted]'),
+        });
+        await vi.advanceTimersByTimeAsync(5000); // 让两次退避重试跑完
+        await assertion;
+        await expect(attempt.catch((e: DeepLinkInstallError) => e.message))
+          .resolves.not.toContain('Signature');
+        expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3); // 1 次 + 2 次重试
+      } finally {
+        vi.useRealTimers();
+        vi.mocked(fetch).mockReset();
+      }
+    });
+
+    it('does not retry a real HTTP error status', async () => {
+      vi.mocked(fetch).mockReset();
+      vi.mocked(fetch).mockResolvedValue(new Response('nope', { status: 403 }));
+      await expect(installFromDeepLink({ action: 'install', pkgType: 'employee', url: SIGNED_URL }))
+        .rejects.toMatchObject({ code: 'DOWNLOAD_FAILED', message: 'Download failed: HTTP 403' });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      vi.mocked(fetch).mockReset();
+    });
   });
 
   it('rejects an unsigned employee archive when the platform requires integrity', async () => {

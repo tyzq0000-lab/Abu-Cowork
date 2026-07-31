@@ -18,6 +18,19 @@ export type DeploymentHeartbeatResult =
   | { state: 'offline' }
   | { state: 'skipped' };
 
+/**
+ * 平台 `HireEntitlementReason` 里唯一的**终态**。
+ *
+ * 平台管理员通过 admin 端解除雇佣时，部署凭据仍然有效 —— 心跳拿到的是
+ * 200 + `{ authorized: false, entitlementReason: 'terminated' }`，而不是 401。
+ * 只认 401 的话这类员工会永远挂在侧边栏里。
+ *
+ * 其余取值一律**不**当终态：'paused'（企业可恢复）、'payment_required'（续费即恢复）、
+ * 'employee_unavailable'（平台隔离/下架，可解除）、'awaiting_deployment'（还没部署完）。
+ * 拿不准就按非终态处理 —— 留个残留图标远好过把客户还能恢复的员工包删了。
+ */
+const TERMINAL_ENTITLEMENT_REASONS = new Set(['terminated']);
+
 function validHeartbeatBinding(deployment: EmployeeDeploymentRecord): boolean {
   if (!deployment.heartbeatEndpoint || !deployment.ledgerEndpoint) return false;
   try {
@@ -47,9 +60,10 @@ export async function heartbeatEmployeeDeployment(
   const endpoint = deployment.heartbeatEndpoint;
   if (!endpoint) return { state: 'offline' };
   if (!validHeartbeatBinding(deployment)) return { state: 'offline' };
+  const secretKey = SECRET_KEYS.deployment(deployment.deploymentId);
   let credential: string | null;
   try {
-    credential = await (opts.readSecret ?? getSecret)(SECRET_KEYS.deployment(deployment.deploymentId));
+    credential = await (opts.readSecret ?? getSecret)(secretKey);
   } catch {
     return { state: 'offline' };
   }
@@ -64,10 +78,11 @@ export async function heartbeatEmployeeDeployment(
   } catch {
     return { state: 'offline' };
   }
-  if (response.status === 401) {
-    await (opts.removeSecret ?? deleteSecret)(SECRET_KEYS.deployment(deployment.deploymentId)).catch(() => undefined);
+  const revoke = async (): Promise<DeploymentHeartbeatResult> => {
+    await (opts.removeSecret ?? deleteSecret)(secretKey).catch(() => undefined);
     return { state: 'revoked', reason: 'unauthorized' };
-  }
+  };
+  if (response.status === 401) return revoke();
   if (!response.ok) return { state: 'offline' };
 
   try {
@@ -79,8 +94,11 @@ export async function heartbeatEmployeeDeployment(
       || typeof body.authorized !== 'boolean'
       || typeof body.hireStatus !== 'string'
     ) return { state: 'offline' };
-    return body.authorized
-      ? { state: 'authorized', hireStatus: body.hireStatus }
+    if (body.authorized) return { state: 'authorized', hireStatus: body.hireStatus };
+    // 管理员解除雇佣走的是 200 + authorized:false（凭据没被吊销），只有终态才等同 401。
+    return typeof body.entitlementReason === 'string'
+      && TERMINAL_ENTITLEMENT_REASONS.has(body.entitlementReason)
+      ? revoke()
       : { state: 'inactive', hireStatus: body.hireStatus };
   } catch {
     return { state: 'offline' };

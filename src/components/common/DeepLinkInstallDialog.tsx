@@ -24,11 +24,14 @@ export default function DeepLinkInstallDialog() {
     const req = useDeepLinkStore.getState().pending;
     if (!req || useDeepLinkStore.getState().installing) return;
 
-    const { clearPending, setInstalling } = useDeepLinkStore.getState();
+    const { setInstalling } = useDeepLinkStore.getState();
     const { addToast } = useToastStore.getState();
     const i18n = t;
 
-    clearPending();
+    // Keep `pending` until the install actually succeeds: clearing it up front
+    // made every failure terminal (dialog gone, only a new deep link from the
+    // platform could retry). `installing` hides the dialog meanwhile and the
+    // guard above blocks a double-confirm, so nothing can install twice.
     setInstalling(true);
     addToast({ type: 'info', title: i18n.deepLink.installingTitle, duration: 5000 });
 
@@ -104,6 +107,11 @@ export default function DeepLinkInstallDialog() {
             });
           }
         }
+        // Only drop the request we just installed — a deep link that arrived
+        // mid-install has already replaced it and still needs its own dialog.
+        if (useDeepLinkStore.getState().pending === req) {
+          useDeepLinkStore.getState().clearPending();
+        }
         addToast({
           type: 'success',
           title: i18n.deepLink.installSuccessTitle,
@@ -115,10 +123,12 @@ export default function DeepLinkInstallDialog() {
           ),
         });
       } catch (err: unknown) {
+        // The pending request is only cleared on success, so this dialog is still
+        // on screen — say so, otherwise the retry affordance goes unnoticed.
         addToast({
           type: 'error',
           title: i18n.deepLink.installFailedTitle,
-          message: err instanceof Error ? err.message : String(err),
+          message: `${err instanceof Error ? err.message : String(err)} ${i18n.deepLink.installFailedRetryHint}`,
         });
       } finally {
         useDeepLinkStore.getState().setInstalling(false);

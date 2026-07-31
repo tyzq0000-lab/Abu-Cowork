@@ -58,10 +58,34 @@ export type DeepLinkInstallErrorCode =
   | 'PACKAGE_INTEGRITY_INVALID'
   | 'WRITE_FAILED';
 
+const URL_IN_TEXT = /https?:\/\/[^\s)'"]+/gi;
+
+/**
+ * Strip query strings from every URL inside a user-visible string.
+ *
+ * Package URLs are OSS pre-signed (`?OSSAccessKeyId=…&Expires=…&Signature=…`)
+ * and reqwest embeds the whole request URL in its transport-error `Display`
+ * text ("error sending request for url (…)"). That text goes straight into an
+ * error toast, which ends up in user screenshots. Scheme + host + path survive
+ * so the message stays diagnosable; only the credentials go.
+ */
+export function redactUrls(text: string): string {
+  return text.replace(URL_IN_TEXT, (raw) => {
+    try {
+      const u = new URL(raw);
+      return u.search || u.hash ? `${u.origin}${u.pathname}?[redacted]` : raw;
+    } catch {
+      return raw;
+    }
+  });
+}
+
 export class DeepLinkInstallError extends Error {
   code: DeepLinkInstallErrorCode;
   constructor(code: DeepLinkInstallErrorCode, message: string) {
-    super(message);
+    // Redact here rather than at each throw site: every install failure surfaces
+    // through this class, so no future message can leak a signed URL either.
+    super(redactUrls(message));
     this.name = 'DeepLinkInstallError';
     this.code = code;
   }
@@ -233,20 +257,52 @@ export function planEmployeeUnpack(
 
 // ── Download + install ─────────────────────────────────────────────────────
 
+// tauri-plugin-http leaves `connectTimeout` undefined, so before these only
+// OS-level TCP timeouts bounded a hang. Same reasoning as the LLM transport's
+// HEADER_TIMEOUT_MS in core/llm/tauriFetch.ts.
+const DOWNLOAD_CONNECT_TIMEOUT_MS = 15_000;
+// ponytail: one flat budget covering connect + headers + body. The 50MB archive
+// cap needs ~3.4Mbps to fit in 120s; if slow links start tripping it, add a
+// stall detector on the body stream rather than raising this number.
+const DOWNLOAD_TIMEOUT_MS = 120_000;
+const DOWNLOAD_RETRIES = 2;
+const DOWNLOAD_RETRY_BASE_MS = 500;
+
 /** Download a package archive. Caller must have validated the URL already. */
 async function downloadArchive(url: string): Promise<Uint8Array> {
-  let res: Response;
+  // Local platform development should not be routed through a system proxy.
+  // The WebView transport is sufficient because the platform ZIP endpoint
+  // explicitly allows CORS; production HTTPS downloads keep using Tauri.
+  let isLoopback: boolean;
   try {
     const host = new URL(url).hostname;
-    const isLoopback = host === 'localhost' || host === '127.0.0.1';
-    // Local platform development should not be routed through a system proxy.
-    // The WebView transport is sufficient because the platform ZIP endpoint
-    // explicitly allows CORS; production HTTPS downloads keep using Tauri.
-    res = isLoopback
-      ? await globalThis.fetch(url, { method: 'GET' })
-      : await tauriFetch(url, { method: 'GET' });
+    isLoopback = host === 'localhost' || host === '127.0.0.1';
   } catch (err) {
     throw new DeepLinkInstallError('DOWNLOAD_FAILED', `Download failed: ${String(err)}`);
+  }
+
+  let res: Response | undefined;
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= DOWNLOAD_RETRIES; attempt++) {
+    // Fresh signal per attempt — AbortSignal.timeout counts from creation.
+    const signal = AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS);
+    try {
+      res = isLoopback
+        ? await globalThis.fetch(url, { method: 'GET', signal })
+        : await tauriFetch(url, { method: 'GET', signal, connectTimeout: DOWNLOAD_CONNECT_TIMEOUT_MS });
+      break;
+    } catch (err) {
+      // Only transport failures land here (DNS/TCP/TLS/reset/timeout) — a real
+      // HTTP status resolves the promise and is handled by !res.ok below, and
+      // retrying a 403/404 would just burn the user's time.
+      lastError = err;
+      if (attempt < DOWNLOAD_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, DOWNLOAD_RETRY_BASE_MS * 2 ** attempt));
+      }
+    }
+  }
+  if (!res) {
+    throw new DeepLinkInstallError('DOWNLOAD_FAILED', `Download failed: ${String(lastError)}`);
   }
   if (!res.ok) {
     throw new DeepLinkInstallError('DOWNLOAD_FAILED', `Download failed: HTTP ${res.status}`);
