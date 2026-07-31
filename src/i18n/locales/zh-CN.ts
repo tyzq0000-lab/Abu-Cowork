@@ -122,6 +122,7 @@ const zhCN: TranslationDict = {
     viewTrigger: '查看触发器',
     archiveTriggerRun: '删除记录',
     help: '帮助',
+    moreActions: '更多',
     editProfile: '编辑资料',
     nickname: '昵称',
     nicknamePlaceholder: '输入你的昵称',
@@ -149,6 +150,7 @@ const zhCN: TranslationDict = {
     subtitle: '管理扶摇的账号身份和已授权设备',
     signIn: '登录有谱账号',
     signingIn: '等待浏览器授权',
+    signInFailed: '登录失败',
     signedOutTitle: '当前未登录',
     signedOutDescription: '登录后可在扶摇识别你的有谱身份并管理设备。数字员工仍按企业雇佣与部署凭据独立授权。',
     browserHint: '扶摇会打开系统浏览器，请在网页中确认本次设备登录。',
@@ -1808,6 +1810,7 @@ const zhCN: TranslationDict = {
     installSuccessEmployee: '数字员工「{name}」已加载，可在对话中 @ 调用',
     installSuccessSkill: '技能「{name}」已安装',
     installFailedTitle: '部署失败',
+    installFailedRetryHint: '可再次点击「确认」重试。',
   },
 };
 

@@ -122,6 +122,7 @@ const enUS: TranslationDict = {
     viewTrigger: 'View trigger',
     archiveTriggerRun: 'Archive',
     help: 'Help',
+    moreActions: 'More',
     editProfile: 'Edit Profile',
     nickname: 'Nickname',
     nicknamePlaceholder: 'Enter your nickname',
@@ -149,6 +150,7 @@ const enUS: TranslationDict = {
     subtitle: 'Manage your Fuyao account identity and authorized devices',
     signIn: 'Sign in to uprow',
     signingIn: 'Waiting for browser approval',
+    signInFailed: 'Sign-in failed',
     signedOutTitle: 'Not signed in',
     signedOutDescription: 'Sign in to identify your uprow account and manage devices in Fuyao. Digital employees remain independently authorized by hires and deployment credentials.',
     browserHint: 'Fuyao will open your system browser. Approve this device on the web page.',
@@ -1807,6 +1809,7 @@ const enUS: TranslationDict = {
     installSuccessEmployee: 'Digital employee "{name}" is ready — @mention it in chat',
     installSuccessSkill: 'Skill "{name}" installed',
     installFailedTitle: 'Deployment failed',
+    installFailedRetryHint: 'Confirm again to retry.',
   },
 };
 

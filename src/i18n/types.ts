@@ -153,6 +153,8 @@ export interface TranslationDict {
     viewTrigger: string;
     archiveTriggerRun: string;
     help: string;
+    /** 底栏「…」溢出菜单触发按钮（导入会话 / 审批队列 / 工具箱 / 自动化 / 帮助） */
+    moreActions: string;
     editProfile: string;
     nickname: string;
     nicknamePlaceholder: string;
@@ -180,6 +182,8 @@ export interface TranslationDict {
     subtitle: string;
     signIn: string;
     signingIn: string;
+    /** 侧栏头像直接登录失败时的 toast 标题（AccountSection 之外没有地方渲染 store.error） */
+    signInFailed: string;
     signedOutTitle: string;
     signedOutDescription: string;
     browserHint: string;
@@ -1852,5 +1856,7 @@ export interface TranslationDict {
     /** "技能 {name} 已安装" */
     installSuccessSkill: string;
     installFailedTitle: string;
+    /** Appended to the failure toast: the confirm dialog stays open so the user can retry. */
+    installFailedRetryHint: string;
   };
 }

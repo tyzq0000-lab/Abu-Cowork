@@ -158,6 +158,10 @@ export default function EmployeeRuntimeSetupDialog() {
   return (
     <ConfirmDialog
       open
+      // Workspace picker + dependency table + blocker list + workflow toggles +
+      // authorization cards do not fit the 360px default; ConfirmDialog clamps
+      // this to the viewport width on small windows.
+      width={540}
       title={`配置数字员工 · ${runtimeSetup.level}`}
       message={(
         <div className="space-y-4">
@@ -206,7 +210,8 @@ export default function EmployeeRuntimeSetupDialog() {
           {workflows.length > 0 && (
             <section className="space-y-2">
               <div className="font-medium text-[var(--abu-text-primary)]">推荐工作模板</div>
-              <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl bg-[var(--abu-bg-muted)] p-3">
+              {/* No inner max-h/overflow: the ConfirmDialog body is the one scroll container. */}
+              <div className="space-y-2 rounded-xl bg-[var(--abu-bg-muted)] p-3">
                 {workflows.map((workflow) => (
                   <div key={workflow.id} className="rounded-lg bg-white p-3">
                     <div className="flex items-center justify-between gap-3">
@@ -227,7 +232,7 @@ export default function EmployeeRuntimeSetupDialog() {
           {authorizations.length > 0 && (
             <section className="space-y-2">
               <div className="font-medium text-[var(--abu-text-primary)]">岗位授权与降级</div>
-              <div className="max-h-36 space-y-2 overflow-y-auto">
+              <div className="space-y-2">
                 {authorizations.map((authorization) => (
                   <div key={authorization.type} className="rounded-lg border p-2 text-[12px]">
                     <div className="font-medium">{authorization.type} · {authorization.required}</div>
