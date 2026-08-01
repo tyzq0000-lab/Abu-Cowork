@@ -18,7 +18,7 @@ mirror    https://github.com/tyzq0000-lab/Abu-Cowork   # 自有 GitHub 镜像（
 - mirror 是 HTTPS 远程,本机走代理时遇 TLS-MITM,推送用 `git -c http.sslVerify=false push mirror dev`(仅本次,勿全局关校验)。
 - token 需 **classic PAT 且勾 `repo` + `workflow` scope**(仓内含 `.github/workflows/`,缺 `workflow` scope 会被 remote rejected)。
 - 首跑 job 会因仓内无 `upstream` label 在打标签步报 `exit 1`(issue 已成功创建,`continue-on-error` 故 run 仍 success);建仓内 `upstream` label 后即全绿。
-- **当前上游已到 v0.23.2(本地 0.23.1)**,合入按下方流程,留待后续。
+- ~~当前上游已到 v0.23.2(本地 0.23.1)~~ ⚠️ **2026-07-23 版本线已切断**：`v0.24.0`–`v0.33.0` 标签被上游占用，扶摇改走独立 1.x 线，**本地已到 1.0.3**。上游版本号不再可直接比对，需要时用 `git log upstream/main` / upstream tag 现查。
 
 ⚠️ `upstream-watch.yml` 是 GitHub Actions——**只在 GitHub 仓库上运行**。gitee 为主仓时，需另建一个自己的 GitHub 仓（私有即可）作为镜像并 push 本仓内容，监测 issue 会开在该 GitHub 仓里；或改用本机定时任务轮询上游 releases API。
 
