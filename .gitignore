@@ -73,3 +73,7 @@ AX_*.md
 
 # e2e 测试留存产物（数字员工运行输出，保三端独立，不入库）
 e2e-workspace/
+
+# 本地工具产物（CodeGraph 索引 / Qoder 工作区），非源码，别提交
+.codegraph/
+.qoder/
